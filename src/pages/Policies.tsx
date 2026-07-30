@@ -1,10 +1,18 @@
 import { useEffect, useState, useCallback } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { Search, Plus, Download, Car } from 'lucide-react'
-import { getPolicies, createPolicy } from '@/services/policies'
+import { Search, Plus, Download, Car, Pencil, RefreshCw, Trash2 } from 'lucide-react'
+import {
+  getPolicies,
+  createPolicy,
+  updatePolicy,
+  deletePolicyWithRelations,
+  prepareRenewalData,
+} from '@/services/policies'
 import { getClients } from '@/services/clients'
 import { getSeguradoras } from '@/services/seguradoras'
 import { getParceiros } from '@/services/parceiros'
+import { getPayments } from '@/services/payments'
+import { getReminders } from '@/services/reminders'
 import { Policy, Client, Seguradora, Parceiro, FilterState } from '@/types'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -18,10 +26,15 @@ import {
   SelectValue,
 } from '@/components/ui/select'
 import { PolicyFormDialog } from '@/components/PolicyFormDialog'
+import { DeletePolicyDialog } from '@/components/DeletePolicyDialog'
 import { GlobalFilters } from '@/components/GlobalFilters'
 import { buildFilterString } from '@/lib/constants'
 import { exportPoliciesToCsv } from '@/lib/export-utils'
 import { useToast } from '@/hooks/use-toast'
+import { useRealtime } from '@/hooks/use-realtime'
+import { extractFieldErrors, getErrorMessage, type FieldErrors } from '@/lib/pocketbase/errors'
+
+type DialogMode = 'create' | 'edit' | 'renew' | null
 
 export default function Policies() {
   const navigate = useNavigate()
@@ -33,8 +46,13 @@ export default function Policies() {
   const [search, setSearch] = useState('')
   const [placaSearch, setPlacaSearch] = useState('')
   const [statusFilter, setStatusFilter] = useState('ALL')
-  const [isModalOpen, setIsModalOpen] = useState(false)
   const [filters, setFilters] = useState<FilterState>({})
+  const [dialogMode, setDialogMode] = useState<DialogMode>(null)
+  const [selectedPolicy, setSelectedPolicy] = useState<Policy | null>(null)
+  const [fieldErrors, setFieldErrors] = useState<FieldErrors>({})
+  const [deleteTarget, setDeleteTarget] = useState<Policy | null>(null)
+  const [deleteLoading, setDeleteLoading] = useState(false)
+  const [relatedCount, setRelatedCount] = useState({ payments: 0, reminders: 0 })
 
   const loadData = useCallback(async () => {
     try {
@@ -63,17 +81,97 @@ export default function Policies() {
   useEffect(() => {
     loadData()
   }, [loadData])
+  useRealtime('policies', () => loadData())
 
-  const handleCreate = async (formData: any) => {
+  const handleSubmit = async (formData: any) => {
     try {
-      await createPolicy(formData)
-      toast({ title: 'Apólice cadastrada!' })
-      setIsModalOpen(false)
+      if (dialogMode === 'edit' && selectedPolicy) {
+        await updatePolicy(selectedPolicy.id, formData)
+        toast({ title: 'Apólice atualizada com sucesso!' })
+      } else {
+        const newPolicy = await createPolicy(formData)
+        toast({ title: dialogMode === 'renew' ? 'Apólice renovada!' : 'Apólice cadastrada!' })
+        if (dialogMode === 'renew') {
+          navigate(`/apolices/${newPolicy.id}`)
+          return
+        }
+      }
+      setDialogMode(null)
+      setSelectedPolicy(null)
+      setFieldErrors({})
       loadData()
-    } catch (err: any) {
-      toast({ title: 'Erro ao cadastrar', description: err.message, variant: 'destructive' })
+    } catch (err) {
+      setFieldErrors(extractFieldErrors(err))
+      toast({ title: 'Erro ao salvar', description: getErrorMessage(err), variant: 'destructive' })
     }
   }
+
+  const handleEdit = (policy: Policy) => {
+    setSelectedPolicy(policy)
+    setFieldErrors({})
+    setDialogMode('edit')
+  }
+
+  const handleRenew = (policy: Policy) => {
+    setSelectedPolicy(policy)
+    setFieldErrors({})
+    setDialogMode('renew')
+  }
+
+  const handleDeleteClick = async (policy: Policy) => {
+    setDeleteTarget(policy)
+    try {
+      const [pays, rems] = await Promise.all([
+        getPayments(`policy = "${policy.id}"`),
+        getReminders(`policy = "${policy.id}"`),
+      ])
+      setRelatedCount({ payments: pays.length, reminders: rems.length })
+    } catch {
+      setRelatedCount({ payments: 0, reminders: 0 })
+    }
+  }
+
+  const handleDeleteConfirm = async () => {
+    if (!deleteTarget) return
+    setDeleteLoading(true)
+    try {
+      await deletePolicyWithRelations(deleteTarget.id)
+      toast({ title: 'Apólice excluída com sucesso!' })
+      setDeleteTarget(null)
+      loadData()
+    } catch (err: any) {
+      toast({ title: 'Erro ao excluir', description: getErrorMessage(err), variant: 'destructive' })
+    } finally {
+      setDeleteLoading(false)
+    }
+  }
+
+  const closeDialog = () => {
+    setDialogMode(null)
+    setSelectedPolicy(null)
+    setFieldErrors({})
+  }
+
+  const initialData =
+    dialogMode === 'edit' && selectedPolicy
+      ? selectedPolicy
+      : dialogMode === 'renew' && selectedPolicy
+        ? prepareRenewalData(selectedPolicy)
+        : undefined
+
+  const dialogTitle =
+    dialogMode === 'edit'
+      ? 'Editar Apólice'
+      : dialogMode === 'renew'
+        ? 'Renovar Apólice'
+        : 'Registrar Nova Apólice'
+
+  const submitLabel =
+    dialogMode === 'edit'
+      ? 'Salvar Alterações'
+      : dialogMode === 'renew'
+        ? 'Criar Renovação'
+        : 'Salvar Apólice'
 
   return (
     <div className="space-y-6">
@@ -86,7 +184,14 @@ export default function Policies() {
           <Button variant="outline" onClick={() => exportPoliciesToCsv(policies)}>
             <Download className="w-4 h-4 mr-2" /> Exportar Carteira (Excel)
           </Button>
-          <Button className="bg-blue-600 hover:bg-blue-700" onClick={() => setIsModalOpen(true)}>
+          <Button
+            className="bg-blue-600 hover:bg-blue-700"
+            onClick={() => {
+              setSelectedPolicy(null)
+              setFieldErrors({})
+              setDialogMode('create')
+            }}
+          >
             <Plus className="w-4 h-4 mr-2" /> Nova Apólice
           </Button>
         </div>
@@ -149,7 +254,7 @@ export default function Policies() {
                 <th className="p-3.5">Valor Líquido</th>
                 <th className="p-3.5">Comissão</th>
                 <th className="p-3.5">Status</th>
-                <th className="p-3.5 text-right">Ação</th>
+                <th className="p-3.5 text-right">Ações</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-100">
@@ -191,10 +296,47 @@ export default function Policies() {
                         {p.status}
                       </Badge>
                     </td>
-                    <td className="p-3.5 text-right">
-                      <Button variant="ghost" size="sm" className="text-blue-600">
-                        Detalhes
-                      </Button>
+                    <td className="p-3.5">
+                      <div
+                        className="flex items-center justify-end gap-0.5"
+                        onClick={(e) => e.stopPropagation()}
+                      >
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          onClick={() => navigate(`/apolices/${p.id}`)}
+                          title="Detalhes"
+                        >
+                          Detalhes
+                        </Button>
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          className="text-blue-600"
+                          onClick={() => handleEdit(p)}
+                          title="Editar"
+                        >
+                          <Pencil className="w-3.5 h-3.5" />
+                        </Button>
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          className="text-amber-600"
+                          onClick={() => handleRenew(p)}
+                          title="Renovar"
+                        >
+                          <RefreshCw className="w-3.5 h-3.5" />
+                        </Button>
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          className="text-red-600"
+                          onClick={() => handleDeleteClick(p)}
+                          title="Excluir"
+                        >
+                          <Trash2 className="w-3.5 h-3.5" />
+                        </Button>
+                      </div>
                     </td>
                   </tr>
                 ))
@@ -205,12 +347,29 @@ export default function Policies() {
       </Card>
 
       <PolicyFormDialog
-        open={isModalOpen}
-        onOpenChange={setIsModalOpen}
-        onSubmit={handleCreate}
+        open={dialogMode !== null}
+        onOpenChange={(open) => {
+          if (!open) closeDialog()
+        }}
+        onSubmit={handleSubmit}
         clients={clients}
         seguradoras={seguradoras}
         parceiros={parceiros}
+        initialData={initialData}
+        title={dialogTitle}
+        fieldErrors={fieldErrors}
+        submitLabel={submitLabel}
+      />
+
+      <DeletePolicyDialog
+        open={!!deleteTarget}
+        onOpenChange={(open) => {
+          if (!open) setDeleteTarget(null)
+        }}
+        onConfirm={handleDeleteConfirm}
+        policyNumber={deleteTarget?.policy_number || ''}
+        relatedCount={relatedCount}
+        loading={deleteLoading}
       />
     </div>
   )

@@ -17,9 +17,35 @@ import {
   SelectValue,
 } from '@/components/ui/select'
 import { Checkbox } from '@/components/ui/checkbox'
+import { Textarea } from '@/components/ui/textarea'
 import { TIPOS_DE_SEGURO, TIPOS_DE_VENDA } from '@/lib/constants'
 import { Client, Seguradora, Parceiro, Policy } from '@/types'
 import { ClientAutocomplete } from '@/components/ClientAutocomplete'
+import type { FieldErrors } from '@/lib/pocketbase/errors'
+
+const DEFAULT_FORM = {
+  client: '',
+  seguradora: '',
+  policy_number: '',
+  tipo_de_seguro: 'Auto',
+  placa: '',
+  modelo_veiculo: '',
+  valor_bruto: 0,
+  valor_liquido: 0,
+  commission_percent: 10,
+  tipo_de_venda: 'Produção Própria',
+  observacao_indicacao: '',
+  parceiro: '',
+  valor_repasse: 0,
+  data_pagamento_parceiro: '',
+  pago_parceiro: false,
+  comissao_recebida: false,
+  data_recebimento_comissao: '',
+  notes: '',
+  start_date: new Date().toISOString().split('T')[0],
+  end_date: new Date(Date.now() + 365 * 86400000).toISOString().split('T')[0],
+  status: 'Ativa',
+}
 
 interface Props {
   open: boolean
@@ -30,6 +56,13 @@ interface Props {
   parceiros: Parceiro[]
   initialData?: Partial<Policy>
   title?: string
+  fieldErrors?: FieldErrors
+  submitLabel?: string
+}
+
+function FieldErr({ message }: { message?: string }) {
+  if (!message) return null
+  return <p className="text-xs text-red-500 mt-0.5">{message}</p>
 }
 
 export function PolicyFormDialog({
@@ -41,43 +74,20 @@ export function PolicyFormDialog({
   parceiros,
   initialData,
   title = 'Registrar Nova Apólice',
+  fieldErrors = {},
+  submitLabel = 'Salvar Apólice',
 }: Props) {
-  const [form, setForm] = useState<any>({
-    client: '',
-    seguradora: '',
-    policy_number: '',
-    tipo_de_seguro: 'Auto',
-    placa: '',
-    modelo_veiculo: '',
-    valor_bruto: 0,
-    valor_liquido: 0,
-    commission_percent: 10,
-    tipo_de_venda: 'Produção Própria',
-    observacao_indicacao: '',
-    parceiro: '',
-    valor_repasse: 0,
-    data_pagamento_parceiro: '',
-    pago_parceiro: false,
-    start_date: new Date().toISOString().split('T')[0],
-    end_date: new Date(Date.now() + 365 * 86400000).toISOString().split('T')[0],
-    status: 'Ativa',
-  })
+  const [form, setForm] = useState<any>({ ...DEFAULT_FORM })
   const [loading, setLoading] = useState(false)
 
   useEffect(() => {
     if (!open) return
     if (initialData) {
+      const exp = initialData.expand as any
       setForm({
-        client:
-          initialData.client ||
-          (typeof initialData.expand?.client === 'object' ? initialData.expand?.client?.id : '') ||
-          '',
-        seguradora:
-          initialData.seguradora ||
-          (typeof initialData.expand?.seguradora === 'object'
-            ? initialData.expand?.seguradora?.id
-            : '') ||
-          '',
+        ...DEFAULT_FORM,
+        client: initialData.client || (exp?.client?.id ?? ''),
+        seguradora: initialData.seguradora || (exp?.seguradora?.id ?? ''),
         policy_number: initialData.policy_number || '',
         tipo_de_seguro: initialData.tipo_de_seguro || initialData.coverage_type || 'Auto',
         placa: initialData.placa || '',
@@ -87,46 +97,27 @@ export function PolicyFormDialog({
         commission_percent: initialData.commission_percent || 10,
         tipo_de_venda: initialData.tipo_de_venda || 'Produção Própria',
         observacao_indicacao: initialData.observacao_indicacao || '',
-        parceiro:
-          initialData.parceiro ||
-          (typeof initialData.expand?.parceiro === 'object'
-            ? initialData.expand?.parceiro?.id
-            : '') ||
-          '',
+        parceiro: initialData.parceiro || (exp?.parceiro?.id ?? ''),
         valor_repasse: initialData.valor_repasse || 0,
         data_pagamento_parceiro: initialData.data_pagamento_parceiro
-          ? initialData.data_pagamento_parceiro.split('T')[0]
+          ? String(initialData.data_pagamento_parceiro).split('T')[0]
           : '',
         pago_parceiro: !!initialData.pago_parceiro,
+        comissao_recebida: !!initialData.comissao_recebida,
+        data_recebimento_comissao: initialData.data_recebimento_comissao
+          ? String(initialData.data_recebimento_comissao).split('T')[0]
+          : '',
+        notes: initialData.notes || '',
         start_date: initialData.start_date
-          ? initialData.start_date.split('T')[0]
-          : new Date().toISOString().split('T')[0],
+          ? String(initialData.start_date).split('T')[0]
+          : DEFAULT_FORM.start_date,
         end_date: initialData.end_date
-          ? initialData.end_date.split('T')[0]
-          : new Date(Date.now() + 365 * 86400000).toISOString().split('T')[0],
+          ? String(initialData.end_date).split('T')[0]
+          : DEFAULT_FORM.end_date,
         status: initialData.status || 'Ativa',
       })
     } else {
-      setForm({
-        client: '',
-        seguradora: '',
-        policy_number: '',
-        tipo_de_seguro: 'Auto',
-        placa: '',
-        modelo_veiculo: '',
-        valor_bruto: 0,
-        valor_liquido: 0,
-        commission_percent: 10,
-        tipo_de_venda: 'Produção Própria',
-        observacao_indicacao: '',
-        parceiro: '',
-        valor_repasse: 0,
-        data_pagamento_parceiro: '',
-        pago_parceiro: false,
-        start_date: new Date().toISOString().split('T')[0],
-        end_date: new Date(Date.now() + 365 * 86400000).toISOString().split('T')[0],
-        status: 'Ativa',
-      })
+      setForm({ ...DEFAULT_FORM })
     }
   }, [open, initialData])
 
@@ -147,15 +138,13 @@ export function PolicyFormDialog({
     try {
       const endDate = new Date(form.end_date)
       const renewalDate = new Date(endDate.getTime() - 30 * 86400000).toISOString().split('T')[0]
-      await onSubmit({
-        ...form,
-        commission: calculatedCommission,
-        renewal_date: renewalDate,
-      })
+      await onSubmit({ ...form, commission: calculatedCommission, renewal_date: renewalDate })
     } finally {
       setLoading(false)
     }
   }
+
+  const err = (f: string) => fieldErrors[f]
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
@@ -169,9 +158,10 @@ export function PolicyFormDialog({
             <ClientAutocomplete
               clients={clients}
               value={form.client}
-              onChange={(v) => set('client', v)}
+              onChange={(v: string) => set('client', v)}
               placeholder="Buscar cliente por nome..."
             />
+            <FieldErr message={err('client')} />
           </div>
           <div className="grid grid-cols-2 gap-2">
             <div>
@@ -181,6 +171,7 @@ export function PolicyFormDialog({
                 value={form.policy_number}
                 onChange={(e) => set('policy_number', e.target.value)}
               />
+              <FieldErr message={err('policy_number')} />
             </div>
             <div>
               <Label className="text-xs font-semibold">Seguradora</Label>
@@ -268,6 +259,26 @@ export function PolicyFormDialog({
                 disabled
                 value={`R$ ${calculatedCommission.toFixed(2)}`}
                 className="bg-slate-100 font-bold"
+              />
+            </div>
+          </div>
+          <div className="grid grid-cols-2 gap-2">
+            <div className="flex items-end gap-2 pb-1">
+              <Checkbox
+                id="comissao_recebida"
+                checked={form.comissao_recebida}
+                onCheckedChange={(v) => set('comissao_recebida', !!v)}
+              />
+              <Label htmlFor="comissao_recebida" className="text-xs cursor-pointer">
+                Comissão Recebida
+              </Label>
+            </div>
+            <div>
+              <Label className="text-xs font-semibold">Data Recebimento Comissão</Label>
+              <Input
+                type="date"
+                value={form.data_recebimento_comissao}
+                onChange={(e) => set('data_recebimento_comissao', e.target.value)}
               />
             </div>
           </div>
@@ -385,12 +396,22 @@ export function PolicyFormDialog({
               </SelectContent>
             </Select>
           </div>
+          <div>
+            <Label className="text-xs font-semibold">Observações</Label>
+            <Textarea
+              value={form.notes}
+              onChange={(e) => set('notes', e.target.value)}
+              placeholder="Notas adicionais sobre a apólice..."
+              className="text-sm"
+              rows={2}
+            />
+          </div>
           <DialogFooter>
             <Button type="button" variant="outline" onClick={() => onOpenChange(false)}>
               Cancelar
             </Button>
             <Button type="submit" className="bg-blue-600 hover:bg-blue-700" disabled={loading}>
-              Salvar Apólice
+              {loading ? 'Salvando...' : submitLabel}
             </Button>
           </DialogFooter>
         </form>

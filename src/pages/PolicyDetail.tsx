@@ -1,9 +1,19 @@
 import { useEffect, useState } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
-import { FileText, Calendar, RefreshCw, DollarSign, Plus } from 'lucide-react'
-import { getPolicy, createPolicy, updatePolicy } from '@/services/policies'
+import { Plus, Pencil, RefreshCw, Trash2 } from 'lucide-react'
+import {
+  getPolicy,
+  createPolicy,
+  updatePolicy,
+  deletePolicyWithRelations,
+  prepareRenewalData,
+} from '@/services/policies'
 import { getPayments, createPayment } from '@/services/payments'
-import { Policy, Payment } from '@/types'
+import { getReminders } from '@/services/reminders'
+import { getClients } from '@/services/clients'
+import { getSeguradoras } from '@/services/seguradoras'
+import { getParceiros } from '@/services/parceiros'
+import { Policy, Payment, Client, Seguradora, Parceiro } from '@/types'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs'
@@ -24,7 +34,13 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select'
+import { PolicyFormDialog } from '@/components/PolicyFormDialog'
+import { DeletePolicyDialog } from '@/components/DeletePolicyDialog'
 import { useToast } from '@/hooks/use-toast'
+import { useRealtime } from '@/hooks/use-realtime'
+import { extractFieldErrors, getErrorMessage, type FieldErrors } from '@/lib/pocketbase/errors'
+
+type DialogMode = 'edit' | 'renew' | null
 
 export default function PolicyDetail() {
   const { id } = useParams<{ id: string }>()
@@ -33,7 +49,15 @@ export default function PolicyDetail() {
 
   const [policy, setPolicy] = useState<Policy | null>(null)
   const [payments, setPayments] = useState<Payment[]>([])
+  const [clients, setClients] = useState<Client[]>([])
+  const [seguradoras, setSeguradoras] = useState<Seguradora[]>([])
+  const [parceiros, setParceiros] = useState<Parceiro[]>([])
   const [isPayModalOpen, setIsPayModalOpen] = useState(false)
+  const [dialogMode, setDialogMode] = useState<DialogMode>(null)
+  const [fieldErrors, setFieldErrors] = useState<FieldErrors>({})
+  const [deleteOpen, setDeleteOpen] = useState(false)
+  const [deleteLoading, setDeleteLoading] = useState(false)
+  const [relatedCount, setRelatedCount] = useState({ payments: 0, reminders: 0 })
 
   const [paymentForm, setPaymentForm] = useState({
     amount: 1000,
@@ -49,6 +73,10 @@ export default function PolicyDetail() {
       setPolicy(p)
       const pays = await getPayments(`policy = "${id}"`)
       setPayments(pays)
+      const [cls, segs, pars] = await Promise.all([getClients(), getSeguradoras(), getParceiros()])
+      setClients(cls)
+      setSeguradoras(segs)
+      setParceiros(pars)
     } catch {
       /* intentionally ignored */
     }
@@ -57,37 +85,54 @@ export default function PolicyDetail() {
   useEffect(() => {
     loadData()
   }, [id])
+  useRealtime('policies', () => loadData())
+  useRealtime('payments', () => loadData())
 
-  const handleRenew = async () => {
+  const handleSubmit = async (formData: any) => {
     if (!policy) return
     try {
-      const oldEndDate = new Date(policy.end_date)
-      const newStartDate = oldEndDate.toISOString().split('T')[0]
-      const newEndDate = new Date(oldEndDate.getTime() + 365 * 24 * 60 * 60 * 1000)
-        .toISOString()
-        .split('T')[0]
-      const renewalDate = new Date(
-        new Date(newEndDate).getTime() - 30 * 24 * 60 * 60 * 1000,
-      ).toISOString()
+      if (dialogMode === 'edit') {
+        await updatePolicy(policy.id, formData)
+        toast({ title: 'Apólice atualizada com sucesso!' })
+        setDialogMode(null)
+        setFieldErrors({})
+        loadData()
+      } else if (dialogMode === 'renew') {
+        const newPolicy = await createPolicy(formData)
+        toast({ title: 'Apólice renovada com sucesso!' })
+        navigate(`/apolices/${newPolicy.id}`)
+      }
+    } catch (err) {
+      setFieldErrors(extractFieldErrors(err))
+      toast({ title: 'Erro ao salvar', description: getErrorMessage(err), variant: 'destructive' })
+    }
+  }
 
-      await createPolicy({
-        client: policy.client,
-        insurance_company: policy.insurance_company,
-        policy_number: `${policy.policy_number}-REN`,
-        coverage_type: policy.coverage_type,
-        premium_amount: policy.premium_amount,
-        start_date: newStartDate,
-        end_date: newEndDate,
-        renewal_date: renewalDate,
-        status: 'Ativa',
-        commission: policy.commission,
-      })
+  const handleDeleteClick = async () => {
+    if (!policy) return
+    try {
+      const [pays, rems] = await Promise.all([
+        getPayments(`policy = "${policy.id}"`),
+        getReminders(`policy = "${policy.id}"`),
+      ])
+      setRelatedCount({ payments: pays.length, reminders: rems.length })
+    } catch {
+      setRelatedCount({ payments: 0, reminders: 0 })
+    }
+    setDeleteOpen(true)
+  }
 
-      await updatePolicy(policy.id, { status: 'Expirada' })
-      toast({ title: 'Apólice renovada com sucesso!' })
+  const handleDeleteConfirm = async () => {
+    if (!policy) return
+    setDeleteLoading(true)
+    try {
+      await deletePolicyWithRelations(policy.id)
+      toast({ title: 'Apólice excluída com sucesso!' })
       navigate('/apolices')
     } catch (err: any) {
-      toast({ title: 'Erro ao renovar', description: err.message, variant: 'destructive' })
+      toast({ title: 'Erro ao excluir', description: getErrorMessage(err), variant: 'destructive' })
+    } finally {
+      setDeleteLoading(false)
     }
   }
 
@@ -95,10 +140,7 @@ export default function PolicyDetail() {
     e.preventDefault()
     if (!id) return
     try {
-      await createPayment({
-        policy: id,
-        ...paymentForm,
-      })
+      await createPayment({ policy: id, ...paymentForm })
       toast({ title: 'Pagamento registrado!' })
       setIsPayModalOpen(false)
       loadData()
@@ -112,6 +154,10 @@ export default function PolicyDetail() {
   }
 
   if (!policy) return <div className="p-8 text-center text-slate-500">Carregando apólice...</div>
+
+  const fmtMoney = (v: number) => v?.toLocaleString('pt-BR', { minimumFractionDigits: 2 }) || '0,00'
+  const initialData =
+    dialogMode === 'edit' ? policy : dialogMode === 'renew' ? prepareRenewalData(policy) : undefined
 
   return (
     <div className="space-y-6">
@@ -127,10 +173,29 @@ export default function PolicyDetail() {
           </Button>
           <h1 className="text-2xl font-bold text-slate-900">Apólice {policy.policy_number}</h1>
         </div>
-        <Button className="bg-amber-600 hover:bg-amber-700" onClick={handleRenew}>
-          <RefreshCw className="w-4 h-4 mr-2" />
-          Renovar Apólice
-        </Button>
+        <div className="flex gap-2">
+          <Button
+            variant="outline"
+            onClick={() => {
+              setFieldErrors({})
+              setDialogMode('edit')
+            }}
+          >
+            <Pencil className="w-4 h-4 mr-2" /> Editar
+          </Button>
+          <Button
+            className="bg-amber-600 hover:bg-amber-700"
+            onClick={() => {
+              setFieldErrors({})
+              setDialogMode('renew')
+            }}
+          >
+            <RefreshCw className="w-4 h-4 mr-2" /> Renovar
+          </Button>
+          <Button variant="destructive" onClick={handleDeleteClick}>
+            <Trash2 className="w-4 h-4 mr-2" /> Excluir
+          </Button>
+        </div>
       </div>
 
       <Card className="shadow-sm">
@@ -151,18 +216,78 @@ export default function PolicyDetail() {
           </div>
           <div>
             <p className="text-xs text-slate-500">Seguradora</p>
-            <p className="font-semibold">{policy.insurance_company || '-'}</p>
-          </div>
-          <div>
-            <p className="text-xs text-slate-500">Tipo Cobertura</p>
-            <p className="font-semibold">{policy.coverage_type}</p>
-          </div>
-          <div>
-            <p className="text-xs text-slate-500">Prêmio Anual</p>
-            <p className="font-bold text-slate-900">
-              R$ {policy.premium_amount?.toLocaleString('pt-BR')}
+            <p className="font-semibold">
+              {policy.expand?.seguradora?.nome || policy.insurance_company || '-'}
             </p>
           </div>
+          <div>
+            <p className="text-xs text-slate-500">Tipo de Seguro</p>
+            <p className="font-semibold">{policy.tipo_de_seguro || policy.coverage_type}</p>
+          </div>
+          <div>
+            <p className="text-xs text-slate-500">Tipo de Venda</p>
+            <p className="font-semibold">{policy.tipo_de_venda || '-'}</p>
+          </div>
+          {policy.tipo_de_seguro === 'Auto' && (
+            <>
+              <div>
+                <p className="text-xs text-slate-500">Placa</p>
+                <p className="font-semibold">{policy.placa || '-'}</p>
+              </div>
+              <div>
+                <p className="text-xs text-slate-500">Modelo do Veículo</p>
+                <p className="font-semibold">{policy.modelo_veiculo || '-'}</p>
+              </div>
+            </>
+          )}
+          <div>
+            <p className="text-xs text-slate-500">Valor Bruto</p>
+            <p className="font-bold text-slate-900">R$ {fmtMoney(policy.valor_bruto || 0)}</p>
+          </div>
+          <div>
+            <p className="text-xs text-slate-500">Valor Líquido</p>
+            <p className="font-bold text-slate-900">
+              R$ {fmtMoney(policy.valor_liquido || policy.premium_amount || 0)}
+            </p>
+          </div>
+          <div>
+            <p className="text-xs text-slate-500">Comissão (%)</p>
+            <p className="font-semibold">{policy.commission_percent || 0}%</p>
+          </div>
+          <div>
+            <p className="text-xs text-slate-500">Valor da Comissão</p>
+            <p className="font-bold text-blue-600">
+              R${' '}
+              {fmtMoney(
+                ((policy.commission_percent || 0) / 100) *
+                  (policy.valor_liquido || policy.premium_amount || 0),
+              )}
+            </p>
+          </div>
+          <div>
+            <p className="text-xs text-slate-500">Data Início</p>
+            <p className="font-semibold">
+              {policy.start_date ? new Date(policy.start_date).toLocaleDateString('pt-BR') : '-'}
+            </p>
+          </div>
+          <div>
+            <p className="text-xs text-slate-500">Data Fim</p>
+            <p className="font-semibold">
+              {policy.end_date ? new Date(policy.end_date).toLocaleDateString('pt-BR') : '-'}
+            </p>
+          </div>
+          {policy.expand?.parceiro && (
+            <div>
+              <p className="text-xs text-slate-500">Parceiro</p>
+              <p className="font-semibold">{policy.expand.parceiro.nome}</p>
+            </div>
+          )}
+          {policy.notes && (
+            <div className="md:col-span-4">
+              <p className="text-xs text-slate-500">Observações</p>
+              <p className="text-sm">{policy.notes}</p>
+            </div>
+          )}
         </CardContent>
       </Card>
 
@@ -175,8 +300,7 @@ export default function PolicyDetail() {
             <div className="flex justify-between items-center mb-4">
               <h3 className="font-bold text-sm">Histórico de Parcelas</h3>
               <Button size="sm" onClick={() => setIsPayModalOpen(true)}>
-                <Plus className="w-4 h-4 mr-1" />
-                Registrar Pagamento
+                <Plus className="w-4 h-4 mr-1" /> Registrar Pagamento
               </Button>
             </div>
             {payments.length === 0 ? (
@@ -212,7 +336,33 @@ export default function PolicyDetail() {
         </TabsContent>
       </Tabs>
 
-      {/* Modal Pagamento */}
+      <PolicyFormDialog
+        open={dialogMode !== null}
+        onOpenChange={(open) => {
+          if (!open) {
+            setDialogMode(null)
+            setFieldErrors({})
+          }
+        }}
+        onSubmit={handleSubmit}
+        clients={clients}
+        seguradoras={seguradoras}
+        parceiros={parceiros}
+        initialData={initialData}
+        title={dialogMode === 'edit' ? 'Editar Apólice' : 'Renovar Apólice'}
+        fieldErrors={fieldErrors}
+        submitLabel={dialogMode === 'edit' ? 'Salvar Alterações' : 'Criar Renovação'}
+      />
+
+      <DeletePolicyDialog
+        open={deleteOpen}
+        onOpenChange={setDeleteOpen}
+        onConfirm={handleDeleteConfirm}
+        policyNumber={policy.policy_number}
+        relatedCount={relatedCount}
+        loading={deleteLoading}
+      />
+
       <Dialog open={isPayModalOpen} onOpenChange={setIsPayModalOpen}>
         <DialogContent>
           <DialogHeader>

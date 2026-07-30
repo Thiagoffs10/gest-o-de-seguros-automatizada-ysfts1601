@@ -16,3 +16,7 @@ export const createPayment = async (data: Partial<Payment>) => {
 export const updatePayment = async (id: string, data: Partial<Payment>) => {
   return pb.collection('payments').update<Payment>(id, data)
 }
+
+export const deletePayment = async (id: string) => {
+  return pb.collection('payments').delete(id)
+}

@@ -119,3 +119,36 @@ export const updatePolicyFinancial = async (
 export const deletePolicy = async (id: string) => {
   return pb.collection('policies').delete(id)
 }
+
+export const deletePolicyWithRelations = async (id: string) => {
+  const payments = await pb.collection('payments').getFullList({ filter: `policy = "${id}"` })
+  for (const p of payments) {
+    await pb.collection('payments').delete(p.id)
+  }
+  const reminders = await pb.collection('reminders').getFullList({ filter: `policy = "${id}"` })
+  for (const r of reminders) {
+    await pb.collection('reminders').delete(r.id)
+  }
+  await pb.collection('policies').delete(id)
+}
+
+export function prepareRenewalData(policy: Policy): Partial<Policy> {
+  const data: any = { ...policy }
+  delete data.id
+  delete data.expand
+  delete data.created
+  delete data.updated
+  delete data.policy_code
+  return {
+    ...data,
+    policy_number: '',
+    start_date: new Date().toISOString().split('T')[0],
+    end_date: new Date(Date.now() + 365 * 86400000).toISOString().split('T')[0],
+    renewal_date: undefined,
+    status: 'Ativa',
+    comissao_recebida: false,
+    data_recebimento_comissao: null,
+    pago_parceiro: false,
+    data_pagamento_parceiro: null,
+  }
+}
