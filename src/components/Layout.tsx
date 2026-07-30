@@ -12,6 +12,7 @@ import {
   Menu,
   X,
   Handshake,
+  Building2,
 } from 'lucide-react'
 import logoImg from '@/assets/cred10mixlogooficialfundobranco4k-12574.jpg'
 import { useAuth } from '@/hooks/use-auth'
@@ -57,6 +58,7 @@ export default function Layout() {
     { title: 'Clientes', path: '/clientes', icon: Users },
     { title: 'Apólices', path: '/apolices', icon: FileText },
     { title: 'Parceiros', path: '/parceiros', icon: Handshake },
+    { title: 'Seguradoras', path: '/seguradoras', icon: Building2 },
     { title: 'Financeiro', path: '/financeiro', icon: Wallet },
     { title: 'Lembretes', path: '/lembretes', icon: Bell, badge: reminders.length },
     { title: 'Comunicação', path: '/comunicacao', icon: Send },

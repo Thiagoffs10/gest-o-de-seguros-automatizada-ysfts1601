@@ -1,0 +1,228 @@
+import { useEffect, useState, useCallback } from 'react'
+import { Search, Plus, Pencil, Trash2 } from 'lucide-react'
+import {
+  getSeguradoras,
+  createSeguradora,
+  updateSeguradora,
+  deleteSeguradora,
+} from '@/services/seguradoras'
+import { Seguradora } from '@/types'
+import { Input } from '@/components/ui/input'
+import { Button } from '@/components/ui/button'
+import { Card } from '@/components/ui/card'
+import { SeguradoraFormDialog } from '@/components/SeguradoraFormDialog'
+import { useRealtime } from '@/hooks/use-realtime'
+import { useToast } from '@/hooks/use-toast'
+import { extractFieldErrors, getErrorMessage, type FieldErrors } from '@/lib/pocketbase/errors'
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from '@/components/ui/alert-dialog'
+
+export default function Seguradoras() {
+  const { toast } = useToast()
+  const [seguradoras, setSeguradoras] = useState<Seguradora[]>([])
+  const [search, setSearch] = useState('')
+  const [isModalOpen, setIsModalOpen] = useState(false)
+  const [editing, setEditing] = useState<Partial<Seguradora> | undefined>()
+  const [deleteId, setDeleteId] = useState<string | null>(null)
+  const [fieldErrors, setFieldErrors] = useState<FieldErrors>({})
+
+  const loadData = useCallback(async () => {
+    try {
+      const data = await getSeguradoras()
+      setSeguradoras(data)
+    } catch {
+      /* ignored */
+    }
+  }, [])
+
+  useEffect(() => {
+    loadData()
+  }, [loadData])
+  useRealtime('seguradoras', () => loadData())
+
+  const filtered = seguradoras.filter((s) => {
+    if (!search) return true
+    return s.nome?.toLowerCase().includes(search.toLowerCase())
+  })
+
+  const handleCreate = async (formData: any) => {
+    try {
+      await createSeguradora(formData)
+      toast({ title: 'Seguradora cadastrada com sucesso!' })
+      setIsModalOpen(false)
+      loadData()
+    } catch (err) {
+      setFieldErrors(extractFieldErrors(err))
+      toast({
+        title: 'Erro ao cadastrar',
+        description: getErrorMessage(err),
+        variant: 'destructive',
+      })
+    }
+  }
+
+  const handleEdit = async (formData: any) => {
+    if (!editing?.id) return
+    try {
+      await updateSeguradora(editing.id, formData)
+      toast({ title: 'Seguradora atualizada!' })
+      setIsModalOpen(false)
+      setEditing(undefined)
+      setFieldErrors({})
+      loadData()
+    } catch (err) {
+      setFieldErrors(extractFieldErrors(err))
+      toast({
+        title: 'Erro ao atualizar',
+        description: getErrorMessage(err),
+        variant: 'destructive',
+      })
+    }
+  }
+
+  const handleDelete = async () => {
+    if (!deleteId) return
+    try {
+      await deleteSeguradora(deleteId)
+      toast({ title: 'Seguradora excluída!' })
+      setDeleteId(null)
+      loadData()
+    } catch (err) {
+      toast({
+        title: 'Erro ao excluir',
+        description: getErrorMessage(err),
+        variant: 'destructive',
+      })
+    }
+  }
+
+  return (
+    <div className="space-y-6">
+      <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
+        <div>
+          <h1 className="text-2xl font-bold text-slate-900">Gestão de Seguradoras</h1>
+          <p className="text-slate-500 text-sm">
+            Cadastre seguradoras e configure o percentual de imposto.
+          </p>
+        </div>
+        <Button
+          className="bg-blue-600 hover:bg-blue-700"
+          onClick={() => {
+            setEditing(undefined)
+            setFieldErrors({})
+            setIsModalOpen(true)
+          }}
+        >
+          <Plus className="w-4 h-4 mr-2" /> Nova Seguradora
+        </Button>
+      </div>
+
+      <div className="relative max-w-md">
+        <Search className="w-4 h-4 absolute left-3 top-3 text-slate-400" />
+        <Input
+          placeholder="Buscar por nome..."
+          className="pl-9"
+          value={search}
+          onChange={(e) => setSearch(e.target.value)}
+        />
+      </div>
+
+      <Card className="shadow-sm overflow-hidden border">
+        <div className="overflow-x-auto">
+          <table className="w-full text-left text-sm text-slate-700">
+            <thead className="bg-slate-100 text-slate-600 font-semibold border-b">
+              <tr>
+                <th className="p-3.5">Nome</th>
+                <th className="p-3.5">Imposto (%)</th>
+                <th className="p-3.5 text-right">Ações</th>
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-slate-100">
+              {filtered.length === 0 ? (
+                <tr>
+                  <td colSpan={3} className="text-center p-6 text-slate-500">
+                    Nenhuma seguradora encontrada.
+                  </td>
+                </tr>
+              ) : (
+                filtered.map((s) => (
+                  <tr key={s.id} className="hover:bg-slate-50/80 transition-colors">
+                    <td className="p-3.5 font-semibold text-slate-900">{s.nome}</td>
+                    <td className="p-3.5 font-bold text-blue-600">
+                      {s.imposto_percentual != null ? `${s.imposto_percentual}%` : '-'}
+                    </td>
+                    <td className="p-3.5">
+                      <div className="flex justify-end gap-1">
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          className="text-blue-600 hover:text-blue-800"
+                          onClick={() => {
+                            setEditing(s)
+                            setFieldErrors({})
+                            setIsModalOpen(true)
+                          }}
+                        >
+                          <Pencil className="w-4 h-4" />
+                        </Button>
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          className="text-red-600 hover:text-red-800"
+                          onClick={() => setDeleteId(s.id)}
+                        >
+                          <Trash2 className="w-4 h-4" />
+                        </Button>
+                      </div>
+                    </td>
+                  </tr>
+                ))
+              )}
+            </tbody>
+          </table>
+        </div>
+      </Card>
+
+      <SeguradoraFormDialog
+        open={isModalOpen}
+        onOpenChange={(open) => {
+          setIsModalOpen(open)
+          if (!open) {
+            setEditing(undefined)
+            setFieldErrors({})
+          }
+        }}
+        onSubmit={editing ? handleEdit : handleCreate}
+        initialData={editing}
+        title={editing ? 'Editar Seguradora' : 'Nova Seguradora'}
+        fieldErrors={fieldErrors}
+        submitLabel={editing ? 'Salvar Alterações' : 'Cadastrar'}
+      />
+
+      <AlertDialog open={!!deleteId} onOpenChange={(open) => !open && setDeleteId(null)}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Confirmar exclusão</AlertDialogTitle>
+            <AlertDialogDescription>
+              Tem certeza que deseja excluir esta seguradora? Esta ação não pode ser desfeita.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancelar</AlertDialogCancel>
+            <AlertDialogAction className="bg-red-600 hover:bg-red-700" onClick={handleDelete}>
+              Excluir
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+    </div>
+  )
+}

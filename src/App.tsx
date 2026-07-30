@@ -15,6 +15,7 @@ import ClientDetail from '@/pages/ClientDetail'
 import Policies from '@/pages/Policies'
 import PolicyDetail from '@/pages/PolicyDetail'
 import Parceiros from '@/pages/Parceiros'
+import Seguradoras from '@/pages/Seguradoras'
 import PartnerReport from '@/pages/PartnerReport'
 import Financial from '@/pages/Financial'
 import RemindersPage from '@/pages/RemindersPage'
@@ -40,6 +41,7 @@ const App = () => (
               <Route path="/apolices" element={<Policies />} />
               <Route path="/apolices/:id" element={<PolicyDetail />} />
               <Route path="/parceiros" element={<Parceiros />} />
+              <Route path="/seguradoras" element={<Seguradoras />} />
               <Route path="/relatorio-comissoes" element={<PartnerReport />} />
               <Route path="/financeiro" element={<Financial />} />
               <Route path="/lembretes" element={<RemindersPage />} />

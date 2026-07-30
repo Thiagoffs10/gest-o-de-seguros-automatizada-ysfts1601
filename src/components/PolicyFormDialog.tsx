@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import {
   Dialog,
   DialogContent,
@@ -106,9 +106,27 @@ export function PolicyFormDialog({
     } else {
       setForm({ ...DEFAULT_FORM })
     }
+    skipCalc.current = true
   }, [open, initialData])
 
   const set = (key: string, val: any) => setForm((prev: any) => ({ ...prev, [key]: val }))
+
+  const selectedSeguradora = seguradoras.find((s) => s.id === form.seguradora)
+  const impostoPercentual = selectedSeguradora?.imposto_percentual ?? 0
+
+  const skipCalc = useRef(true)
+
+  useEffect(() => {
+    if (skipCalc.current) {
+      skipCalc.current = false
+      return
+    }
+    const calculated =
+      form.valor_bruto != null
+        ? Math.max(0, form.valor_bruto - (form.valor_bruto * (impostoPercentual || 0)) / 100)
+        : 0
+    set('valor_liquido', calculated)
+  }, [form.valor_bruto, form.seguradora, impostoPercentual])
 
   const calculatedCommission =
     form.valor_liquido && form.commission_percent
@@ -228,6 +246,9 @@ export function PolicyFormDialog({
                 value={form.valor_liquido}
                 onChange={(e) => set('valor_liquido', Number(e.target.value))}
               />
+              {form.seguradora && (
+                <p className="text-xs text-slate-500 mt-0.5">Imposto: {impostoPercentual}%</p>
+              )}
             </div>
           </div>
           <div className="grid grid-cols-2 gap-2">
