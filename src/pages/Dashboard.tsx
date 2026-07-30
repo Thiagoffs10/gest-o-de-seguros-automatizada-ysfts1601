@@ -1,10 +1,21 @@
 import { useEffect, useState, useMemo } from 'react'
-import { Users, FileCheck, Clock, DollarSign, ArrowRight, Plus, HelpCircle } from 'lucide-react'
+import {
+  Users,
+  FileCheck,
+  Clock,
+  DollarSign,
+  ArrowRight,
+  Plus,
+  HelpCircle,
+  TrendingUp,
+  Calendar,
+} from 'lucide-react'
 import { useNavigate } from 'react-router-dom'
 import { getClients } from '@/services/clients'
 import { getPolicies } from '@/services/policies'
 import { getPayments } from '@/services/payments'
-import { Client, Policy, Payment } from '@/types'
+import { getCustosFixos } from '@/services/custos-fixos'
+import { Client, Policy, Payment, CustoFixo } from '@/types'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { SecretsGuideDialog } from '@/components/SecretsGuideDialog'
@@ -26,14 +37,22 @@ export default function Dashboard() {
   const [clients, setClients] = useState<Client[]>([])
   const [policies, setPolicies] = useState<Policy[]>([])
   const [payments, setPayments] = useState<Payment[]>([])
+  const [custosFixos, setCustosFixos] = useState<CustoFixo[]>([])
+  const [selectedMonth, setSelectedMonth] = useState(new Date().toISOString().slice(0, 7))
   const [loading, setLoading] = useState(true)
 
   const loadData = async () => {
     try {
-      const [cls, pols, pays] = await Promise.all([getClients(), getPolicies(), getPayments()])
+      const [cls, pols, pays, custos] = await Promise.all([
+        getClients(),
+        getPolicies(),
+        getPayments(),
+        getCustosFixos(),
+      ])
       setClients(cls)
       setPolicies(pols)
       setPayments(pays)
+      setCustosFixos(custos)
     } catch {
       /* intentionally ignored */
     }
@@ -46,6 +65,7 @@ export default function Dashboard() {
   useRealtime('clients', () => loadData())
   useRealtime('policies', () => loadData())
   useRealtime('payments', () => loadData())
+  useRealtime('custos_fixos', () => loadData())
 
   const activePolicies = policies.filter((p) => p.status === 'Ativa')
   const pendingRenewals = policies.filter((p) => p.status === 'Renovação Pendente')
@@ -62,6 +82,30 @@ export default function Dashboard() {
     .map((type) => ({ name: type, value: policies.filter((p) => p.coverage_type === type).length }))
     .filter((d) => d.value > 0)
   const COLORS = ['#2563eb', '#10b981', '#f59e0b', '#8b5cf6', '#ec4899', '#64748b']
+
+  const profitData = useMemo(() => {
+    const nonCanceled = policies.filter((p) => p.status !== 'Cancelada')
+    const grossCommission = nonCanceled.reduce((sum, p) => sum + (p.commission || 0), 0)
+    const paidRepasses = nonCanceled
+      .filter((p) => p.pago_parceiro)
+      .reduce((sum, p) => sum + (p.valor_repasse || 0), 0)
+    const lucroBruto = grossCommission - paidRepasses
+
+    const [year, month] = selectedMonth.split('-').map(Number)
+    const monthCustos = custosFixos.filter((c) => {
+      const d = new Date(c.data)
+      return d.getFullYear() === year && d.getMonth() + 1 === month
+    })
+    const custosFixosMes = monthCustos.reduce((sum, c) => sum + (c.valor || 0), 0)
+    const lucroLiquido = lucroBruto - custosFixosMes
+
+    return {
+      lucroBruto,
+      custosFixosMes,
+      lucroLiquido,
+      topCustos: [...monthCustos].sort((a, b) => (b.valor || 0) - (a.valor || 0)).slice(0, 5),
+    }
+  }, [policies, custosFixos, selectedMonth])
 
   const monthlyData = useMemo(() => {
     const months = [
@@ -173,6 +217,62 @@ export default function Dashboard() {
           </CardContent>
         </Card>
       </div>
+
+      <Card className="shadow-sm p-5">
+        <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3 mb-4">
+          <div className="flex items-center gap-2">
+            <TrendingUp className="w-5 h-5 text-blue-600" />
+            <h3 className="text-base font-bold text-slate-800">Resumo de Lucro</h3>
+          </div>
+          <div className="flex items-center gap-2">
+            <Calendar className="w-4 h-4 text-slate-400" />
+            <input
+              type="month"
+              value={selectedMonth}
+              onChange={(e) => setSelectedMonth(e.target.value)}
+              className="text-sm border border-slate-200 rounded-md px-2 py-1 focus:outline-none focus:ring-2 focus:ring-blue-500"
+            />
+          </div>
+        </div>
+        <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 mb-4">
+          <div className="bg-slate-50 rounded-lg p-3 border">
+            <p className="text-xs text-slate-500 font-medium">Lucro Bruto</p>
+            <p className="text-xl font-bold text-slate-900">
+              R$ {profitData.lucroBruto.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
+            </p>
+          </div>
+          <div className="bg-amber-50 rounded-lg p-3 border border-amber-100">
+            <p className="text-xs text-amber-600 font-medium">Custos Fixos do Mês</p>
+            <p className="text-xl font-bold text-amber-700">
+              R$ {profitData.custosFixosMes.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
+            </p>
+          </div>
+          <div className="bg-blue-50 rounded-lg p-3 border border-blue-100">
+            <p className="text-xs text-blue-600 font-medium">Lucro Líquido</p>
+            <p className="text-xl font-bold text-blue-700">
+              R$ {profitData.lucroLiquido.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
+            </p>
+          </div>
+        </div>
+        {profitData.topCustos.length > 0 && (
+          <div>
+            <p className="text-xs font-semibold text-slate-600 mb-2">Top 5 Custos do Mês</p>
+            <div className="space-y-1.5">
+              {profitData.topCustos.map((c) => (
+                <div
+                  key={c.id}
+                  className="flex justify-between items-center text-sm bg-slate-50 rounded px-3 py-1.5 border"
+                >
+                  <span className="font-medium text-slate-700">{c.descricao}</span>
+                  <span className="font-bold text-slate-900">
+                    R$ {(c.valor || 0).toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
+                  </span>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
+      </Card>
 
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
         <Card className="p-4 shadow-sm">

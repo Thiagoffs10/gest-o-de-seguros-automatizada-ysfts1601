@@ -7,6 +7,7 @@ import {
   updatePolicy,
   deletePolicyWithRelations,
   prepareRenewalData,
+  countActivePolicies,
 } from '@/services/policies'
 import { getClients } from '@/services/clients'
 import { getSeguradoras } from '@/services/seguradoras'
@@ -48,6 +49,9 @@ export default function Policies() {
   const [search, setSearch] = useState('')
   const [placaSearch, setPlacaSearch] = useState('')
   const [statusFilter, setStatusFilter] = useState('ALL')
+  const [periodStart, setPeriodStart] = useState('')
+  const [periodEnd, setPeriodEnd] = useState('')
+  const [totalActiveCount, setTotalActiveCount] = useState(0)
   const [filters, setFilters] = useState<FilterState>({})
   const [dialogMode, setDialogMode] = useState<DialogMode>(null)
   const [selectedPolicy, setSelectedPolicy] = useState<Policy | null>(null)
@@ -62,9 +66,16 @@ export default function Policies() {
       setClients(cls)
       setSeguradoras(segs)
       setParceiros(pars)
+      const activeCount = await countActivePolicies()
+      setTotalActiveCount(activeCount)
       let filter = buildFilterString('', filters, 'start_date')
-      if (statusFilter !== 'ALL')
-        filter = filter ? `${filter} && status = "${statusFilter}"` : `status = "${statusFilter}"`
+      if (periodStart && periodEnd) {
+        const periodFilter = `start_date >= "${periodStart}" && start_date <= "${periodEnd} 23:59:59" && status = "Ativa"`
+        filter = filter ? `${filter} && (${periodFilter})` : periodFilter
+      } else {
+        if (statusFilter !== 'ALL')
+          filter = filter ? `${filter} && status = "${statusFilter}"` : `status = "${statusFilter}"`
+      }
       if (search) {
         const sanitized = search.replace(/"/g, '')
         const matchingClients = await getClients(sanitized)
@@ -85,7 +96,7 @@ export default function Policies() {
     } catch {
       /* intentionally ignored */
     }
-  }, [search, placaSearch, statusFilter, filters])
+  }, [search, placaSearch, statusFilter, filters, periodStart, periodEnd])
 
   useEffect(() => {
     const timer = setTimeout(() => {
@@ -262,6 +273,49 @@ export default function Policies() {
             <SelectItem value="Cancelada">Cancelada</SelectItem>
           </SelectContent>
         </Select>
+      </div>
+
+      <div className="flex flex-col sm:flex-row items-start sm:items-center gap-3 p-3 bg-slate-50 rounded-lg border">
+        <div className="flex flex-wrap items-center gap-2">
+          <span className="text-sm font-medium text-slate-600">Período:</span>
+          <Input
+            type="date"
+            value={periodStart}
+            onChange={(e) => setPeriodStart(e.target.value)}
+            className="w-auto"
+          />
+          <span className="text-slate-400 text-sm">até</span>
+          <Input
+            type="date"
+            value={periodEnd}
+            onChange={(e) => setPeriodEnd(e.target.value)}
+            className="w-auto"
+          />
+          {(periodStart || periodEnd) && (
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={() => {
+                setPeriodStart('')
+                setPeriodEnd('')
+              }}
+            >
+              Limpar
+            </Button>
+          )}
+        </div>
+        <div className="flex-1" />
+        <div className="flex items-center gap-3 text-sm">
+          {periodStart && periodEnd && (
+            <span className="font-medium text-blue-600">
+              {policies.length} apólice{policies.length !== 1 ? 's' : ''} ativa
+              {policies.length !== 1 ? 's' : ''} no período selecionado
+            </span>
+          )}
+          <span className="text-slate-500">
+            Total ativas: <strong className="text-slate-700">{totalActiveCount}</strong>
+          </span>
+        </div>
       </div>
 
       <Card className="shadow-sm overflow-hidden border">

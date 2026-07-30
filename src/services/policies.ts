@@ -169,3 +169,10 @@ export function prepareRenewalData(policy: Policy): Partial<Policy> {
     data_pagamento_parceiro: null,
   }
 }
+
+export const countActivePolicies = async () => {
+  const result = await pb.collection('policies').getList(1, 1, {
+    filter: 'status = "Ativa"',
+  })
+  return result.totalItems
+}

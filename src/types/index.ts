@@ -129,6 +129,24 @@ export interface Communication {
   updated: string
 }
 
+export interface CustoFixo {
+  id: string
+  descricao: string
+  valor: number
+  data: string
+  categoria:
+    | 'Contador'
+    | 'Impostos'
+    | 'Energia'
+    | 'Aluguel'
+    | 'Telecomunicação'
+    | 'Marketing'
+    | 'Outros'
+  observacoes?: string
+  created: string
+  updated: string
+}
+
 export interface FilterState {
   year?: string
   month?: string

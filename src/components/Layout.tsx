@@ -16,6 +16,7 @@ import {
   UserCog,
   LayoutGrid,
   Mail,
+  Receipt,
 } from 'lucide-react'
 import logoImg from '@/assets/cred10mixlogooficialfundobranco4k-12574.jpg'
 import { useAuth } from '@/hooks/use-auth'
@@ -71,6 +72,9 @@ export default function Layout() {
     { title: 'Parceiros', path: '/parceiros', icon: Handshake },
     { title: 'Seguradoras', path: '/seguradoras', icon: Building2 },
     { title: 'Financeiro', path: '/financeiro', icon: Wallet },
+    ...(can('custos_fixos', 'read')
+      ? [{ title: 'Custos Fixos', path: '/custos-fixos', icon: Receipt }]
+      : []),
     { title: 'Lembretes', path: '/lembretes', icon: Bell, badge: reminders.length },
     { title: 'Comunicação', path: '/comunicacao', icon: Send },
     ...(canMassSend ? [{ title: 'Envio em Massa', path: '/envio-em-massa', icon: Mail }] : []),

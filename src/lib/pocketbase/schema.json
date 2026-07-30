@@ -1,5 +1,5 @@
 {
-  "generatedAt": "2026-07-30T22:35:13.616Z",
+  "generatedAt": "2026-07-30T22:58:37.287Z",
   "collections": [
     {
       "name": "users",
@@ -719,6 +719,76 @@
         }
       ],
       "indexes": ["CREATE INDEX idx_parceiros_nome ON parceiros (nome)"]
+    },
+    {
+      "name": "custos_fixos",
+      "type": "base",
+      "apiRules": {
+        "list": "@request.auth.role = 'Admin' || @request.auth.role = 'Administrador' || @request.auth.role = 'Gerente'",
+        "view": "@request.auth.role = 'Admin' || @request.auth.role = 'Administrador' || @request.auth.role = 'Gerente'",
+        "create": "@request.auth.role = 'Admin' || @request.auth.role = 'Administrador' || @request.auth.role = 'Gerente'",
+        "update": "@request.auth.role = 'Admin' || @request.auth.role = 'Administrador' || @request.auth.role = 'Gerente'",
+        "delete": "@request.auth.role = 'Admin' || @request.auth.role = 'Administrador' || @request.auth.role = 'Gerente'"
+      },
+      "fields": [
+        {
+          "name": "descricao",
+          "type": "text",
+          "required": true,
+          "system": false
+        },
+        {
+          "name": "valor",
+          "type": "number",
+          "required": true,
+          "system": false
+        },
+        {
+          "name": "data",
+          "type": "date",
+          "required": true,
+          "system": false
+        },
+        {
+          "name": "categoria",
+          "type": "select",
+          "required": true,
+          "system": false,
+          "selectValues": [
+            "Contador",
+            "Impostos",
+            "Energia",
+            "Aluguel",
+            "Telecomunicação",
+            "Marketing",
+            "Outros"
+          ]
+        },
+        {
+          "name": "observacoes",
+          "type": "text",
+          "required": false,
+          "system": false
+        },
+        {
+          "name": "created",
+          "type": "autodate",
+          "required": false,
+          "system": false,
+          "autodateTriggers": ["onCreate"]
+        },
+        {
+          "name": "updated",
+          "type": "autodate",
+          "required": false,
+          "system": false,
+          "autodateTriggers": ["onCreate", "onUpdate"]
+        }
+      ],
+      "indexes": [
+        "CREATE INDEX idx_custos_fixos_data ON custos_fixos (data)",
+        "CREATE INDEX idx_custos_fixos_categoria ON custos_fixos (categoria)"
+      ]
     }
   ]
 }
