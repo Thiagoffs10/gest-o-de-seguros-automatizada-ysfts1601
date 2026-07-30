@@ -1,4 +1,4 @@
-import { Policy } from '@/types'
+import { Client, Policy } from '@/types'
 
 export function downloadCsv(filename: string, headers: string[], rows: (string | number)[][]) {
   const BOM = '\uFEFF'
@@ -78,4 +78,91 @@ export function exportPoliciesToCsv(policies: Policy[]) {
   })
 
   downloadCsv('carteira-seguros.csv', headers, rows)
+}
+
+function formatClientDocument(client: Client): string {
+  if (client.tipo_pessoa === 'PJ') {
+    return client.cnpj || ''
+  }
+  return client.cpf || ''
+}
+
+function formatClientAddress(client: Client): string {
+  const parts = [client.rua, client.numero, client.bairro, client.cidade, client.estado]
+  return parts.filter((p) => p && p.trim()).join(', ')
+}
+
+function formatBirthDate(dateStr?: string): string {
+  if (!dateStr) return ''
+  const date = new Date(dateStr)
+  if (isNaN(date.getTime())) return ''
+  const day = String(date.getDate()).padStart(2, '0')
+  const month = String(date.getMonth() + 1).padStart(2, '0')
+  const year = date.getFullYear()
+  return `${day}/${month}/${year}`
+}
+
+export function exportClientsToCsv(clients: Client[], policies: Policy[]) {
+  const headers = [
+    'Nome',
+    'CPF/CNPJ',
+    'Data de Nascimento',
+    'Telefone',
+    'Email',
+    'Endereço',
+    'Apólice',
+    'Seguradora',
+    'Tipo de Seguro',
+    'Valor Bruto',
+    'Valor Líquido',
+    'Comissão',
+  ]
+
+  const rows: (string | number)[][] = []
+
+  for (const client of clients) {
+    const clientPolicies = policies.filter((p) => p.client === client.id)
+
+    if (clientPolicies.length === 0) {
+      rows.push([
+        client.name || '',
+        formatClientDocument(client),
+        formatBirthDate(client.birth_date),
+        client.phone || '',
+        client.email || '',
+        formatClientAddress(client),
+        '',
+        '',
+        '',
+        0,
+        0,
+        0,
+      ])
+      continue
+    }
+
+    for (const p of clientPolicies) {
+      const valorBruto = p.valor_bruto || 0
+      const valorLiquido = p.valor_liquido || p.premium_amount || 0
+      const commissionPercent = p.commission_percent || p.commission || 0
+      const commissionValue = (commissionPercent / 100) * valorLiquido
+
+      rows.push([
+        client.name || '',
+        formatClientDocument(client),
+        formatBirthDate(client.birth_date),
+        client.phone || '',
+        client.email || '',
+        formatClientAddress(client),
+        p.policy_number || p.policy_code?.toString() || '',
+        p.expand?.seguradora?.nome || p.insurance_company || '',
+        p.tipo_de_seguro || p.coverage_type || '',
+        valorBruto,
+        valorLiquido,
+        commissionValue.toFixed(2),
+      ])
+    }
+  }
+
+  downloadCsv('carteira-clientes.csv', headers, rows)
 }

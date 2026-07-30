@@ -1,5 +1,16 @@
 import { useEffect, useState, useCallback } from 'react'
-import { Search, UserPlus, Phone, Mail, Building2, User, X, Pencil, Trash2 } from 'lucide-react'
+import {
+  Search,
+  UserPlus,
+  Phone,
+  Mail,
+  Building2,
+  User,
+  X,
+  Pencil,
+  Trash2,
+  Download,
+} from 'lucide-react'
 import { getClients, createClient, deleteClient } from '@/services/clients'
 import { getPolicies } from '@/services/policies'
 import { formatDocumentLabel } from '@/lib/document-validators'
@@ -25,6 +36,7 @@ export default function Clients() {
   const [isDeleteDialogOpen, setIsDeleteDialogOpen] = useState(false)
   const [deleteLoading, setDeleteLoading] = useState(false)
   const [filters, setFilters] = useState<FilterState>({})
+  const [exportLoading, setExportLoading] = useState(false)
 
   const loadClients = useCallback(async () => {
     try {
@@ -90,6 +102,30 @@ export default function Clients() {
     setIsDeleteDialogOpen(true)
   }
 
+  const handleExport = async () => {
+    setExportLoading(true)
+    try {
+      const filterStr = buildFilterString('', filters, 'created')
+      const exportClients = await getClients(search, filterStr)
+      let allPolicies: any[] = []
+      if (exportClients.length > 0) {
+        const clientIds = exportClients.map((c) => c.id)
+        const policyFilter = clientIds.map((id) => `client = "${id}"`).join(' || ')
+        allPolicies = await getPolicies(policyFilter)
+      }
+      exportClientsToCsv(exportClients, allPolicies)
+      toast({ title: 'Carteira exportada com sucesso!' })
+    } catch (err: any) {
+      toast({
+        title: 'Erro ao exportar carteira',
+        description: err.message,
+        variant: 'destructive',
+      })
+    } finally {
+      setExportLoading(false)
+    }
+  }
+
   const handleDeleteConfirm = async () => {
     if (!deletingClient) return
     setDeleteLoading(true)
@@ -127,9 +163,14 @@ export default function Clients() {
           <h1 className="text-2xl font-bold text-slate-900">Gestão de Clientes</h1>
           <p className="text-slate-500 text-sm">Cadastre e gerencie a base de segurados.</p>
         </div>
-        <Button className="bg-blue-600 hover:bg-blue-700" onClick={() => setIsModalOpen(true)}>
-          <UserPlus className="w-4 h-4 mr-2" /> Adicionar Cliente
-        </Button>
+        <div className="flex gap-2">
+          <Button variant="outline" onClick={handleExport} disabled={exportLoading}>
+            <Download className="w-4 h-4 mr-2" /> Exportar para Excel
+          </Button>
+          <Button className="bg-blue-600 hover:bg-blue-700" onClick={() => setIsModalOpen(true)}>
+            <UserPlus className="w-4 h-4 mr-2" /> Adicionar Cliente
+          </Button>
+        </div>
       </div>
 
       <GlobalFilters filters={filters} onFilterChange={setFilters} />
