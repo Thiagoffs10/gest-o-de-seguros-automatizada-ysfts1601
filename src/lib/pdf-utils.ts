@@ -1,44 +1,62 @@
-export interface ReceiptData {
-  clientName: string
-  seguradoraName: string
-  policyNumber: string
-  valorLiquido: number
-  repassePercent: number
-  valorPagar: number
-  partnerName?: string
-}
+import logoImg from '@/assets/cred10mixlogooficialfundobranco4k-12574.jpg'
+import { Policy } from '@/types'
 
-export function generateReceiptPDF(data: ReceiptData) {
-  const win = window.open('', '_blank', 'width=600,height=800')
+export function generatePolicyPDF(policy: Policy) {
+  const win = window.open('', '_blank', 'width=1000,height=800')
   if (!win) return
 
-  const fmt = (v: number) =>
-    v.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })
+  const fmt = (v?: number) =>
+    (v || 0).toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })
 
-  const html = `<!DOCTYPE html><html><head><title>Recibo de Repasse</title>
-<style>body{font-family:Arial,sans-serif;padding:40px;color:#1e293b}
-h1{text-align:center;color:#1e293b;border-bottom:2px solid #2563eb;padding-bottom:10px}
-.info{margin:20px 0}.info p{margin:8px 0;font-size:14px}
-.label{font-weight:bold;color:#64748b;display:inline-block;width:220px}
-.value{color:#1e293b}
-.total{margin-top:30px;padding:20px;background:#f1f5f9;border-radius:8px;text-align:center}
-.total .amount{font-size:28px;font-weight:bold;color:#2563eb}
-.footer{margin-top:40px;text-align:center;font-size:12px;color:#94a3b8}</style></head><body>
-<h1>Recibo de Repasse de Comissão</h1>
-<div class="info">
-<p><span class="label">Nome do Cliente:</span><span class="value">${data.clientName}</span></p>
-<p><span class="label">Seguradora:</span><span class="value">${data.seguradoraName}</span></p>
-<p><span class="label">Número da Apólice:</span><span class="value">${data.policyNumber}</span></p>
-<p><span class="label">Valor Líquido da Apólice:</span><span class="value">R$ ${fmt(data.valorLiquido)}</span></p>
-<p><span class="label">Percentual de Repasse:</span><span class="value">${data.repassePercent}%</span></p>
-${data.partnerName ? `<p><span class="label">Parceiro:</span><span class="value">${data.partnerName}</span></p>` : ''}
+  const clientName = policy.expand?.client?.name || 'Cliente não informado'
+  const seguradoraName =
+    policy.expand?.seguradora?.nome || policy.insurance_company || 'Não informada'
+  const startDate = policy.start_date
+    ? new Date(policy.start_date).toLocaleDateString('pt-BR')
+    : '-'
+  const endDate = policy.end_date ? new Date(policy.end_date).toLocaleDateString('pt-BR') : '-'
+
+  const html = `<!DOCTYPE html><html><head><title>Apólice ${policy.policy_number} - CRED10MIX CORRETORA DE SEGUROS</title>
+<style>
+*{margin:0;padding:0;box-sizing:border-box}
+body{font-family:Arial,sans-serif;padding:30px;color:#1e293b}
+.header{display:flex;align-items:center;justify-content:space-between;margin-bottom:24px;border-bottom:3px solid #2563eb;padding-bottom:16px}
+.header-brand{display:flex;align-items:center;gap:16px}
+.logo-box{background:#ffffff;padding:6px 12px;border:1px solid #cbd5e1;border-radius:8px;display:flex;align-items:center;justify-content:center}
+.header-logo{height:54px;width:auto;object-fit:contain}
+.header-titles h1{font-size:18px;color:#0f172a;font-weight:800;line-height:1.2}
+.header-titles p{font-size:13px;color:#475569;margin-top:3px;font-weight:600}
+.section{margin-bottom:20px;padding:16px;background:#f8fafc;border-radius:8px;border:1px solid #e2e8f0}
+.section-title{font-size:14px;font-weight:700;color:#1e293b;margin-bottom:12px;border-bottom:2px solid #3b82f6;padding-bottom:4px;display:inline-block}
+.grid{display:grid;grid-template-columns:repeat(2,1fr);gap:12px}
+.field-label{font-size:11px;color:#64748b;font-weight:600}
+.field-value{font-size:13px;color:#0f172a;font-weight:700;margin-top:2px}
+.footer{margin-top:40px;text-align:center;font-size:11px;color:#94a3b8;border-top:1px solid #e2e8f0;padding-top:12px}
+</style></head><body>
+<div class="header">
+  <div class="header-brand">
+    <div class="logo-box">
+      <img src="${logoImg}" alt="CRED10MIX CORRETORA DE SEGUROS" class="header-logo" />
+    </div>
+    <div class="header-titles">
+      <h1>CRED10MIX CORRETORA DE SEGUROS</h1>
+      <p>Ficha Detalhada da Apólice nº ${policy.policy_number}</p>
+    </div>
+  </div>
 </div>
-<div class="total">
-<p class="label" style="display:block;width:auto;margin-bottom:8px">Valor a Pagar</p>
-<p class="amount">R$ ${fmt(data.valorPagar)}</p>
+<div class="section">
+  <div class="section-title">Informações Gerais</div>
+  <div class="grid">
+    <div><div class="field-label">Cliente</div><div class="field-value">${clientName}</div></div>
+    <div><div class="field-label">Seguradora</div><div class="field-value">${seguradoraName}</div></div>
+    <div><div class="field-label">Ramo / Tipo</div><div class="field-value">${policy.tipo_de_seguro || policy.coverage_type || 'N/I'}</div></div>
+    <div><div class="field-label">Status</div><div class="field-value">${policy.status}</div></div>
+    <div><div class="field-label">Vigência</div><div class="field-value">${startDate} até ${endDate}</div></div>
+    <div><div class="field-label">Prêmio Bruto</div><div class="field-value">R$ ${fmt(policy.valor_bruto || policy.premium_amount)}</div></div>
+  </div>
 </div>
-<div class="footer">Documento gerado em ${new Date().toLocaleDateString('pt-BR')} às ${new Date().toLocaleTimeString('pt-BR')}</div>
-<script>window.onload=function(){window.print()}</script>
+<div class="footer">Documento emitido por CRED10MIX CORRETORA DE SEGUROS</div>
+<script>window.onload=function(){setTimeout(function(){window.print()},300)}</script>
 </body></html>`
 
   win.document.write(html)

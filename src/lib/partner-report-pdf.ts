@@ -1,4 +1,4 @@
-import logoImg from '@/assets/cred10mixlogooficialtransparente4k-13c6c.png'
+import logoImg from '@/assets/cred10mixlogooficialfundobranco4k-12574.jpg'
 
 export interface PartnerReportEntry {
   clientName: string
@@ -73,8 +73,8 @@ export function generatePartnerReportPDF(data: PartnerReportData) {
 body{font-family:Arial,sans-serif;padding:30px;color:#1e293b}
 .header{display:flex;align-items:center;justify-content:space-between;margin-bottom:24px;border-bottom:3px solid #2563eb;padding-bottom:16px}
 .header-brand{display:flex;align-items:center;gap:16px}
-.logo-box{background:#0f172a;padding:8px 14px;border-radius:8px;display:flex;align-items:center;justify-content:center}
-.header-logo{height:50px;width:auto;object-fit:contain}
+.logo-box{background:#ffffff;padding:6px 12px;border:1px solid #cbd5e1;border-radius:8px;display:flex;align-items:center;justify-content:center}
+.header-logo{height:54px;width:auto;object-fit:contain}
 .header-titles h1{font-size:18px;color:#0f172a;font-weight:800;line-height:1.2;letter-spacing:-0.2px}
 .header-titles p{font-size:13px;color:#475569;margin-top:3px;font-weight:600}
 .header-meta{text-align:right}

@@ -13,7 +13,7 @@ import {
   X,
   Handshake,
 } from 'lucide-react'
-import logoImg from '@/assets/cred10mixlogooficialtransparente4k-13c6c.png'
+import logoImg from '@/assets/cred10mixlogooficialfundobranco4k-12574.jpg'
 import { useAuth } from '@/hooks/use-auth'
 import { useRealtime } from '@/hooks/use-realtime'
 import { getReminders, updateReminder } from '@/services/reminders'
@@ -70,7 +70,7 @@ export default function Layout() {
       {/* Sidebar Desktop */}
       <aside className="hidden lg:flex w-[260px] flex-col bg-[#1e293b] text-white p-4 shadow-lg shrink-0">
         <div className="flex items-center gap-3 px-3 py-4 border-b border-slate-700/60 mb-6">
-          <div className="p-1 bg-slate-900/80 rounded-lg flex items-center justify-center border border-slate-700/50 shrink-0">
+          <div className="p-1 bg-white rounded-lg flex items-center justify-center border border-slate-200 shrink-0 shadow-sm">
             <img
               src={logoImg}
               alt="CRED10MIX CORRETORA DE SEGUROS"
@@ -237,7 +237,9 @@ export default function Layout() {
             <div className="relative flex w-[260px] flex-col bg-[#1e293b] text-white p-4 z-10">
               <div className="flex items-center justify-between pb-4 border-b border-slate-700/60 mb-4">
                 <div className="flex items-center gap-2.5">
-                  <img src={logoImg} alt="CRED10MIX Logo" className="h-8 w-auto object-contain" />
+                  <div className="p-1 bg-white rounded-lg flex items-center justify-center border border-slate-200 shrink-0 shadow-sm">
+                    <img src={logoImg} alt="CRED10MIX Logo" className="h-8 w-auto object-contain" />
+                  </div>
                   <div className="flex flex-col">
                     <span className="font-bold text-xs tracking-wider text-amber-400">
                       CRED10MIX

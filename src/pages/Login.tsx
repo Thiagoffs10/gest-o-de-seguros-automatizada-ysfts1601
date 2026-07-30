@@ -1,7 +1,7 @@
 import { useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { Mail, Lock, User } from 'lucide-react'
-import logoImg from '@/assets/cred10mixlogooficialtransparente4k-13c6c.png'
+import logoImg from '@/assets/cred10mixlogooficialfundobranco4k-12574.jpg'
 import { useAuth } from '@/hooks/use-auth'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -66,11 +66,11 @@ export default function Login() {
       <Card className="w-full max-w-md shadow-2xl border-none">
         <CardHeader className="text-center pb-2">
           <div className="flex justify-center mb-3">
-            <div className="p-4 bg-slate-950/90 rounded-2xl shadow-xl border border-slate-800 flex items-center justify-center max-w-[280px] w-full">
+            <div className="p-3 bg-white rounded-2xl shadow-md border border-slate-200 flex items-center justify-center max-w-[280px] w-full">
               <img
                 src={logoImg}
                 alt="CRED10MIX CORRETORA DE SEGUROS"
-                className="h-16 w-auto object-contain drop-shadow"
+                className="h-16 w-auto object-contain drop-shadow-sm"
               />
             </div>
           </div>
