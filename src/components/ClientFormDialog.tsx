@@ -22,6 +22,7 @@ import { BRAZILIAN_STATES } from '@/lib/constants'
 import { lookupCep } from '@/lib/cep'
 import { isValidCpf, isValidCnpj, maskCpf, maskCnpj } from '@/lib/document-validators'
 import { Client } from '@/types'
+import { getClients } from '@/services/clients'
 
 interface Props {
   open: boolean
@@ -119,9 +120,31 @@ export function ClientFormDialog({
     return Object.keys(errs).length === 0
   }
 
+  const checkDuplicateDocument = async (): Promise<boolean> => {
+    try {
+      if (form.tipo_pessoa === 'PF' && form.cpf.trim()) {
+        const existing = await getClients('', `cpf = "${form.cpf}"`)
+        if (existing.length > 0 && existing[0].id !== initialData?.id) {
+          setErrors((prev) => ({ ...prev, cpf: 'Este CPF já está cadastrado' }))
+          return false
+        }
+      } else if (form.tipo_pessoa === 'PJ' && form.cnpj.trim()) {
+        const existing = await getClients('', `cnpj = "${form.cnpj}"`)
+        if (existing.length > 0 && existing[0].id !== initialData?.id) {
+          setErrors((prev) => ({ ...prev, cnpj: 'Este CNPJ já está cadastrado' }))
+          return false
+        }
+      }
+    } catch {
+      /* network error — allow submit, backend will enforce uniqueness */
+    }
+    return true
+  }
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
     if (!validate()) return
+    if (!(await checkDuplicateDocument())) return
     setLoading(true)
     const payload = { ...form }
     if (payload.tipo_pessoa === 'PF') {
@@ -130,8 +153,11 @@ export function ClientFormDialog({
       payload.cpf = ''
       payload.birth_date = ''
     }
-    await onSubmit(payload)
-    setLoading(false)
+    try {
+      await onSubmit(payload)
+    } finally {
+      setLoading(false)
+    }
   }
 
   const set = (key: string, val: string) => setForm((prev) => ({ ...prev, [key]: val }))

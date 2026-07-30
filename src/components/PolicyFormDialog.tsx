@@ -16,7 +16,6 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select'
-import { Checkbox } from '@/components/ui/checkbox'
 import { Textarea } from '@/components/ui/textarea'
 import { TIPOS_DE_SEGURO, TIPOS_DE_VENDA } from '@/lib/constants'
 import { Client, Seguradora, Parceiro, Policy } from '@/types'
@@ -37,10 +36,6 @@ const DEFAULT_FORM = {
   observacao_indicacao: '',
   parceiro: '',
   valor_repasse: 0,
-  data_pagamento_parceiro: '',
-  pago_parceiro: false,
-  comissao_recebida: false,
-  data_recebimento_comissao: '',
   notes: '',
   start_date: new Date().toISOString().split('T')[0],
   end_date: new Date(Date.now() + 365 * 86400000).toISOString().split('T')[0],
@@ -99,14 +94,6 @@ export function PolicyFormDialog({
         observacao_indicacao: initialData.observacao_indicacao || '',
         parceiro: initialData.parceiro || (exp?.parceiro?.id ?? ''),
         valor_repasse: initialData.valor_repasse || 0,
-        data_pagamento_parceiro: initialData.data_pagamento_parceiro
-          ? String(initialData.data_pagamento_parceiro).split('T')[0]
-          : '',
-        pago_parceiro: !!initialData.pago_parceiro,
-        comissao_recebida: !!initialData.comissao_recebida,
-        data_recebimento_comissao: initialData.data_recebimento_comissao
-          ? String(initialData.data_recebimento_comissao).split('T')[0]
-          : '',
         notes: initialData.notes || '',
         start_date: initialData.start_date
           ? String(initialData.start_date).split('T')[0]
@@ -262,26 +249,6 @@ export function PolicyFormDialog({
               />
             </div>
           </div>
-          <div className="grid grid-cols-2 gap-2">
-            <div className="flex items-end gap-2 pb-1">
-              <Checkbox
-                id="comissao_recebida"
-                checked={form.comissao_recebida}
-                onCheckedChange={(v) => set('comissao_recebida', !!v)}
-              />
-              <Label htmlFor="comissao_recebida" className="text-xs cursor-pointer">
-                Comissão Recebida
-              </Label>
-            </div>
-            <div>
-              <Label className="text-xs font-semibold">Data Recebimento Comissão</Label>
-              <Input
-                type="date"
-                value={form.data_recebimento_comissao}
-                onChange={(e) => set('data_recebimento_comissao', e.target.value)}
-              />
-            </div>
-          </div>
           <div>
             <Label className="text-xs font-semibold">Tipo de Venda</Label>
             <Select value={form.tipo_de_venda} onValueChange={(v) => set('tipo_de_venda', v)}>
@@ -340,26 +307,6 @@ export function PolicyFormDialog({
                     value={`R$ ${calculatedRepasse.toFixed(2)}`}
                     className="bg-slate-100"
                   />
-                </div>
-              </div>
-              <div className="grid grid-cols-2 gap-2">
-                <div>
-                  <Label className="text-xs font-semibold">Data Pagto Parceiro</Label>
-                  <Input
-                    type="date"
-                    value={form.data_pagamento_parceiro}
-                    onChange={(e) => set('data_pagamento_parceiro', e.target.value)}
-                  />
-                </div>
-                <div className="flex items-end gap-2 pb-1">
-                  <Checkbox
-                    id="pago_parceiro"
-                    checked={form.pago_parceiro}
-                    onCheckedChange={(v) => set('pago_parceiro', !!v)}
-                  />
-                  <Label htmlFor="pago_parceiro" className="text-xs cursor-pointer">
-                    Pago ao Parceiro
-                  </Label>
                 </div>
               </div>
             </>

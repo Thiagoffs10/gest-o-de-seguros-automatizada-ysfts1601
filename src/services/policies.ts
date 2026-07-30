@@ -41,19 +41,36 @@ export function preparePolicyPayload(data: Partial<Policy> & Record<string, any>
   }
 
   // Dates: PocketBase rejects empty string "" for date fields
-  if (
-    !payload.data_pagamento_parceiro ||
-    (typeof payload.data_pagamento_parceiro === 'string' &&
-      payload.data_pagamento_parceiro.trim() === '')
-  ) {
-    payload.data_pagamento_parceiro = null
+  // Only process financial tracking fields if they were explicitly provided
+  // (e.g. from Finance tab or renewal). When absent (policy form), preserve
+  // existing DB values by removing them from the payload entirely.
+  if ('data_pagamento_parceiro' in data) {
+    if (
+      !payload.data_pagamento_parceiro ||
+      (typeof payload.data_pagamento_parceiro === 'string' &&
+        payload.data_pagamento_parceiro.trim() === '')
+    ) {
+      payload.data_pagamento_parceiro = null
+    }
+  } else {
+    delete payload.data_pagamento_parceiro
   }
-  if (
-    !payload.data_recebimento_comissao ||
-    (typeof payload.data_recebimento_comissao === 'string' &&
-      payload.data_recebimento_comissao.trim() === '')
-  ) {
-    payload.data_recebimento_comissao = null
+  if ('data_recebimento_comissao' in data) {
+    if (
+      !payload.data_recebimento_comissao ||
+      (typeof payload.data_recebimento_comissao === 'string' &&
+        payload.data_recebimento_comissao.trim() === '')
+    ) {
+      payload.data_recebimento_comissao = null
+    }
+  } else {
+    delete payload.data_recebimento_comissao
+  }
+  if (!('pago_parceiro' in data)) {
+    delete payload.pago_parceiro
+  }
+  if (!('comissao_recebida' in data)) {
+    delete payload.comissao_recebida
   }
   if (
     !payload.renewal_date ||
