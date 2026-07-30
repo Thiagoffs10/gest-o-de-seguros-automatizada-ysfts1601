@@ -56,6 +56,8 @@ export default function Layout() {
     fetchPendingReminders()
   }
 
+  const isAdmin = user?.role === 'Admin' || user?.role === 'Administrador'
+
   const navItems = [
     { title: 'Dashboard', path: '/dashboard', icon: LayoutDashboard },
     { title: 'Clientes', path: '/clientes', icon: Users },
@@ -65,7 +67,7 @@ export default function Layout() {
     { title: 'Financeiro', path: '/financeiro', icon: Wallet },
     { title: 'Lembretes', path: '/lembretes', icon: Bell, badge: reminders.length },
     { title: 'Comunicação', path: '/comunicacao', icon: Send },
-    ...(user?.role === 'Admin' ? [{ title: 'Usuários', path: '/usuarios', icon: UserCog }] : []),
+    ...(isAdmin ? [{ title: 'Usuários', path: '/usuarios', icon: UserCog }] : []),
     { title: 'Configurações', path: '/configuracoes', icon: Settings },
   ]
 

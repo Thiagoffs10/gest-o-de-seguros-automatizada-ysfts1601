@@ -29,7 +29,7 @@ interface Props {
 }
 
 const ROLE_OPTIONS = [
-  { value: 'Admin', label: 'Administrador' },
+  { value: 'Administrador', label: 'Administrador' },
   { value: 'Gerente', label: 'Gerente' },
   { value: 'Operador', label: 'Operador' },
   { value: 'Visualizador', label: 'Visualizador' },

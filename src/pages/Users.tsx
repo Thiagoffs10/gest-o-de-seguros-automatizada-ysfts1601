@@ -13,6 +13,7 @@ import { getErrorMessage } from '@/lib/pocketbase/errors'
 
 const ROLE_LABELS: Record<string, string> = {
   Admin: 'Administrador',
+  Administrador: 'Administrador',
   Gerente: 'Gerente',
   Operador: 'Operador',
   Visualizador: 'Visualizador',
@@ -20,6 +21,7 @@ const ROLE_LABELS: Record<string, string> = {
 
 const ROLE_ICONS: Record<string, typeof Shield> = {
   Admin: Shield,
+  Administrador: Shield,
   Gerente: Shield,
   Operador: UserIcon,
   Visualizador: Eye,
@@ -35,7 +37,8 @@ export default function Users() {
   const [editingUser, setEditingUser] = useState<User | null>(null)
 
   useEffect(() => {
-    if (currentUser && currentUser.role !== 'Admin') {
+    const isAdmin = currentUser?.role === 'Admin' || currentUser?.role === 'Administrador'
+    if (currentUser && !isAdmin) {
       navigate('/dashboard')
     }
   }, [currentUser, navigate])

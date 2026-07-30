@@ -1,4 +1,4 @@
-export type UserRole = 'Admin' | 'Gerente' | 'Operador' | 'Visualizador'
+export type UserRole = 'Admin' | 'Administrador' | 'Gerente' | 'Operador' | 'Visualizador'
 
 export type CollectionName =
   | 'clients'
@@ -18,6 +18,15 @@ const RU: ActionType[] = ['read', 'update']
 
 const PERMISSIONS: Record<UserRole, Record<CollectionName, ActionType[]>> = {
   Admin: {
+    clients: ALL,
+    policies: ALL,
+    payments: ALL,
+    seguradoras: ALL,
+    parceiros: ALL,
+    communications: ALL,
+    reminders: ALL,
+  },
+  Administrador: {
     clients: ALL,
     policies: ALL,
     payments: ALL,

@@ -7,7 +7,7 @@ import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { useToast } from '@/hooks/use-toast'
-import { verifyOldPassword, updatePassword, reauthenticate } from '@/services/users'
+import { updatePassword, reauthenticate } from '@/services/users'
 import { extractFieldErrors, getErrorMessage } from '@/lib/pocketbase/errors'
 
 export default function ChangePassword() {
@@ -29,13 +29,13 @@ export default function ChangePassword() {
     setFieldErrors({})
 
     const errors: Record<string, string> = {}
-    if (!oldPassword) errors.oldPassword = 'Senha atual e obrigatoria.'
-    if (!newPassword) errors.newPassword = 'Nova senha e obrigatoria.'
+    if (!oldPassword.trim()) errors.oldPassword = 'Senha atual é obrigatória.'
+    if (!newPassword.trim()) errors.newPassword = 'Nova senha é obrigatória.'
     if (newPassword && newPassword.length < 8)
-      errors.newPassword = 'A nova senha deve ter no minimo 8 caracteres.'
-    if (!confirmPassword) errors.confirmPassword = 'Confirmacao e obrigatoria.'
+      errors.newPassword = 'A nova senha deve ter no mínimo 8 caracteres.'
+    if (!confirmPassword.trim()) errors.confirmPassword = 'Confirmação é obrigatória.'
     if (newPassword && confirmPassword && newPassword !== confirmPassword)
-      errors.confirmPassword = 'As senhas nao conferem.'
+      errors.confirmPassword = 'As senhas não conferem.'
 
     if (Object.keys(errors).length > 0) {
       setFieldErrors(errors)
@@ -44,24 +44,25 @@ export default function ChangePassword() {
 
     setLoading(true)
 
-    const isOldValid = await verifyOldPassword(user?.email || '', oldPassword)
-    if (!isOldValid) {
-      setFieldErrors({ oldPassword: 'Senha atual incorreta.' })
-      setLoading(false)
-      return
-    }
-
     try {
-      await updatePassword(user?.id || '', newPassword)
-      await reauthenticate(user?.email || '', newPassword)
+      await updatePassword(user?.id || '', oldPassword, newPassword)
+      if (user?.email) {
+        await reauthenticate(user.email, newPassword)
+      }
 
       toast({ title: 'Senha alterada com sucesso!' })
       navigate('/configuracoes')
     } catch (err) {
-      setFieldErrors(extractFieldErrors(err))
+      const fieldErrs = extractFieldErrors(err)
+      if (fieldErrs.oldPassword) {
+        fieldErrs.oldPassword = 'Senha atual incorreta.'
+      }
+      if (Object.keys(fieldErrs).length > 0) {
+        setFieldErrors(fieldErrs)
+      }
       toast({
         title: 'Erro ao alterar senha',
-        description: getErrorMessage(err),
+        description: fieldErrs.oldPassword || getErrorMessage(err),
         variant: 'destructive',
       })
     } finally {
@@ -85,7 +86,7 @@ export default function ChangePassword() {
         <CardHeader>
           <CardTitle className="text-base font-bold flex items-center gap-2">
             <Lock className="w-5 h-5 text-blue-600" />
-            Alteracao de Senha
+            Alteração de Senha
           </CardTitle>
           <CardDescription>Digite sua senha atual e a nova senha.</CardDescription>
         </CardHeader>
@@ -98,7 +99,7 @@ export default function ChangePassword() {
                 <Input
                   type={showOld ? 'text' : 'password'}
                   className="pl-9 pr-9"
-                  placeholder="........"
+                  placeholder="••••••••"
                   value={oldPassword}
                   onChange={(e) => setOldPassword(e.target.value)}
                 />
@@ -122,7 +123,7 @@ export default function ChangePassword() {
                 <Input
                   type={showNew ? 'text' : 'password'}
                   className="pl-9 pr-9"
-                  placeholder="........"
+                  placeholder="••••••••"
                   value={newPassword}
                   onChange={(e) => setNewPassword(e.target.value)}
                 />
@@ -146,7 +147,7 @@ export default function ChangePassword() {
                 <Input
                   type={showConfirm ? 'text' : 'password'}
                   className="pl-9 pr-9"
-                  placeholder="........"
+                  placeholder="••••••••"
                   value={confirmPassword}
                   onChange={(e) => setConfirmPassword(e.target.value)}
                 />

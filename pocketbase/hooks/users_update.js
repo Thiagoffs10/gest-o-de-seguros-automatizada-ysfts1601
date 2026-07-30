@@ -4,7 +4,9 @@ routerAdd(
   (e) => {
     const auth = e.auth
     if (!auth) return e.unauthorizedError('auth required')
-    if (auth.getString('role') !== 'Admin') return e.forbiddenError('admin only')
+    var currentRole = auth.getString('role')
+    if (currentRole !== 'Admin' && currentRole !== 'Administrador')
+      return e.forbiddenError('admin only')
 
     var id = e.request.pathValue('id')
     var body = e.requestInfo().body || {}
@@ -22,7 +24,7 @@ routerAdd(
     }
 
     if (body.role !== undefined && body.role !== null) {
-      var validRoles = ['Admin', 'Gerente', 'Operador', 'Visualizador']
+      var validRoles = ['Admin', 'Administrador', 'Gerente', 'Operador', 'Visualizador']
       if (validRoles.indexOf(body.role) < 0) return e.badRequestError('Role invalido.')
       record.set('role', body.role)
     }

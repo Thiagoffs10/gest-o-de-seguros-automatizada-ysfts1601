@@ -8,6 +8,6 @@ export function usePermissions() {
   return {
     can: (collection: CollectionName, action: ActionType) => can(role, collection, action),
     role,
-    isAdmin: role === 'Admin',
+    isAdmin: role === 'Admin' || role === 'Administrador',
   }
 }

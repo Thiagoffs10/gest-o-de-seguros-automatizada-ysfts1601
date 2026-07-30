@@ -10,7 +10,7 @@ export const createUser = async (data: {
   email: string
   password: string
   passwordConfirm: string
-  role: 'admin' | 'user'
+  role: 'Administrador' | 'Gerente' | 'Operador' | 'Visualizador' | 'Admin'
 }): Promise<User> => {
   return pb.send('/backend/v1/users', {
     method: 'POST',
@@ -28,8 +28,13 @@ export const verifyOldPassword = async (email: string, password: string): Promis
   }
 }
 
-export const updatePassword = async (userId: string, newPassword: string): Promise<void> => {
+export const updatePassword = async (
+  userId: string,
+  oldPassword: string,
+  newPassword: string,
+): Promise<void> => {
   await pb.collection('users').update(userId, {
+    oldPassword,
     password: newPassword,
     passwordConfirm: newPassword,
   })
@@ -43,7 +48,7 @@ export const updateUser = async (
   id: string,
   data: {
     name?: string
-    role?: 'Admin' | 'Gerente' | 'Operador' | 'Visualizador'
+    role?: 'Administrador' | 'Gerente' | 'Operador' | 'Visualizador' | 'Admin'
     password?: string
     passwordConfirm?: string
   },
