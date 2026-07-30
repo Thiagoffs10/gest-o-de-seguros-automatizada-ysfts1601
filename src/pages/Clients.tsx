@@ -1,23 +1,29 @@
 import { useEffect, useState, useCallback } from 'react'
-import { useNavigate } from 'react-router-dom'
-import { Search, UserPlus, Phone, Mail, Building2, User, X } from 'lucide-react'
-import { getClients, createClient } from '@/services/clients'
+import { Search, UserPlus, Phone, Mail, Building2, User, X, Pencil, Trash2 } from 'lucide-react'
+import { getClients, createClient, deleteClient } from '@/services/clients'
+import { getPolicies } from '@/services/policies'
 import { formatDocumentLabel } from '@/lib/document-validators'
 import { Client, FilterState } from '@/types'
 import { Input } from '@/components/ui/input'
 import { Button } from '@/components/ui/button'
 import { Card } from '@/components/ui/card'
 import { ClientFormDialog } from '@/components/ClientFormDialog'
+import { DeleteClientDialog } from '@/components/DeleteClientDialog'
 import { GlobalFilters } from '@/components/GlobalFilters'
 import { buildFilterString } from '@/lib/constants'
 import { useToast } from '@/hooks/use-toast'
+import { useRealtime } from '@/hooks/use-realtime'
 
 export default function Clients() {
-  const navigate = useNavigate()
   const { toast } = useToast()
   const [clients, setClients] = useState<Client[]>([])
   const [search, setSearch] = useState('')
   const [isModalOpen, setIsModalOpen] = useState(false)
+  const [editingClient, setEditingClient] = useState<Partial<Client> | null>(null)
+  const [isEditModalOpen, setIsEditModalOpen] = useState(false)
+  const [deletingClient, setDeletingClient] = useState<Client | null>(null)
+  const [isDeleteDialogOpen, setIsDeleteDialogOpen] = useState(false)
+  const [deleteLoading, setDeleteLoading] = useState(false)
   const [filters, setFilters] = useState<FilterState>({})
 
   const loadClients = useCallback(async () => {
@@ -37,6 +43,10 @@ export default function Clients() {
     return () => clearTimeout(timer)
   }, [loadClients])
 
+  useRealtime('clients', () => {
+    loadClients()
+  })
+
   const handleCreate = async (formData: any) => {
     try {
       await createClient(formData)
@@ -49,6 +59,64 @@ export default function Clients() {
         description: err.message,
         variant: 'destructive',
       })
+    }
+  }
+
+  const handleEditClick = (client: Client) => {
+    setEditingClient(client)
+    setIsEditModalOpen(true)
+  }
+
+  const handleEditSubmit = async (formData: any) => {
+    if (!editingClient?.id) return
+    try {
+      const { updateClient } = await import('@/services/clients')
+      await updateClient(editingClient.id, formData)
+      toast({ title: 'Cliente atualizado com sucesso!' })
+      setIsEditModalOpen(false)
+      setEditingClient(null)
+      loadClients()
+    } catch (err: any) {
+      toast({
+        title: 'Erro ao atualizar cliente',
+        description: err.message,
+        variant: 'destructive',
+      })
+    }
+  }
+
+  const handleDeleteClick = (client: Client) => {
+    setDeletingClient(client)
+    setIsDeleteDialogOpen(true)
+  }
+
+  const handleDeleteConfirm = async () => {
+    if (!deletingClient) return
+    setDeleteLoading(true)
+    try {
+      const policies = await getPolicies(`client = "${deletingClient.id}"`)
+      if (policies.length > 0) {
+        toast({
+          title: 'Não é possível excluir este cliente pois existem apólices vinculadas a ele.',
+          variant: 'destructive',
+        })
+        setIsDeleteDialogOpen(false)
+        setDeletingClient(null)
+        return
+      }
+      await deleteClient(deletingClient.id)
+      toast({ title: 'Cliente excluído com sucesso!' })
+      setIsDeleteDialogOpen(false)
+      setDeletingClient(null)
+      loadClients()
+    } catch (err: any) {
+      toast({
+        title: 'Erro ao excluir cliente',
+        description: err.message,
+        variant: 'destructive',
+      })
+    } finally {
+      setDeleteLoading(false)
     }
   }
 
@@ -98,7 +166,7 @@ export default function Clients() {
                 <th className="p-3.5">E-mail</th>
                 <th className="p-3.5">Telefone</th>
                 <th className="p-3.5">Cidade/UF</th>
-                <th className="p-3.5 text-right">Ação</th>
+                <th className="p-3.5 text-right">Ações</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-100">
@@ -110,11 +178,7 @@ export default function Clients() {
                 </tr>
               ) : (
                 clients.map((c) => (
-                  <tr
-                    key={c.id}
-                    className="hover:bg-slate-50/80 cursor-pointer transition-colors"
-                    onClick={() => navigate(`/clientes/${c.id}`)}
-                  >
+                  <tr key={c.id} className="hover:bg-slate-50/80 transition-colors">
                     <td className="p-3.5 font-bold text-blue-600">{c.client_code || '-'}</td>
                     <td className="p-3.5">
                       <span className="inline-flex items-center gap-1 text-xs font-semibold px-2 py-0.5 rounded-full bg-slate-100 text-slate-700">
@@ -147,9 +211,26 @@ export default function Clients() {
                       {c.cidade ? `${c.cidade}/${c.estado || ''}` : '-'}
                     </td>
                     <td className="p-3.5 text-right">
-                      <Button variant="ghost" size="sm" className="text-blue-600">
-                        Ver Detalhes
-                      </Button>
+                      <div className="flex items-center justify-end gap-1">
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          className="text-blue-600 hover:text-blue-700 hover:bg-blue-50"
+                          onClick={() => handleEditClick(c)}
+                        >
+                          <Pencil className="w-4 h-4" />
+                          <span className="ml-1">Editar</span>
+                        </Button>
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          className="text-red-600 hover:text-red-700 hover:bg-red-50"
+                          onClick={() => handleDeleteClick(c)}
+                        >
+                          <Trash2 className="w-4 h-4" />
+                          <span className="ml-1">Excluir</span>
+                        </Button>
+                      </div>
                     </td>
                   </tr>
                 ))
@@ -160,6 +241,30 @@ export default function Clients() {
       </Card>
 
       <ClientFormDialog open={isModalOpen} onOpenChange={setIsModalOpen} onSubmit={handleCreate} />
+
+      {editingClient && (
+        <ClientFormDialog
+          open={isEditModalOpen}
+          onOpenChange={(open) => {
+            setIsEditModalOpen(open)
+            if (!open) setEditingClient(null)
+          }}
+          onSubmit={handleEditSubmit}
+          initialData={editingClient}
+          title="Editar Cliente"
+        />
+      )}
+
+      <DeleteClientDialog
+        open={isDeleteDialogOpen}
+        onOpenChange={(open) => {
+          setIsDeleteDialogOpen(open)
+          if (!open) setDeletingClient(null)
+        }}
+        onConfirm={handleDeleteConfirm}
+        clientName={deletingClient?.name || ''}
+        loading={deleteLoading}
+      />
     </div>
   )
 }
