@@ -104,3 +104,22 @@ export function buildFilterString(
   }
   return f
 }
+
+export const EMAIL_TEMPLATES = {
+  aniversario: {
+    id: 'aniversario' as const,
+    name: 'Aniversário',
+    subject: 'Feliz Aniversário, ${nome_cliente}!',
+    body: `Olá ${nome_cliente},\n\nDesejamos a você um dia repleto de alegrias, saúde e muito sucesso! Conte sempre com nossa equipe para proteger você e sua família.\n\nAtenciosamente,\nEquipe CRED10MIX`,
+  },
+  renovacao: {
+    id: 'renovacao' as const,
+    name: 'Aviso de Renovação',
+    subject: 'Aviso de Renovação - Apólice ${numero_apolice}',
+    body: `Olá ${nome_cliente},\n\nSua apólice ${numero_apolice} está próxima do vencimento. Entre em contato conosco para garantir a renovação do seu plano sem interrupção de cobertura.\n\nAtenciosamente,\nEquipe CRED10MIX`,
+  },
+}
+
+export function personalizeTemplate(template: string, vars: Record<string, string>): string {
+  return template.replace(/\$\{(\w+)\}/g, (_, key) => vars[key] || '')
+}

@@ -1,5 +1,5 @@
-import { useEffect, useState } from 'react'
-import { Users, FileCheck, Clock, AlertTriangle, Plus, ArrowRight } from 'lucide-react'
+import { useEffect, useState, useMemo } from 'react'
+import { Users, FileCheck, Clock, DollarSign, ArrowRight, Plus } from 'lucide-react'
 import { useNavigate } from 'react-router-dom'
 import { getClients } from '@/services/clients'
 import { getPolicies } from '@/services/policies'
@@ -7,6 +7,7 @@ import { getPayments } from '@/services/payments'
 import { Client, Policy, Payment } from '@/types'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
+import { useRealtime } from '@/hooks/use-realtime'
 import {
   BarChart,
   Bar,
@@ -26,53 +27,72 @@ export default function Dashboard() {
   const [payments, setPayments] = useState<Payment[]>([])
   const [loading, setLoading] = useState(true)
 
-  useEffect(() => {
-    async function loadData() {
-      try {
-        const [cls, pols, pays] = await Promise.all([getClients(), getPolicies(), getPayments()])
-        setClients(cls)
-        setPolicies(pols)
-        setPayments(pays)
-      } catch {
-        /* intentionally ignored */
-      }
-      setLoading(false)
+  const loadData = async () => {
+    try {
+      const [cls, pols, pays] = await Promise.all([getClients(), getPolicies(), getPayments()])
+      setClients(cls)
+      setPolicies(pols)
+      setPayments(pays)
+    } catch {
+      /* intentionally ignored */
     }
+    setLoading(false)
+  }
+
+  useEffect(() => {
     loadData()
   }, [])
+  useRealtime('clients', () => loadData())
+  useRealtime('policies', () => loadData())
+  useRealtime('payments', () => loadData())
 
   const activePolicies = policies.filter((p) => p.status === 'Ativa')
   const pendingRenewals = policies.filter((p) => p.status === 'Renovação Pendente')
   const overduePayments = payments.filter((p) => p.status === 'Atrasado')
 
+  const pendingCommissions = useMemo(
+    () =>
+      policies.filter((p) => !p.comissao_recebida).reduce((sum, p) => sum + (p.commission || 0), 0),
+    [policies],
+  )
+
   const coverageTypes = ['Auto', 'Vida', 'Residencial', 'Empresarial', 'Saúde', 'Outros']
   const pieData = coverageTypes
-    .map((type) => ({
-      name: type,
-      value: policies.filter((p) => p.coverage_type === type).length,
-    }))
+    .map((type) => ({ name: type, value: policies.filter((p) => p.coverage_type === type).length }))
     .filter((d) => d.value > 0)
-
   const COLORS = ['#2563eb', '#10b981', '#f59e0b', '#8b5cf6', '#ec4899', '#64748b']
 
-  const monthlyEmittedData = [
-    { month: 'Jan', value: 4 },
-    { month: 'Fev', value: 7 },
-    { month: 'Mar', value: 5 },
-    { month: 'Abr', value: 9 },
-    { month: 'Mai', value: 12 },
-    { month: 'Jun', value: 8 },
-  ]
+  const monthlyData = useMemo(() => {
+    const months = [
+      'Jan',
+      'Fev',
+      'Mar',
+      'Abr',
+      'Mai',
+      'Jun',
+      'Jul',
+      'Ago',
+      'Set',
+      'Out',
+      'Nov',
+      'Dez',
+    ]
+    const year = new Date().getFullYear()
+    const counts = new Array(12).fill(0)
+    policies.forEach((p) => {
+      const d = new Date(p.created)
+      if (d.getFullYear() === year) counts[d.getMonth()]++
+    })
+    return months.map((m, i) => ({ month: m, value: counts[i] }))
+  }, [policies])
 
-  if (loading) {
+  if (loading)
     return (
       <div className="text-slate-500 py-8 text-center">Carregando informações do dashboard...</div>
     )
-  }
 
   return (
     <div className="space-y-6">
-      {/* Top Bar Actions */}
       <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
         <div>
           <h1 className="text-2xl font-bold text-slate-900">Visão Geral da Corretora</h1>
@@ -92,7 +112,6 @@ export default function Dashboard() {
         </div>
       </div>
 
-      {/* Summary Cards */}
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
         <Card className="shadow-sm">
           <CardHeader className="flex flex-row items-center justify-between pb-2">
@@ -104,7 +123,6 @@ export default function Dashboard() {
             <p className="text-xs text-slate-500 mt-1">Segurados cadastrados</p>
           </CardContent>
         </Card>
-
         <Card className="shadow-sm">
           <CardHeader className="flex flex-row items-center justify-between pb-2">
             <CardTitle className="text-sm font-medium text-slate-600">Apólices Ativas</CardTitle>
@@ -115,7 +133,6 @@ export default function Dashboard() {
             <p className="text-xs text-slate-500 mt-1">Vigência em andamento</p>
           </CardContent>
         </Card>
-
         <Card
           className={`shadow-sm ${pendingRenewals.length > 0 ? 'border-amber-300 bg-amber-50/30' : ''}`}
         >
@@ -130,30 +147,32 @@ export default function Dashboard() {
             <p className="text-xs text-amber-600 mt-1">Próximos 30 dias</p>
           </CardContent>
         </Card>
-
         <Card
-          className={`shadow-sm ${overduePayments.length > 0 ? 'border-red-300 bg-red-50/30' : ''}`}
+          className={`shadow-sm ${pendingCommissions > 0 ? 'border-blue-300 bg-blue-50/30' : ''}`}
         >
           <CardHeader className="flex flex-row items-center justify-between pb-2">
             <CardTitle className="text-sm font-medium text-slate-600">
-              Pagamentos Atrasados
+              Comissões a Receber
             </CardTitle>
-            <AlertTriangle className="w-5 h-5 text-red-600" />
+            <DollarSign className="w-5 h-5 text-blue-600" />
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold text-red-700">{overduePayments.length}</div>
-            <p className="text-xs text-red-600 mt-1">Necessitam cobrança</p>
+            <div className="text-2xl font-bold text-blue-700">
+              R$ {pendingCommissions.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
+            </div>
+            <p className="text-xs text-blue-600 mt-1">Comissões pendentes</p>
           </CardContent>
         </Card>
       </div>
 
-      {/* Charts Section */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
         <Card className="p-4 shadow-sm">
-          <h3 className="text-base font-bold text-slate-800 mb-4">Apólices Emitidas por Mês</h3>
+          <h3 className="text-base font-bold text-slate-800 mb-4">
+            Apólices Emitidas por Mês ({new Date().getFullYear()})
+          </h3>
           <div className="h-64">
             <ResponsiveContainer width="100%" height="100%">
-              <BarChart data={monthlyEmittedData}>
+              <BarChart data={monthlyData}>
                 <XAxis dataKey="month" stroke="#64748b" fontSize={12} />
                 <YAxis stroke="#64748b" fontSize={12} />
                 <Tooltip />
@@ -162,7 +181,6 @@ export default function Dashboard() {
             </ResponsiveContainer>
           </div>
         </Card>
-
         <Card className="p-4 shadow-sm">
           <h3 className="text-base font-bold text-slate-800 mb-4">Distribuição por Cobertura</h3>
           <div className="h-64 flex items-center justify-center">
@@ -192,7 +210,6 @@ export default function Dashboard() {
         </Card>
       </div>
 
-      {/* Recent Activity / Policies */}
       <Card className="shadow-sm">
         <CardHeader className="flex flex-row items-center justify-between">
           <CardTitle className="text-base font-bold text-slate-800">Apólices Recentes</CardTitle>
@@ -214,29 +231,29 @@ export default function Dashboard() {
               >
                 <div>
                   <p className="font-semibold text-slate-900">
-                    {pol.policy_number} - {pol.insurance_company}
+                    {pol.policy_number} -{' '}
+                    {pol.expand?.seguradora?.nome || pol.insurance_company || '-'}
                   </p>
                   <p className="text-xs text-slate-500">
                     Cliente: {pol.expand?.client?.name || 'Cliente Indefinido'} | Tipo:{' '}
-                    {pol.coverage_type}
+                    {pol.tipo_de_seguro || pol.coverage_type}
                   </p>
                 </div>
                 <div className="text-right">
                   <p className="font-bold text-slate-900">
-                    R$ {pol.premium_amount?.toLocaleString('pt-BR')}
+                    R$ {(pol.valor_liquido || pol.premium_amount)?.toLocaleString('pt-BR')}
                   </p>
                   <span
-                    className={`text-[10px] px-2 py-0.5 rounded-full font-bold ${
-                      pol.status === 'Ativa'
-                        ? 'bg-emerald-100 text-emerald-800'
-                        : 'bg-amber-100 text-amber-800'
-                    }`}
+                    className={`text-[10px] px-2 py-0.5 rounded-full font-bold ${pol.status === 'Ativa' ? 'bg-emerald-100 text-emerald-800' : 'bg-amber-100 text-amber-800'}`}
                   >
                     {pol.status}
                   </span>
                 </div>
               </div>
             ))}
+            {policies.length === 0 && (
+              <p className="text-sm text-slate-500 text-center py-4">Nenhuma apólice cadastrada.</p>
+            )}
           </div>
         </CardContent>
       </Card>

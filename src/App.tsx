@@ -20,6 +20,8 @@ import PartnerReport from '@/pages/PartnerReport'
 import Financial from '@/pages/Financial'
 import RemindersPage from '@/pages/RemindersPage'
 import Communication from '@/pages/Communication'
+import EnvioEmMassa from '@/pages/EnvioEmMassa'
+import Pipeline from '@/pages/Pipeline'
 import Settings from '@/pages/Settings'
 import ChangePassword from '@/pages/ChangePassword'
 import UsersPage from '@/pages/Users'
@@ -48,6 +50,8 @@ const App = () => (
               <Route path="/financeiro" element={<Financial />} />
               <Route path="/lembretes" element={<RemindersPage />} />
               <Route path="/comunicacao" element={<Communication />} />
+              <Route path="/envio-em-massa" element={<EnvioEmMassa />} />
+              <Route path="/pipeline" element={<Pipeline />} />
               <Route path="/alterar-senha" element={<ChangePassword />} />
               <Route path="/usuarios" element={<UsersPage />} />
               <Route path="/configuracoes" element={<Settings />} />

@@ -41,7 +41,7 @@ const PERMISSIONS: Record<UserRole, Record<CollectionName, ActionType[]>> = {
     payments: READ,
     seguradoras: READ,
     parceiros: READ,
-    communications: READ,
+    communications: ['create', 'read'] as ActionType[],
     reminders: READ,
   },
   Operador: {
@@ -73,4 +73,8 @@ export function can(
   const r = role as UserRole
   if (!(r in PERMISSIONS)) return false
   return PERMISSIONS[r][collection]?.includes(action) ?? false
+}
+
+export function canAccessMassSend(role: string | undefined): boolean {
+  return role === 'Admin' || role === 'Administrador' || role === 'Gerente'
 }

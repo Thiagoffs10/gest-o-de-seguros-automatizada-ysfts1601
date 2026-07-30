@@ -14,17 +14,21 @@ import {
   Handshake,
   Building2,
   UserCog,
+  LayoutGrid,
+  Mail,
 } from 'lucide-react'
 import logoImg from '@/assets/cred10mixlogooficialfundobranco4k-12574.jpg'
 import { useAuth } from '@/hooks/use-auth'
 import { useRealtime } from '@/hooks/use-realtime'
 import { usePermissions } from '@/hooks/use-permissions'
+import { canAccessMassSend } from '@/lib/permissions'
 import { getReminders, updateReminder } from '@/services/reminders'
 import { Reminder } from '@/types'
 import { Avatar, AvatarFallback } from '@/components/ui/avatar'
 import { Button } from '@/components/ui/button'
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover'
 import { Badge } from '@/components/ui/badge'
+import { FloatingActions } from '@/components/FloatingActions'
 
 export default function Layout() {
   const { user, signOut } = useAuth()
@@ -57,16 +61,19 @@ export default function Layout() {
   }
 
   const isAdmin = user?.role === 'Admin' || user?.role === 'Administrador'
+  const canMassSend = canAccessMassSend(user?.role)
 
   const navItems = [
     { title: 'Dashboard', path: '/dashboard', icon: LayoutDashboard },
     { title: 'Clientes', path: '/clientes', icon: Users },
     { title: 'Apólices', path: '/apolices', icon: FileText },
+    { title: 'Pipeline', path: '/pipeline', icon: LayoutGrid },
     { title: 'Parceiros', path: '/parceiros', icon: Handshake },
     { title: 'Seguradoras', path: '/seguradoras', icon: Building2 },
     { title: 'Financeiro', path: '/financeiro', icon: Wallet },
     { title: 'Lembretes', path: '/lembretes', icon: Bell, badge: reminders.length },
     { title: 'Comunicação', path: '/comunicacao', icon: Send },
+    ...(canMassSend ? [{ title: 'Envio em Massa', path: '/envio-em-massa', icon: Mail }] : []),
     ...(isAdmin ? [{ title: 'Usuários', path: '/usuarios', icon: UserCog }] : []),
     { title: 'Configurações', path: '/configuracoes', icon: Settings },
   ]
@@ -319,6 +326,8 @@ export default function Layout() {
           reservados.
         </footer>
       </div>
+
+      <FloatingActions />
     </div>
   )
 }
