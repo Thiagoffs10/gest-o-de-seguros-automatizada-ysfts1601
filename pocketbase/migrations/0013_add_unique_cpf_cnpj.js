@@ -16,11 +16,8 @@ migrate(
       )
       .execute()
 
-    app.db().newQuery("UPDATE clients SET cpf = NULL WHERE cpf = ''").execute()
-    app.db().newQuery("UPDATE clients SET cnpj = NULL WHERE cnpj = ''").execute()
-
-    col.addIndex('idx_clients_cpf_unique', true, 'cpf')
-    col.addIndex('idx_clients_cnpj_unique', true, 'cnpj')
+    col.addIndex('idx_clients_cpf_unique', true, 'cpf', "WHERE cpf != ''")
+    col.addIndex('idx_clients_cnpj_unique', true, 'cnpj', "WHERE cnpj != ''")
 
     app.save(col)
   },

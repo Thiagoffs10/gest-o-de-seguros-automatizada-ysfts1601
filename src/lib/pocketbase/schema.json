@@ -1,5 +1,5 @@
 {
-  "generatedAt": "2026-07-30T13:45:49.011Z",
+  "generatedAt": "2026-07-30T13:51:29.695Z",
   "collections": [
     {
       "name": "users",
@@ -167,7 +167,11 @@
           "system": false
         }
       ],
-      "indexes": ["CREATE INDEX idx_clients_name ON clients (name)"]
+      "indexes": [
+        "CREATE INDEX idx_clients_name ON clients (name)",
+        "CREATE UNIQUE INDEX `idx_clients_cpf_unique` ON `clients` (cpf) WHERE WHERE cpf != ''",
+        "CREATE UNIQUE INDEX `idx_clients_cnpj_unique` ON `clients` (cnpj) WHERE WHERE cnpj != ''"
+      ]
     },
     {
       "name": "policies",
