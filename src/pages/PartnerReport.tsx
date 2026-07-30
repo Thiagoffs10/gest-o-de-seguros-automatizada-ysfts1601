@@ -102,12 +102,21 @@ export default function PartnerReport() {
       toast({ title: 'Nenhum dado para gerar relatório', variant: 'destructive' })
       return
     }
+    const selectedParceiro = parceiros.find((p) => p.id === selectedPartner)
     const partnerName =
-      selectedPartner === 'all'
-        ? 'Todos os Parceiros'
-        : parceiros.find((p) => p.id === selectedPartner)?.nome || 'Parceiro'
+      selectedPartner === 'all' ? 'Todos os Parceiros' : selectedParceiro?.nome || 'Parceiro'
     generatePartnerReportPDF({
       partnerName,
+      isAllPartners: selectedPartner === 'all',
+      partnerInfo: selectedParceiro
+        ? {
+            nome: selectedParceiro.nome,
+            cpf: selectedParceiro.cpf,
+            telefone: selectedParceiro.telefone,
+            email: selectedParceiro.email,
+            dadosBancarios: selectedParceiro.dados_bancarios_ou_pix,
+          }
+        : null,
       generatedAt: new Date(),
       entries: reportEntries,
       totalPaid,

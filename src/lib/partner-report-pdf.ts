@@ -8,8 +8,18 @@ export interface PartnerReportEntry {
   status: 'Pago' | 'Em aberto'
 }
 
+export interface PartnerReportInfo {
+  nome: string
+  cpf?: string
+  telefone?: string
+  email?: string
+  dadosBancarios?: string
+}
+
 export interface PartnerReportData {
   partnerName: string
+  partnerInfo?: PartnerReportInfo | null
+  isAllPartners?: boolean
   generatedAt: Date
   entries: PartnerReportEntry[]
   totalPaid: number
@@ -25,6 +35,21 @@ export function generatePartnerReportPDF(data: PartnerReportData) {
 
   const dateStr = data.generatedAt.toLocaleDateString('pt-BR')
   const timeStr = data.generatedAt.toLocaleTimeString('pt-BR')
+
+  const partnerHeader = data.isAllPartners
+    ? `<div class="partner-header"><h2>Relatório de Comissões - Todos os Parceiros</h2></div>`
+    : data.partnerInfo
+      ? `<div class="partner-header">
+        <h2>Dados do Parceiro</h2>
+        <div class="partner-grid">
+          <div class="partner-field"><span class="partner-label">Nome:</span> ${data.partnerInfo.nome}</div>
+          ${data.partnerInfo.cpf ? `<div class="partner-field"><span class="partner-label">CPF:</span> ${data.partnerInfo.cpf}</div>` : ''}
+          ${data.partnerInfo.telefone ? `<div class="partner-field"><span class="partner-label">Telefone:</span> ${data.partnerInfo.telefone}</div>` : ''}
+          ${data.partnerInfo.email ? `<div class="partner-field"><span class="partner-label">E-mail:</span> ${data.partnerInfo.email}</div>` : ''}
+          ${data.partnerInfo.dadosBancarios ? `<div class="partner-field"><span class="partner-label">Dados Bancários/PIX:</span> ${data.partnerInfo.dadosBancarios}</div>` : ''}
+        </div>
+      </div>`
+      : `<div class="partner-header"><h2>${data.partnerName}</h2></div>`
 
   const rows = data.entries
     .map(
@@ -48,6 +73,11 @@ body{font-family:Arial,sans-serif;padding:30px;color:#1e293b}
 .header h1{font-size:22px;color:#1e293b;margin-bottom:4px}
 .header p{font-size:13px;color:#64748b}
 .header .partner{font-size:15px;font-weight:bold;color:#2563eb;margin-top:4px}
+.partner-header{margin-bottom:20px;padding:16px 20px;background:#f1f5f9;border-left:4px solid #2563eb;border-radius:6px}
+.partner-header h2{font-size:16px;color:#1e293b;margin-bottom:10px}
+.partner-grid{display:flex;flex-wrap:wrap;gap:6px 30px}
+.partner-field{font-size:13px;color:#334155}
+.partner-label{font-weight:600;color:#64748b;display:inline-block;min-width:140px}
 table{width:100%;border-collapse:collapse;font-size:12px}
 th{background:#1e293b;color:#fff;padding:8px 6px;text-align:left;font-weight:600}
 td{padding:7px 6px;border-bottom:1px solid #e2e8f0}
@@ -71,6 +101,7 @@ tr:nth-child(even){background:#f8fafc}
 <p>Gerado em ${dateStr} às ${timeStr}</p>
 <p class="partner">${data.partnerName}</p>
 </div>
+${partnerHeader}
 <table>
 <thead><tr>
 <th>Nome</th><th>Seguradora</th><th>Tipo de Seguro</th>
