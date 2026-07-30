@@ -121,5 +121,6 @@ export const EMAIL_TEMPLATES = {
 }
 
 export function personalizeTemplate(template: string, vars: Record<string, string>): string {
+  if (typeof template !== 'string') return ''
   return template.replace(/\$\{(\w+)\}/g, (_, key) => vars[key] || '')
 }

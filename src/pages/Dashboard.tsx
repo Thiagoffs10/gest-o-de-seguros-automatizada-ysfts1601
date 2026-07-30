@@ -1,5 +1,5 @@
 import { useEffect, useState, useMemo } from 'react'
-import { Users, FileCheck, Clock, DollarSign, ArrowRight, Plus } from 'lucide-react'
+import { Users, FileCheck, Clock, DollarSign, ArrowRight, Plus, HelpCircle } from 'lucide-react'
 import { useNavigate } from 'react-router-dom'
 import { getClients } from '@/services/clients'
 import { getPolicies } from '@/services/policies'
@@ -7,6 +7,7 @@ import { getPayments } from '@/services/payments'
 import { Client, Policy, Payment } from '@/types'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
+import { SecretsGuideDialog } from '@/components/SecretsGuideDialog'
 import { useRealtime } from '@/hooks/use-realtime'
 import {
   BarChart,
@@ -100,7 +101,15 @@ export default function Dashboard() {
             Resumo de clientes, apólices e indicadores operacionais.
           </p>
         </div>
-        <div className="flex gap-2">
+        <div className="flex gap-2 flex-wrap">
+          <SecretsGuideDialog
+            trigger={
+              <Button variant="ghost" size="sm" className="text-slate-500 hover:text-blue-600">
+                <HelpCircle className="w-4 h-4 mr-2" />
+                Configurar E-mail
+              </Button>
+            }
+          />
           <Button className="bg-blue-600 hover:bg-blue-700" onClick={() => navigate('/clientes')}>
             <Plus className="w-4 h-4 mr-2" />
             Novo Cliente

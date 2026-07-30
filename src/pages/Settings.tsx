@@ -1,12 +1,13 @@
 import { useState } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { User, Bell, Key, Shield } from 'lucide-react'
+import { User, Bell, Key, Shield, HelpCircle } from 'lucide-react'
 import { useAuth } from '@/hooks/use-auth'
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Checkbox } from '@/components/ui/checkbox'
+import { SecretsGuideDialog } from '@/components/SecretsGuideDialog'
 import { useToast } from '@/hooks/use-toast'
 import pb from '@/lib/pocketbase/client'
 
@@ -108,11 +109,23 @@ export default function Settings() {
             Integrações Futuras
           </CardTitle>
         </CardHeader>
-        <CardContent className="text-xs text-slate-600">
+        <CardContent className="text-xs text-slate-600 space-y-3">
           <p>
             Esta plataforma permite conexão futura via webhook para gateways de pagamento, APIs de
             WhatsApp Oficial e envio de e-mails em massa.
           </p>
+          <SecretsGuideDialog
+            trigger={
+              <Button
+                variant="outline"
+                size="sm"
+                className="text-blue-600 border-blue-300 hover:bg-blue-50"
+              >
+                <HelpCircle className="w-4 h-4 mr-2" />
+                Como configurar envio de e-mails (Resend)
+              </Button>
+            }
+          />
         </CardContent>
       </Card>
     </div>
