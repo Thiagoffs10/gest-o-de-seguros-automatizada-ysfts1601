@@ -1,8 +1,12 @@
 import pb from '@/lib/pocketbase/client'
 import { Client } from '@/types'
 
-export const getClients = async (searchQuery?: string) => {
-  const filter = searchQuery ? `name ~ "${searchQuery}" || email ~ "${searchQuery}"` : ''
+export const getClients = async (searchQuery?: string, filterString?: string) => {
+  let filter = filterString || ''
+  if (searchQuery) {
+    const q = `name ~ "${searchQuery}" || email ~ "${searchQuery}" || cpf ~ "${searchQuery}"`
+    filter = filter ? `${filter} && (${q})` : q
+  }
   return pb.collection('clients').getFullList<Client>({
     filter,
     sort: '-created',

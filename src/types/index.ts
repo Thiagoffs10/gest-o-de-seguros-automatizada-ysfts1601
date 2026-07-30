@@ -1,8 +1,16 @@
 export interface Client {
   id: string
+  client_code?: number
   name: string
+  cpf?: string
   email?: string
   phone?: string
+  cep?: string
+  rua?: string
+  numero?: string
+  bairro?: string
+  cidade?: string
+  estado?: string
   address?: string
   birth_date?: string
   notes?: string
@@ -10,19 +18,59 @@ export interface Client {
   updated: string
 }
 
+export interface Seguradora {
+  id: string
+  nome: string
+  imposto_percentual?: number
+  created: string
+  updated: string
+}
+
+export interface Parceiro {
+  id: string
+  partner_code?: number
+  nome: string
+  cpf?: string
+  telefone?: string
+  email?: string
+  dados_bancarios_ou_pix?: string
+  created: string
+  updated: string
+}
+
 export interface Policy {
   id: string
+  policy_code?: number
   client: string
-  expand?: { client?: Client }
+  expand?: {
+    client?: Client
+    seguradora?: Seguradora
+    parceiro?: Parceiro
+  }
+  seguradora?: string
   insurance_company?: string
   policy_number: string
-  coverage_type: 'Auto' | 'Vida' | 'Residencial' | 'Empresarial' | 'Saúde' | 'Outros'
+  tipo_de_seguro?: string
+  coverage_type?: 'Auto' | 'Vida' | 'Residencial' | 'Empresarial' | 'Saúde' | 'Outros'
   premium_amount: number
+  valor_bruto?: number
+  valor_liquido?: number
+  placa?: string
+  modelo_veiculo?: string
   start_date: string
   end_date: string
   renewal_date?: string
   status: 'Ativa' | 'Expirada' | 'Cancelada' | 'Renovação Pendente'
   commission?: number
+  commission_percent?: number
+  tipo_de_venda?: 'Produção Própria' | 'Parceiro' | 'Indicação'
+  observacao_indicacao?: string
+  parceiro?: string
+  valor_repasse?: number
+  data_pagamento_parceiro?: string
+  pago_parceiro?: boolean
+  data_recebimento_comissao?: string
+  comissao_recebida?: boolean
   notes?: string
   created: string
   updated: string
@@ -68,4 +116,14 @@ export interface Communication {
   sent_date?: string
   created: string
   updated: string
+}
+
+export interface FilterState {
+  year?: string
+  month?: string
+  dateFrom?: string
+  dateTo?: string
+  partnerId?: string
+  seguradoraId?: string
+  tipoSeguro?: string
 }

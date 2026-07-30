@@ -1,9 +1,11 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useState, useCallback } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { Plus, Search, FileText } from 'lucide-react'
+import { Search, Plus, Download, Car } from 'lucide-react'
 import { getPolicies, createPolicy } from '@/services/policies'
 import { getClients } from '@/services/clients'
-import { Policy, Client } from '@/types'
+import { getSeguradoras } from '@/services/seguradoras'
+import { getParceiros } from '@/services/parceiros'
+import { Policy, Client, Seguradora, Parceiro, FilterState } from '@/types'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Card } from '@/components/ui/card'
@@ -15,14 +17,10 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select'
-import {
-  Dialog,
-  DialogContent,
-  DialogHeader,
-  DialogTitle,
-  DialogFooter,
-} from '@/components/ui/dialog'
-import { Label } from '@/components/ui/label'
+import { PolicyFormDialog } from '@/components/PolicyFormDialog'
+import { GlobalFilters } from '@/components/GlobalFilters'
+import { buildFilterString } from '@/lib/constants'
+import { exportPoliciesToCsv } from '@/lib/export-utils'
 import { useToast } from '@/hooks/use-toast'
 
 export default function Policies() {
@@ -30,58 +28,45 @@ export default function Policies() {
   const { toast } = useToast()
   const [policies, setPolicies] = useState<Policy[]>([])
   const [clients, setClients] = useState<Client[]>([])
+  const [seguradoras, setSeguradoras] = useState<Seguradora[]>([])
+  const [parceiros, setParceiros] = useState<Parceiro[]>([])
   const [search, setSearch] = useState('')
+  const [placaSearch, setPlacaSearch] = useState('')
   const [statusFilter, setStatusFilter] = useState('ALL')
   const [isModalOpen, setIsModalOpen] = useState(false)
+  const [filters, setFilters] = useState<FilterState>({})
 
-  const [formData, setFormData] = useState({
-    client: '',
-    insurance_company: '',
-    policy_number: '',
-    coverage_type: 'Auto' as const,
-    premium_amount: 1500,
-    start_date: new Date().toISOString().split('T')[0],
-    end_date: new Date(Date.now() + 365 * 24 * 60 * 60 * 1000).toISOString().split('T')[0],
-    commission: 15,
-    status: 'Ativa' as const,
-  })
-
-  const loadData = async () => {
+  const loadData = useCallback(async () => {
     try {
-      const cls = await getClients()
+      const [cls, segs, pars] = await Promise.all([getClients(), getSeguradoras(), getParceiros()])
       setClients(cls)
-      let filter = ''
-      if (statusFilter !== 'ALL') filter = `status = "${statusFilter}"`
+      setSeguradoras(segs)
+      setParceiros(pars)
+      let filter = buildFilterString('', filters, 'start_date')
+      if (statusFilter !== 'ALL')
+        filter = filter ? `${filter} && status = "${statusFilter}"` : `status = "${statusFilter}"`
       if (search) {
-        filter +=
-          (filter ? ' && ' : '') +
-          `(policy_number ~ "${search}" || insurance_company ~ "${search}")`
+        const q = `policy_number ~ "${search}" || insurance_company ~ "${search}"`
+        filter = filter ? `${filter} && (${q})` : q
+      }
+      if (placaSearch) {
+        const q = `placa ~ "${placaSearch}"`
+        filter = filter ? `${filter} && (${q})` : q
       }
       const data = await getPolicies(filter)
       setPolicies(data)
     } catch {
       /* intentionally ignored */
     }
-  }
+  }, [search, placaSearch, statusFilter, filters])
 
   useEffect(() => {
     loadData()
-  }, [search, statusFilter])
+  }, [loadData])
 
-  const handleCreate = async (e: React.FormEvent) => {
-    e.preventDefault()
-    if (!formData.client) {
-      toast({ title: 'Selecione um cliente', variant: 'destructive' })
-      return
-    }
+  const handleCreate = async (formData: any) => {
     try {
-      const endDate = new Date(formData.end_date)
-      const renewalDate = new Date(endDate.getTime() - 30 * 24 * 60 * 60 * 1000)
-
-      await createPolicy({
-        ...formData,
-        renewal_date: renewalDate.toISOString(),
-      })
+      await createPolicy(formData)
       toast({ title: 'Apólice cadastrada!' })
       setIsModalOpen(false)
       loadData()
@@ -97,11 +82,25 @@ export default function Policies() {
           <h1 className="text-2xl font-bold text-slate-900">Gestão de Apólices</h1>
           <p className="text-slate-500 text-sm">Registro de apólices e coberturas ativas.</p>
         </div>
-        <Button className="bg-blue-600 hover:bg-blue-700" onClick={() => setIsModalOpen(true)}>
-          <Plus className="w-4 h-4 mr-2" />
-          Nova Apólice
-        </Button>
+        <div className="flex gap-2">
+          <Button variant="outline" onClick={() => exportPoliciesToCsv(policies)}>
+            <Download className="w-4 h-4 mr-2" /> Exportar Carteira (Excel)
+          </Button>
+          <Button className="bg-blue-600 hover:bg-blue-700" onClick={() => setIsModalOpen(true)}>
+            <Plus className="w-4 h-4 mr-2" /> Nova Apólice
+          </Button>
+        </div>
       </div>
+
+      <GlobalFilters
+        filters={filters}
+        onFilterChange={setFilters}
+        showSeguradoraFilter
+        seguradoras={seguradoras}
+        showPartnerFilter
+        parceiros={parceiros}
+        showTipoSeguroFilter
+      />
 
       <div className="flex flex-col sm:flex-row gap-4">
         <div className="relative flex-1">
@@ -111,6 +110,15 @@ export default function Policies() {
             className="pl-9"
             value={search}
             onChange={(e) => setSearch(e.target.value)}
+          />
+        </div>
+        <div className="relative flex-1">
+          <Car className="w-4 h-4 absolute left-3 top-3 text-slate-400" />
+          <Input
+            placeholder="Pesquisar por Placa..."
+            className="pl-9"
+            value={placaSearch}
+            onChange={(e) => setPlacaSearch(e.target.value)}
           />
         </div>
         <Select value={statusFilter} onValueChange={setStatusFilter}>
@@ -132,11 +140,14 @@ export default function Policies() {
           <table className="w-full text-left text-sm text-slate-700">
             <thead className="bg-slate-100 text-slate-600 font-semibold border-b">
               <tr>
+                <th className="p-3.5">Código</th>
                 <th className="p-3.5">Nº Apólice</th>
                 <th className="p-3.5">Seguradora</th>
                 <th className="p-3.5">Cliente</th>
-                <th className="p-3.5">Cobertura</th>
-                <th className="p-3.5">Prêmio</th>
+                <th className="p-3.5">Tipo</th>
+                <th className="p-3.5">Placa</th>
+                <th className="p-3.5">Valor Líquido</th>
+                <th className="p-3.5">Comissão</th>
                 <th className="p-3.5">Status</th>
                 <th className="p-3.5 text-right">Ação</th>
               </tr>
@@ -144,7 +155,7 @@ export default function Policies() {
             <tbody className="divide-y divide-slate-100">
               {policies.length === 0 ? (
                 <tr>
-                  <td colSpan={7} className="text-center p-6 text-slate-500">
+                  <td colSpan={10} className="text-center p-6 text-slate-500">
                     Nenhuma apólice encontrada.
                   </td>
                 </tr>
@@ -155,13 +166,18 @@ export default function Policies() {
                     className="hover:bg-slate-50/80 cursor-pointer"
                     onClick={() => navigate(`/apolices/${p.id}`)}
                   >
+                    <td className="p-3.5 font-bold text-blue-600">{p.policy_code || '-'}</td>
                     <td className="p-3.5 font-bold text-slate-900">{p.policy_number}</td>
-                    <td className="p-3.5">{p.insurance_company || '-'}</td>
-                    <td className="p-3.5 font-medium">{p.expand?.client?.name || 'Indefinido'}</td>
-                    <td className="p-3.5">{p.coverage_type}</td>
-                    <td className="p-3.5 font-bold text-slate-900">
-                      R$ {p.premium_amount?.toLocaleString('pt-BR')}
+                    <td className="p-3.5">
+                      {p.expand?.seguradora?.nome || p.insurance_company || '-'}
                     </td>
+                    <td className="p-3.5 font-medium">{p.expand?.client?.name || 'Indefinido'}</td>
+                    <td className="p-3.5">{p.tipo_de_seguro || p.coverage_type}</td>
+                    <td className="p-3.5">{p.placa || '-'}</td>
+                    <td className="p-3.5 font-bold">
+                      R$ {(p.valor_liquido || p.premium_amount)?.toLocaleString('pt-BR')}
+                    </td>
+                    <td className="p-3.5">{p.commission_percent || p.commission || 0}%</td>
                     <td className="p-3.5">
                       <Badge
                         className={
@@ -188,134 +204,14 @@ export default function Policies() {
         </div>
       </Card>
 
-      {/* Modal Adicionar Apólice */}
-      <Dialog open={isModalOpen} onOpenChange={setIsModalOpen}>
-        <DialogContent className="sm:max-w-lg">
-          <DialogHeader>
-            <DialogTitle>Registrar Nova Apólice</DialogTitle>
-          </DialogHeader>
-          <form onSubmit={handleCreate} className="space-y-3 pt-2">
-            <div>
-              <Label>Cliente *</Label>
-              <Select
-                value={formData.client}
-                onValueChange={(val) => setFormData({ ...formData, client: val })}
-              >
-                <SelectTrigger>
-                  <SelectValue placeholder="Selecione o segurado" />
-                </SelectTrigger>
-                <SelectContent>
-                  {clients.map((c) => (
-                    <SelectItem key={c.id} value={c.id}>
-                      {c.name}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
-            <div className="grid grid-cols-2 gap-2">
-              <div>
-                <Label>Nº da Apólice *</Label>
-                <Input
-                  required
-                  value={formData.policy_number}
-                  onChange={(e) => setFormData({ ...formData, policy_number: e.target.value })}
-                />
-              </div>
-              <div>
-                <Label>Seguradora</Label>
-                <Input
-                  value={formData.insurance_company}
-                  onChange={(e) => setFormData({ ...formData, insurance_company: e.target.value })}
-                />
-              </div>
-            </div>
-            <div className="grid grid-cols-2 gap-2">
-              <div>
-                <Label>Cobertura</Label>
-                <Select
-                  value={formData.coverage_type}
-                  onValueChange={(val: any) => setFormData({ ...formData, coverage_type: val })}
-                >
-                  <SelectTrigger>
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="Auto">Auto</SelectItem>
-                    <SelectItem value="Vida">Vida</SelectItem>
-                    <SelectItem value="Residencial">Residencial</SelectItem>
-                    <SelectItem value="Empresarial">Empresarial</SelectItem>
-                    <SelectItem value="Saúde">Saúde</SelectItem>
-                    <SelectItem value="Outros">Outros</SelectItem>
-                  </SelectContent>
-                </Select>
-              </div>
-              <div>
-                <Label>Status</Label>
-                <Select
-                  value={formData.status}
-                  onValueChange={(val: any) => setFormData({ ...formData, status: val })}
-                >
-                  <SelectTrigger>
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="Ativa">Ativa</SelectItem>
-                    <SelectItem value="Renovação Pendente">Renovação Pendente</SelectItem>
-                    <SelectItem value="Expirada">Expirada</SelectItem>
-                  </SelectContent>
-                </Select>
-              </div>
-            </div>
-            <div className="grid grid-cols-2 gap-2">
-              <div>
-                <Label>Valor Prêmio (R$)</Label>
-                <Input
-                  type="number"
-                  value={formData.premium_amount}
-                  onChange={(e) =>
-                    setFormData({ ...formData, premium_amount: Number(e.target.value) })
-                  }
-                />
-              </div>
-              <div>
-                <Label>Comissão (%)</Label>
-                <Input
-                  type="number"
-                  value={formData.commission}
-                  onChange={(e) => setFormData({ ...formData, commission: Number(e.target.value) })}
-                />
-              </div>
-            </div>
-            <div className="grid grid-cols-2 gap-2">
-              <div>
-                <Label>Data Início</Label>
-                <Input
-                  type="date"
-                  value={formData.start_date}
-                  onChange={(e) => setFormData({ ...formData, start_date: e.target.value })}
-                />
-              </div>
-              <div>
-                <Label>Data Fim</Label>
-                <Input
-                  type="date"
-                  value={formData.end_date}
-                  onChange={(e) => setFormData({ ...formData, end_date: e.target.value })}
-                />
-              </div>
-            </div>
-            <DialogFooter>
-              <Button type="button" variant="outline" onClick={() => setIsModalOpen(false)}>
-                Cancelar
-              </Button>
-              <Button type="submit" className="bg-blue-600">
-                Salvar Apólice
-              </Button>
-            </DialogFooter>
-          </form>
-        </DialogContent>
-      </Dialog>
+      <PolicyFormDialog
+        open={isModalOpen}
+        onOpenChange={setIsModalOpen}
+        onSubmit={handleCreate}
+        clients={clients}
+        seguradoras={seguradoras}
+        parceiros={parceiros}
+      />
     </div>
   )
 }

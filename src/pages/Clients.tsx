@@ -1,20 +1,14 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useState, useCallback } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { Search, Plus, UserPlus, Phone, Mail } from 'lucide-react'
+import { Search, UserPlus, Phone, Mail } from 'lucide-react'
 import { getClients, createClient } from '@/services/clients'
-import { Client } from '@/types'
+import { Client, FilterState } from '@/types'
 import { Input } from '@/components/ui/input'
 import { Button } from '@/components/ui/button'
 import { Card } from '@/components/ui/card'
-import {
-  Dialog,
-  DialogContent,
-  DialogHeader,
-  DialogTitle,
-  DialogFooter,
-} from '@/components/ui/dialog'
-import { Label } from '@/components/ui/label'
-import { Textarea } from '@/components/ui/textarea'
+import { ClientFormDialog } from '@/components/ClientFormDialog'
+import { GlobalFilters } from '@/components/GlobalFilters'
+import { buildFilterString } from '@/lib/constants'
 import { useToast } from '@/hooks/use-toast'
 
 export default function Clients() {
@@ -23,38 +17,30 @@ export default function Clients() {
   const [clients, setClients] = useState<Client[]>([])
   const [search, setSearch] = useState('')
   const [isModalOpen, setIsModalOpen] = useState(false)
-  const [formData, setFormData] = useState({
-    name: '',
-    email: '',
-    phone: '',
-    address: '',
-    birth_date: '',
-    notes: '',
-  })
+  const [filters, setFilters] = useState<FilterState>({})
 
-  const loadClients = async (query?: string) => {
+  const loadClients = useCallback(async () => {
     try {
-      const data = await getClients(query)
+      const filterStr = buildFilterString('', filters, 'created')
+      const data = await getClients(search, filterStr)
       setClients(data)
     } catch {
       /* intentionally ignored */
     }
-  }
+  }, [search, filters])
 
   useEffect(() => {
     const timer = setTimeout(() => {
-      loadClients(search)
+      loadClients()
     }, 300)
     return () => clearTimeout(timer)
-  }, [search])
+  }, [loadClients])
 
-  const handleCreate = async (e: React.FormEvent) => {
-    e.preventDefault()
+  const handleCreate = async (formData: any) => {
     try {
       await createClient(formData)
       toast({ title: 'Cliente adicionado com sucesso!' })
       setIsModalOpen(false)
-      setFormData({ name: '', email: '', phone: '', address: '', birth_date: '', notes: '' })
       loadClients()
     } catch (err: any) {
       toast({
@@ -73,15 +59,16 @@ export default function Clients() {
           <p className="text-slate-500 text-sm">Cadastre e gerencie a base de segurados.</p>
         </div>
         <Button className="bg-blue-600 hover:bg-blue-700" onClick={() => setIsModalOpen(true)}>
-          <UserPlus className="w-4 h-4 mr-2" />
-          Adicionar Cliente
+          <UserPlus className="w-4 h-4 mr-2" /> Adicionar Cliente
         </Button>
       </div>
+
+      <GlobalFilters filters={filters} onFilterChange={setFilters} />
 
       <div className="relative max-w-md">
         <Search className="w-4 h-4 absolute left-3 top-3 text-slate-400" />
         <Input
-          placeholder="Buscar por nome ou e-mail..."
+          placeholder="Buscar por nome, e-mail ou CPF..."
           className="pl-9"
           value={search}
           onChange={(e) => setSearch(e.target.value)}
@@ -93,17 +80,19 @@ export default function Clients() {
           <table className="w-full text-left text-sm text-slate-700">
             <thead className="bg-slate-100 text-slate-600 font-semibold border-b">
               <tr>
+                <th className="p-3.5">Código</th>
                 <th className="p-3.5">Nome</th>
+                <th className="p-3.5">CPF</th>
                 <th className="p-3.5">E-mail</th>
                 <th className="p-3.5">Telefone</th>
-                <th className="p-3.5">Data de Cadastro</th>
+                <th className="p-3.5">Cidade/UF</th>
                 <th className="p-3.5 text-right">Ação</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-100">
               {clients.length === 0 ? (
                 <tr>
-                  <td colSpan={5} className="text-center p-6 text-slate-500">
+                  <td colSpan={7} className="text-center p-6 text-slate-500">
                     Nenhum cliente encontrado.
                   </td>
                 </tr>
@@ -114,19 +103,23 @@ export default function Clients() {
                     className="hover:bg-slate-50/80 cursor-pointer transition-colors"
                     onClick={() => navigate(`/clientes/${c.id}`)}
                   >
+                    <td className="p-3.5 font-bold text-blue-600">{c.client_code || '-'}</td>
                     <td className="p-3.5 font-semibold text-slate-900">{c.name}</td>
-                    <td className="p-3.5 flex items-center gap-1.5 text-slate-600">
-                      <Mail className="w-3.5 h-3.5 text-slate-400" />
-                      {c.email || '-'}
+                    <td className="p-3.5 text-slate-600">{c.cpf || '-'}</td>
+                    <td className="p-3.5 text-slate-600">
+                      <span className="flex items-center gap-1.5">
+                        <Mail className="w-3.5 h-3.5 text-slate-400" />
+                        {c.email || '-'}
+                      </span>
                     </td>
-                    <td className="p-3.5">
-                      <span className="flex items-center gap-1.5 text-slate-600">
+                    <td className="p-3.5 text-slate-600">
+                      <span className="flex items-center gap-1.5">
                         <Phone className="w-3.5 h-3.5 text-slate-400" />
                         {c.phone || '-'}
                       </span>
                     </td>
                     <td className="p-3.5 text-slate-500">
-                      {new Date(c.created).toLocaleDateString('pt-BR')}
+                      {c.cidade ? `${c.cidade}/${c.estado || ''}` : '-'}
                     </td>
                     <td className="p-3.5 text-right">
                       <Button variant="ghost" size="sm" className="text-blue-600">
@@ -141,71 +134,7 @@ export default function Clients() {
         </div>
       </Card>
 
-      {/* Modal Adicionar Cliente */}
-      <Dialog open={isModalOpen} onOpenChange={setIsModalOpen}>
-        <DialogContent className="sm:max-w-md">
-          <DialogHeader>
-            <DialogTitle>Adicionar Novo Cliente</DialogTitle>
-          </DialogHeader>
-          <form onSubmit={handleCreate} className="space-y-3 pt-2">
-            <div>
-              <Label className="text-xs font-semibold">Nome Completo *</Label>
-              <Input
-                required
-                value={formData.name}
-                onChange={(e) => setFormData({ ...formData, name: e.target.value })}
-              />
-            </div>
-            <div className="grid grid-cols-2 gap-2">
-              <div>
-                <Label className="text-xs font-semibold">E-mail</Label>
-                <Input
-                  type="email"
-                  value={formData.email}
-                  onChange={(e) => setFormData({ ...formData, email: e.target.value })}
-                />
-              </div>
-              <div>
-                <Label className="text-xs font-semibold">Telefone / WhatsApp</Label>
-                <Input
-                  value={formData.phone}
-                  onChange={(e) => setFormData({ ...formData, phone: e.target.value })}
-                />
-              </div>
-            </div>
-            <div>
-              <Label className="text-xs font-semibold">Endereço</Label>
-              <Input
-                value={formData.address}
-                onChange={(e) => setFormData({ ...formData, address: e.target.value })}
-              />
-            </div>
-            <div>
-              <Label className="text-xs font-semibold">Data de Nascimento</Label>
-              <Input
-                type="date"
-                value={formData.birth_date}
-                onChange={(e) => setFormData({ ...formData, birth_date: e.target.value })}
-              />
-            </div>
-            <div>
-              <Label className="text-xs font-semibold">Observações</Label>
-              <Textarea
-                value={formData.notes}
-                onChange={(e) => setFormData({ ...formData, notes: e.target.value })}
-              />
-            </div>
-            <DialogFooter className="pt-2">
-              <Button type="button" variant="outline" onClick={() => setIsModalOpen(false)}>
-                Cancelar
-              </Button>
-              <Button type="submit" className="bg-blue-600">
-                Salvar Cliente
-              </Button>
-            </DialogFooter>
-          </form>
-        </DialogContent>
-      </Dialog>
+      <ClientFormDialog open={isModalOpen} onOpenChange={setIsModalOpen} onSubmit={handleCreate} />
     </div>
   )
 }

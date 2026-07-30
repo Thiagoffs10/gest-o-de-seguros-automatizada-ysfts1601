@@ -1,9 +1,10 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useState, useCallback } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
-import { User, Phone, Mail, MapPin, Calendar, FileText, Plus, Edit } from 'lucide-react'
+import { User, Phone, Mail, MapPin, FileText, Plus, Edit, Hash } from 'lucide-react'
 import { getClient, updateClient } from '@/services/clients'
 import { getPolicies, createPolicy } from '@/services/policies'
-import { Client, Policy } from '@/types'
+import { getSeguradoras } from '@/services/seguradoras'
+import { Client, Policy, Seguradora } from '@/types'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import {
@@ -22,53 +23,52 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select'
+import { ClientFormDialog } from '@/components/ClientFormDialog'
+import { BRAZILIAN_STATES, TIPOS_DE_SEGURO } from '@/lib/constants'
 import { useToast } from '@/hooks/use-toast'
 
 export default function ClientDetail() {
   const { id } = useParams<{ id: string }>()
   const navigate = useNavigate()
   const { toast } = useToast()
-
   const [client, setClient] = useState<Client | null>(null)
   const [policies, setPolicies] = useState<Policy[]>([])
-  const [isEditOpen, setIsModalEditOpen] = useState(false)
+  const [seguradoras, setSeguradoras] = useState<Seguradora[]>([])
+  const [isEditOpen, setIsEditOpen] = useState(false)
   const [isNewPolicyOpen, setIsNewPolicyOpen] = useState(false)
-
-  const [editData, setEditData] = useState<Partial<Client>>({})
-  const [newPolicyData, setNewPolicyData] = useState({
+  const [newPolicy, setNewPolicy] = useState({
     policy_number: '',
-    insurance_company: '',
-    coverage_type: 'Auto' as const,
-    premium_amount: 1000,
+    seguradora: '',
+    tipo_de_seguro: 'Auto',
+    valor_liquido: 1000,
+    commission_percent: 10,
     start_date: new Date().toISOString().split('T')[0],
-    end_date: new Date(Date.now() + 365 * 24 * 60 * 60 * 1000).toISOString().split('T')[0],
-    commission: 15,
+    end_date: new Date(Date.now() + 365 * 86400000).toISOString().split('T')[0],
   })
 
-  const loadData = async () => {
+  const loadData = useCallback(async () => {
     if (!id) return
     try {
       const c = await getClient(id)
       setClient(c)
-      setEditData(c)
-      const pols = await getPolicies(`client = "${id}"`)
+      const [pols, segs] = await Promise.all([getPolicies(`client = "${id}"`), getSeguradoras()])
       setPolicies(pols)
+      setSeguradoras(segs)
     } catch {
       /* intentionally ignored */
     }
-  }
+  }, [id])
 
   useEffect(() => {
     loadData()
-  }, [id])
+  }, [loadData])
 
-  const handleUpdateClient = async (e: React.FormEvent) => {
-    e.preventDefault()
+  const handleUpdateClient = async (formData: any) => {
     if (!id) return
     try {
-      await updateClient(id, editData)
+      await updateClient(id, formData)
       toast({ title: 'Cliente atualizado com sucesso!' })
-      setIsModalEditOpen(false)
+      setIsEditOpen(false)
       loadData()
     } catch (err: any) {
       toast({ title: 'Erro ao atualizar', description: err.message, variant: 'destructive' })
@@ -79,15 +79,17 @@ export default function ClientDetail() {
     e.preventDefault()
     if (!id) return
     try {
-      const startDate = new Date(newPolicyData.start_date)
-      const endDate = new Date(newPolicyData.end_date)
-      const renewalDate = new Date(endDate.getTime() - 30 * 24 * 60 * 60 * 1000)
-
+      const endDate = new Date(newPolicy.end_date)
+      const renewalDate = new Date(endDate.getTime() - 30 * 86400000).toISOString()
+      const commission = (newPolicy.commission_percent / 100) * newPolicy.valor_liquido
       await createPolicy({
-        ...newPolicyData,
+        ...newPolicy,
         client: id,
-        renewal_date: renewalDate.toISOString(),
+        renewal_date: renewalDate,
+        commission,
         status: 'Ativa',
+        premium_amount: newPolicy.valor_liquido,
+        valor_bruto: newPolicy.valor_liquido,
       })
       toast({ title: 'Apólice vinculada ao cliente!' })
       setIsNewPolicyOpen(false)
@@ -97,9 +99,8 @@ export default function ClientDetail() {
     }
   }
 
-  if (!client) {
+  if (!client)
     return <div className="p-8 text-center text-slate-500">Carregando dados do segurado...</div>
-  }
 
   return (
     <div className="space-y-6">
@@ -114,28 +115,27 @@ export default function ClientDetail() {
             ← Voltar para Clientes
           </Button>
           <h1 className="text-2xl font-bold text-slate-900">{client.name}</h1>
+          <p className="text-sm text-slate-500 flex items-center gap-1 mt-1">
+            <Hash className="w-3 h-3" /> Código: {client.client_code || 'N/A'}
+          </p>
         </div>
         <div className="flex gap-2">
-          <Button variant="outline" onClick={() => setIsModalEditOpen(true)}>
-            <Edit className="w-4 h-4 mr-2" />
-            Editar Dados
+          <Button variant="outline" onClick={() => setIsEditOpen(true)}>
+            <Edit className="w-4 h-4 mr-2" /> Editar Dados
           </Button>
           <Button
             className="bg-blue-600 hover:bg-blue-700"
             onClick={() => setIsNewPolicyOpen(true)}
           >
-            <Plus className="w-4 h-4 mr-2" />
-            Nova Apólice
+            <Plus className="w-4 h-4 mr-2" /> Nova Apólice
           </Button>
         </div>
       </div>
 
-      {/* Profile Card */}
       <Card className="shadow-sm">
         <CardHeader>
           <CardTitle className="text-base font-bold flex items-center gap-2">
-            <User className="w-5 h-5 text-blue-600" />
-            Informações Pessoais
+            <User className="w-5 h-5 text-blue-600" /> Informações Pessoais
           </CardTitle>
         </CardHeader>
         <CardContent className="grid grid-cols-1 md:grid-cols-3 gap-4 text-sm text-slate-700">
@@ -154,21 +154,46 @@ export default function ClientDetail() {
             </div>
           </div>
           <div className="flex items-center gap-2">
+            <User className="w-4 h-4 text-slate-400" />
+            <div>
+              <p className="text-xs text-slate-500">CPF</p>
+              <p className="font-semibold">{client.cpf || 'Não informado'}</p>
+            </div>
+          </div>
+          <div className="flex items-center gap-2">
+            <MapPin className="w-4 h-4 text-slate-400" />
+            <div>
+              <p className="text-xs text-slate-500">CEP</p>
+              <p className="font-semibold">{client.cep || 'Não informado'}</p>
+            </div>
+          </div>
+          <div className="flex items-center gap-2">
             <MapPin className="w-4 h-4 text-slate-400" />
             <div>
               <p className="text-xs text-slate-500">Endereço</p>
-              <p className="font-semibold">{client.address || 'Não informado'}</p>
+              <p className="font-semibold">
+                {[client.rua, client.numero, client.bairro].filter(Boolean).join(', ') ||
+                  client.address ||
+                  'Não informado'}
+              </p>
+            </div>
+          </div>
+          <div className="flex items-center gap-2">
+            <MapPin className="w-4 h-4 text-slate-400" />
+            <div>
+              <p className="text-xs text-slate-500">Cidade/UF</p>
+              <p className="font-semibold">
+                {[client.cidade, client.estado].filter(Boolean).join('/') || 'Não informado'}
+              </p>
             </div>
           </div>
         </CardContent>
       </Card>
 
-      {/* Policies List */}
       <Card className="shadow-sm">
-        <CardHeader className="flex flex-row items-center justify-between">
+        <CardHeader>
           <CardTitle className="text-base font-bold flex items-center gap-2">
-            <FileText className="w-5 h-5 text-blue-600" />
-            Apólices do Cliente ({policies.length})
+            <FileText className="w-5 h-5 text-blue-600" /> Apólices do Cliente ({policies.length})
           </CardTitle>
         </CardHeader>
         <CardContent>
@@ -185,17 +210,23 @@ export default function ClientDetail() {
                 >
                   <div>
                     <p className="font-bold text-slate-900">
-                      {pol.policy_number} - {pol.insurance_company}
+                      {pol.policy_number} -{' '}
+                      {pol.expand?.seguradora?.nome || pol.insurance_company || '-'}
                     </p>
                     <p className="text-xs text-slate-500">
-                      Tipo: {pol.coverage_type} | Vigência:{' '}
+                      Tipo: {pol.tipo_de_seguro || pol.coverage_type} | Vigência:{' '}
                       {new Date(pol.start_date).toLocaleDateString('pt-BR')} a{' '}
                       {new Date(pol.end_date).toLocaleDateString('pt-BR')}
                     </p>
+                    {pol.placa && (
+                      <p className="text-xs text-slate-500">
+                        Placa: {pol.placa} | Modelo: {pol.modelo_veiculo}
+                      </p>
+                    )}
                   </div>
                   <div className="text-right">
                     <p className="font-bold text-slate-900">
-                      R$ {pol.premium_amount?.toLocaleString('pt-BR')}
+                      R$ {(pol.valor_liquido || pol.premium_amount)?.toLocaleString('pt-BR')}
                     </p>
                     <Button
                       variant="ghost"
@@ -213,54 +244,14 @@ export default function ClientDetail() {
         </CardContent>
       </Card>
 
-      {/* Edit Modal */}
-      <Dialog open={isEditOpen} onOpenChange={setIsModalEditOpen}>
-        <DialogContent>
-          <DialogHeader>
-            <DialogTitle>Editar Cliente</DialogTitle>
-          </DialogHeader>
-          <form onSubmit={handleUpdateClient} className="space-y-3">
-            <div>
-              <Label>Nome Completo</Label>
-              <Input
-                value={editData.name || ''}
-                onChange={(e) => setEditData({ ...editData, name: e.target.value })}
-              />
-            </div>
-            <div>
-              <Label>E-mail</Label>
-              <Input
-                value={editData.email || ''}
-                onChange={(e) => setEditData({ ...editData, email: e.target.value })}
-              />
-            </div>
-            <div>
-              <Label>Telefone</Label>
-              <Input
-                value={editData.phone || ''}
-                onChange={(e) => setEditData({ ...editData, phone: e.target.value })}
-              />
-            </div>
-            <div>
-              <Label>Endereço</Label>
-              <Input
-                value={editData.address || ''}
-                onChange={(e) => setEditData({ ...editData, address: e.target.value })}
-              />
-            </div>
-            <DialogFooter>
-              <Button type="button" variant="outline" onClick={() => setIsModalEditOpen(false)}>
-                Cancelar
-              </Button>
-              <Button type="submit" className="bg-blue-600">
-                Salvar Alterações
-              </Button>
-            </DialogFooter>
-          </form>
-        </DialogContent>
-      </Dialog>
+      <ClientFormDialog
+        open={isEditOpen}
+        onOpenChange={setIsEditOpen}
+        onSubmit={handleUpdateClient}
+        initialData={client}
+        title="Editar Cliente"
+      />
 
-      {/* New Policy Modal */}
       <Dialog open={isNewPolicyOpen} onOpenChange={setIsNewPolicyOpen}>
         <DialogContent>
           <DialogHeader>
@@ -268,53 +259,57 @@ export default function ClientDetail() {
           </DialogHeader>
           <form onSubmit={handleCreatePolicy} className="space-y-3">
             <div>
-              <Label>Número da Apólice *</Label>
+              <Label>Nº da Apólice *</Label>
               <Input
                 required
-                value={newPolicyData.policy_number}
-                onChange={(e) =>
-                  setNewPolicyData({ ...newPolicyData, policy_number: e.target.value })
-                }
+                value={newPolicy.policy_number}
+                onChange={(e) => setNewPolicy({ ...newPolicy, policy_number: e.target.value })}
               />
             </div>
             <div>
               <Label>Seguradora</Label>
-              <Input
-                value={newPolicyData.insurance_company}
-                onChange={(e) =>
-                  setNewPolicyData({ ...newPolicyData, insurance_company: e.target.value })
-                }
-              />
+              <Select
+                value={newPolicy.seguradora}
+                onValueChange={(v) => setNewPolicy({ ...newPolicy, seguradora: v })}
+              >
+                <SelectTrigger>
+                  <SelectValue placeholder="Selecione" />
+                </SelectTrigger>
+                <SelectContent>
+                  {seguradoras.map((s) => (
+                    <SelectItem key={s.id} value={s.id}>
+                      {s.nome}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
             </div>
             <div>
-              <Label>Tipo de Cobertura</Label>
+              <Label>Tipo de Seguro</Label>
               <Select
-                value={newPolicyData.coverage_type}
-                onValueChange={(val: any) =>
-                  setNewPolicyData({ ...newPolicyData, coverage_type: val })
-                }
+                value={newPolicy.tipo_de_seguro}
+                onValueChange={(v: any) => setNewPolicy({ ...newPolicy, tipo_de_seguro: v })}
               >
                 <SelectTrigger>
                   <SelectValue />
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="Auto">Auto</SelectItem>
-                  <SelectItem value="Vida">Vida</SelectItem>
-                  <SelectItem value="Residencial">Residencial</SelectItem>
-                  <SelectItem value="Empresarial">Empresarial</SelectItem>
-                  <SelectItem value="Saúde">Saúde</SelectItem>
-                  <SelectItem value="Outros">Outros</SelectItem>
+                  {TIPOS_DE_SEGURO.map((t) => (
+                    <SelectItem key={t} value={t}>
+                      {t}
+                    </SelectItem>
+                  ))}
                 </SelectContent>
               </Select>
             </div>
             <div className="grid grid-cols-2 gap-2">
               <div>
-                <Label>Valor Prêmio (R$)</Label>
+                <Label>Valor Líquido (R$)</Label>
                 <Input
                   type="number"
-                  value={newPolicyData.premium_amount}
+                  value={newPolicy.valor_liquido}
                   onChange={(e) =>
-                    setNewPolicyData({ ...newPolicyData, premium_amount: Number(e.target.value) })
+                    setNewPolicy({ ...newPolicy, valor_liquido: Number(e.target.value) })
                   }
                 />
               </div>
@@ -322,9 +317,9 @@ export default function ClientDetail() {
                 <Label>Comissão (%)</Label>
                 <Input
                   type="number"
-                  value={newPolicyData.commission}
+                  value={newPolicy.commission_percent}
                   onChange={(e) =>
-                    setNewPolicyData({ ...newPolicyData, commission: Number(e.target.value) })
+                    setNewPolicy({ ...newPolicy, commission_percent: Number(e.target.value) })
                   }
                 />
               </div>
@@ -334,18 +329,16 @@ export default function ClientDetail() {
                 <Label>Data Início</Label>
                 <Input
                   type="date"
-                  value={newPolicyData.start_date}
-                  onChange={(e) =>
-                    setNewPolicyData({ ...newPolicyData, start_date: e.target.value })
-                  }
+                  value={newPolicy.start_date}
+                  onChange={(e) => setNewPolicy({ ...newPolicy, start_date: e.target.value })}
                 />
               </div>
               <div>
                 <Label>Data Fim</Label>
                 <Input
                   type="date"
-                  value={newPolicyData.end_date}
-                  onChange={(e) => setNewPolicyData({ ...newPolicyData, end_date: e.target.value })}
+                  value={newPolicy.end_date}
+                  onChange={(e) => setNewPolicy({ ...newPolicy, end_date: e.target.value })}
                 />
               </div>
             </div>

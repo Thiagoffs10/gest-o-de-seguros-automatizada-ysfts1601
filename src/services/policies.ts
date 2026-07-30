@@ -4,14 +4,14 @@ import { Policy } from '@/types'
 export const getPolicies = async (filterString?: string) => {
   return pb.collection('policies').getFullList<Policy>({
     filter: filterString || '',
-    expand: 'client',
+    expand: 'client,seguradora,parceiro',
     sort: '-created',
   })
 }
 
 export const getPolicy = async (id: string) => {
   return pb.collection('policies').getOne<Policy>(id, {
-    expand: 'client',
+    expand: 'client,seguradora,parceiro',
   })
 }
 

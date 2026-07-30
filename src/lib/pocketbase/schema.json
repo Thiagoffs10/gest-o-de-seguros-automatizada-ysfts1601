@@ -1,5 +1,5 @@
 {
-  "generatedAt": "2026-07-30T00:16:36.246Z",
+  "generatedAt": "2026-07-30T00:58:13.318Z",
   "collections": [
     {
       "name": "users",
@@ -104,6 +104,54 @@
           "required": false,
           "system": false,
           "autodateTriggers": ["onCreate", "onUpdate"]
+        },
+        {
+          "name": "cpf",
+          "type": "text",
+          "required": false,
+          "system": false
+        },
+        {
+          "name": "client_code",
+          "type": "number",
+          "required": false,
+          "system": false
+        },
+        {
+          "name": "cep",
+          "type": "text",
+          "required": false,
+          "system": false
+        },
+        {
+          "name": "rua",
+          "type": "text",
+          "required": false,
+          "system": false
+        },
+        {
+          "name": "numero",
+          "type": "text",
+          "required": false,
+          "system": false
+        },
+        {
+          "name": "bairro",
+          "type": "text",
+          "required": false,
+          "system": false
+        },
+        {
+          "name": "cidade",
+          "type": "text",
+          "required": false,
+          "system": false
+        },
+        {
+          "name": "estado",
+          "type": "text",
+          "required": false,
+          "system": false
         }
       ],
       "indexes": ["CREATE INDEX idx_clients_name ON clients (name)"]
@@ -201,6 +249,115 @@
           "required": false,
           "system": false,
           "autodateTriggers": ["onCreate", "onUpdate"]
+        },
+        {
+          "name": "policy_code",
+          "type": "number",
+          "required": false,
+          "system": false
+        },
+        {
+          "name": "tipo_de_seguro",
+          "type": "select",
+          "required": false,
+          "system": false,
+          "selectValues": [
+            "Auto",
+            "Vida",
+            "Residencial",
+            "Empresarial",
+            "Saúde",
+            "Outros",
+            "Condomínio",
+            "Viagem"
+          ]
+        },
+        {
+          "name": "seguradora",
+          "type": "relation",
+          "required": false,
+          "system": false,
+          "collectionRef": "seguradoras"
+        },
+        {
+          "name": "placa",
+          "type": "text",
+          "required": false,
+          "system": false
+        },
+        {
+          "name": "modelo_veiculo",
+          "type": "text",
+          "required": false,
+          "system": false
+        },
+        {
+          "name": "valor_bruto",
+          "type": "number",
+          "required": false,
+          "system": false
+        },
+        {
+          "name": "valor_liquido",
+          "type": "number",
+          "required": false,
+          "system": false
+        },
+        {
+          "name": "commission_percent",
+          "type": "number",
+          "required": false,
+          "system": false
+        },
+        {
+          "name": "tipo_de_venda",
+          "type": "select",
+          "required": false,
+          "system": false,
+          "selectValues": ["Produção Própria", "Parceiro", "Indicação"]
+        },
+        {
+          "name": "observacao_indicacao",
+          "type": "text",
+          "required": false,
+          "system": false
+        },
+        {
+          "name": "parceiro",
+          "type": "relation",
+          "required": false,
+          "system": false,
+          "collectionRef": "parceiros"
+        },
+        {
+          "name": "valor_repasse",
+          "type": "number",
+          "required": false,
+          "system": false
+        },
+        {
+          "name": "data_pagamento_parceiro",
+          "type": "date",
+          "required": false,
+          "system": false
+        },
+        {
+          "name": "pago_parceiro",
+          "type": "bool",
+          "required": false,
+          "system": false
+        },
+        {
+          "name": "data_recebimento_comissao",
+          "type": "date",
+          "required": false,
+          "system": false
+        },
+        {
+          "name": "comissao_recebida",
+          "type": "bool",
+          "required": false,
+          "system": false
         }
       ],
       "indexes": [
@@ -434,6 +591,110 @@
         }
       ],
       "indexes": []
+    },
+    {
+      "name": "seguradoras",
+      "type": "base",
+      "apiRules": {
+        "list": "@request.auth.id != ''",
+        "view": "@request.auth.id != ''",
+        "create": "@request.auth.id != ''",
+        "update": "@request.auth.id != ''",
+        "delete": "@request.auth.id != ''"
+      },
+      "fields": [
+        {
+          "name": "nome",
+          "type": "text",
+          "required": true,
+          "system": false
+        },
+        {
+          "name": "imposto_percentual",
+          "type": "number",
+          "required": false,
+          "system": false
+        },
+        {
+          "name": "created",
+          "type": "autodate",
+          "required": false,
+          "system": false,
+          "autodateTriggers": ["onCreate"]
+        },
+        {
+          "name": "updated",
+          "type": "autodate",
+          "required": false,
+          "system": false,
+          "autodateTriggers": ["onCreate", "onUpdate"]
+        }
+      ],
+      "indexes": ["CREATE UNIQUE INDEX idx_seguradoras_nome ON seguradoras (nome)"]
+    },
+    {
+      "name": "parceiros",
+      "type": "base",
+      "apiRules": {
+        "list": "@request.auth.id != ''",
+        "view": "@request.auth.id != ''",
+        "create": "@request.auth.id != ''",
+        "update": "@request.auth.id != ''",
+        "delete": "@request.auth.id != ''"
+      },
+      "fields": [
+        {
+          "name": "partner_code",
+          "type": "number",
+          "required": false,
+          "system": false
+        },
+        {
+          "name": "nome",
+          "type": "text",
+          "required": true,
+          "system": false
+        },
+        {
+          "name": "cpf",
+          "type": "text",
+          "required": false,
+          "system": false
+        },
+        {
+          "name": "telefone",
+          "type": "text",
+          "required": false,
+          "system": false
+        },
+        {
+          "name": "email",
+          "type": "email",
+          "required": false,
+          "system": false
+        },
+        {
+          "name": "dados_bancarios_ou_pix",
+          "type": "text",
+          "required": false,
+          "system": false
+        },
+        {
+          "name": "created",
+          "type": "autodate",
+          "required": false,
+          "system": false,
+          "autodateTriggers": ["onCreate"]
+        },
+        {
+          "name": "updated",
+          "type": "autodate",
+          "required": false,
+          "system": false,
+          "autodateTriggers": ["onCreate", "onUpdate"]
+        }
+      ],
+      "indexes": ["CREATE INDEX idx_parceiros_nome ON parceiros (nome)"]
     }
   ]
 }
