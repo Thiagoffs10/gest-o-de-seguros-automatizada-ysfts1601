@@ -47,7 +47,13 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
     try {
       await pb
         .collection('users')
-        .create({ email, password, passwordConfirm: password, name: name || 'Corretor' })
+        .create({
+          email,
+          password,
+          passwordConfirm: password,
+          name: name || 'Corretor',
+          role: 'Operador',
+        })
       await pb.collection('users').authWithPassword(email, password)
       return { error: null }
     } catch (error) {

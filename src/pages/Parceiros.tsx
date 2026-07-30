@@ -17,6 +17,7 @@ import { Card } from '@/components/ui/card'
 import { PartnerFormDialog } from '@/components/PartnerFormDialog'
 import { useRealtime } from '@/hooks/use-realtime'
 import { useToast } from '@/hooks/use-toast'
+import { usePermissions } from '@/hooks/use-permissions'
 import { getErrorMessage } from '@/lib/pocketbase/errors'
 import {
   AlertDialog,
@@ -34,6 +35,7 @@ const PAGE_SIZE = 10
 export default function Parceiros() {
   const navigate = useNavigate()
   const { toast } = useToast()
+  const { can } = usePermissions()
   const [parceiros, setParceiros] = useState<Parceiro[]>([])
   const [search, setSearch] = useState('')
   const [isModalOpen, setIsModalOpen] = useState(false)
@@ -118,15 +120,17 @@ export default function Parceiros() {
           <Button variant="outline" onClick={() => navigate('/relatorio-comissoes')}>
             <FileBarChart className="w-4 h-4 mr-2" /> Relatório de Comissões
           </Button>
-          <Button
-            className="bg-blue-600 hover:bg-blue-700"
-            onClick={() => {
-              setEditing(undefined)
-              setIsModalOpen(true)
-            }}
-          >
-            <UserPlus className="w-4 h-4 mr-2" /> Novo Parceiro
-          </Button>
+          {can('parceiros', 'create') && (
+            <Button
+              className="bg-blue-600 hover:bg-blue-700"
+              onClick={() => {
+                setEditing(undefined)
+                setIsModalOpen(true)
+              }}
+            >
+              <UserPlus className="w-4 h-4 mr-2" /> Novo Parceiro
+            </Button>
+          )}
         </div>
       </div>
 
@@ -177,25 +181,29 @@ export default function Parceiros() {
                     <td className="p-3.5 text-slate-500">{p.dados_bancarios_ou_pix || '-'}</td>
                     <td className="p-3.5">
                       <div className="flex justify-end gap-1">
-                        <Button
-                          variant="ghost"
-                          size="sm"
-                          className="text-blue-600 hover:text-blue-800"
-                          onClick={() => {
-                            setEditing(p)
-                            setIsModalOpen(true)
-                          }}
-                        >
-                          <Pencil className="w-4 h-4" />
-                        </Button>
-                        <Button
-                          variant="ghost"
-                          size="sm"
-                          className="text-red-600 hover:text-red-800"
-                          onClick={() => setDeleteId(p.id)}
-                        >
-                          <Trash2 className="w-4 h-4" />
-                        </Button>
+                        {can('parceiros', 'update') && (
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            className="text-blue-600 hover:text-blue-800"
+                            onClick={() => {
+                              setEditing(p)
+                              setIsModalOpen(true)
+                            }}
+                          >
+                            <Pencil className="w-4 h-4" />
+                          </Button>
+                        )}
+                        {can('parceiros', 'delete') && (
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            className="text-red-600 hover:text-red-800"
+                            onClick={() => setDeleteId(p.id)}
+                          >
+                            <Trash2 className="w-4 h-4" />
+                          </Button>
+                        )}
                       </div>
                     </td>
                   </tr>

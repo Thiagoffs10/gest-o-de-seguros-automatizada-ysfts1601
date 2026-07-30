@@ -12,6 +12,7 @@ import { CommissionEditDialog, FinancialEditData } from '@/components/Commission
 import { buildFilterString } from '@/lib/constants'
 import { useToast } from '@/hooks/use-toast'
 import { useRealtime } from '@/hooks/use-realtime'
+import { usePermissions } from '@/hooks/use-permissions'
 
 const calcCommission = (p: Policy) =>
   ((p.commission_percent || 0) / 100) * (p.valor_liquido || p.premium_amount || 0)
@@ -22,6 +23,7 @@ const fmtMoney = (v: number) =>
 
 export default function Financial() {
   const { toast } = useToast()
+  const { can } = usePermissions()
   const [policies, setPolicies] = useState<Policy[]>([])
   const [parceiros, setParceiros] = useState<Parceiro[]>([])
   const [filters, setFilters] = useState<FilterState>({})
@@ -161,9 +163,13 @@ export default function Financial() {
                         : '-'}
                     </td>
                     <td className="p-3 text-right">
-                      <Button size="sm" variant="ghost" onClick={() => setEditPolicy(p)}>
-                        <Edit2 className="w-3.5 h-3.5" />
-                      </Button>
+                      {can('policies', 'update') ? (
+                        <Button size="sm" variant="ghost" onClick={() => setEditPolicy(p)}>
+                          <Edit2 className="w-3.5 h-3.5" />
+                        </Button>
+                      ) : (
+                        <span className="text-xs text-slate-400">—</span>
+                      )}
                     </td>
                   </tr>
                 ))
@@ -223,9 +229,13 @@ export default function Financial() {
                         : '-'}
                     </td>
                     <td className="p-3 text-right">
-                      <Button size="sm" variant="ghost" onClick={() => setEditPolicy(p)}>
-                        <Edit2 className="w-3.5 h-3.5" />
-                      </Button>
+                      {can('policies', 'update') ? (
+                        <Button size="sm" variant="ghost" onClick={() => setEditPolicy(p)}>
+                          <Edit2 className="w-3.5 h-3.5" />
+                        </Button>
+                      ) : (
+                        <span className="text-xs text-slate-400">—</span>
+                      )}
                     </td>
                   </tr>
                 ))

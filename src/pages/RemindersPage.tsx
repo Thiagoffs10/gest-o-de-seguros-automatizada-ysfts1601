@@ -24,9 +24,11 @@ import {
   SelectValue,
 } from '@/components/ui/select'
 import { useToast } from '@/hooks/use-toast'
+import { usePermissions } from '@/hooks/use-permissions'
 
 export default function RemindersPage() {
   const { toast } = useToast()
+  const { can } = usePermissions()
   const [reminders, setReminders] = useState<Reminder[]>([])
   const [clients, setClients] = useState<Client[]>([])
   const [isModalOpen, setIsModalOpen] = useState(false)
@@ -86,10 +88,12 @@ export default function RemindersPage() {
             Alertas automáticos de renovações e datas importantes.
           </p>
         </div>
-        <Button className="bg-blue-600 hover:bg-blue-700" onClick={() => setIsModalOpen(true)}>
-          <Plus className="w-4 h-4 mr-2" />
-          Criar Lembrete
-        </Button>
+        {can('reminders', 'create') && (
+          <Button className="bg-blue-600 hover:bg-blue-700" onClick={() => setIsModalOpen(true)}>
+            <Plus className="w-4 h-4 mr-2" />
+            Criar Lembrete
+          </Button>
+        )}
       </div>
 
       <Card className="shadow-sm overflow-hidden border">
@@ -125,12 +129,16 @@ export default function RemindersPage() {
                       </Badge>
                     </td>
                     <td className="p-3.5 text-right">
-                      <Button variant="ghost" size="sm" onClick={() => handleToggleSent(r)}>
-                        <CheckCircle
-                          className={`w-4 h-4 mr-1 ${r.sent ? 'text-slate-400' : 'text-emerald-600'}`}
-                        />
-                        {r.sent ? 'Reabrir' : 'Concluir'}
-                      </Button>
+                      {can('reminders', 'update') ? (
+                        <Button variant="ghost" size="sm" onClick={() => handleToggleSent(r)}>
+                          <CheckCircle
+                            className={`w-4 h-4 mr-1 ${r.sent ? 'text-slate-400' : 'text-emerald-600'}`}
+                          />
+                          {r.sent ? 'Reabrir' : 'Concluir'}
+                        </Button>
+                      ) : (
+                        <span className="text-xs text-slate-400">Sem permissão</span>
+                      )}
                     </td>
                   </tr>
                 ))

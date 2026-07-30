@@ -16,7 +16,8 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select'
-import { createUser } from '@/services/users'
+import { createUser, updateUser } from '@/services/users'
+import { User } from '@/types'
 import { useToast } from '@/hooks/use-toast'
 import { getErrorMessage } from '@/lib/pocketbase/errors'
 
@@ -24,9 +25,17 @@ interface Props {
   open: boolean
   onOpenChange: (open: boolean) => void
   onSuccess: () => void
+  editingUser?: User | null
 }
 
-export function UserFormDialog({ open, onOpenChange, onSuccess }: Props) {
+const ROLE_OPTIONS = [
+  { value: 'Admin', label: 'Administrador' },
+  { value: 'Gerente', label: 'Gerente' },
+  { value: 'Operador', label: 'Operador' },
+  { value: 'Visualizador', label: 'Visualizador' },
+]
+
+export function UserFormDialog({ open, onOpenChange, onSuccess, editingUser }: Props) {
   const { toast } = useToast()
   const [loading, setLoading] = useState(false)
   const [form, setForm] = useState({
@@ -34,16 +43,34 @@ export function UserFormDialog({ open, onOpenChange, onSuccess }: Props) {
     email: '',
     password: '',
     passwordConfirm: '',
-    role: 'user' as 'admin' | 'user',
+    role: 'Operador' as string,
   })
   const [errors, setErrors] = useState<Record<string, string>>({})
 
+  const isEdit = !!editingUser
+
   useEffect(() => {
     if (open) {
-      setForm({ name: '', email: '', password: '', passwordConfirm: '', role: 'user' })
+      if (editingUser) {
+        setForm({
+          name: editingUser.name || '',
+          email: editingUser.email || '',
+          password: '',
+          passwordConfirm: '',
+          role: editingUser.role || 'Operador',
+        })
+      } else {
+        setForm({
+          name: '',
+          email: '',
+          password: '',
+          passwordConfirm: '',
+          role: 'Operador',
+        })
+      }
       setErrors({})
     }
-  }, [open])
+  }, [open, editingUser])
 
   const set = (key: string, val: string) => {
     setForm((prev) => ({ ...prev, [key]: val }))
@@ -52,11 +79,20 @@ export function UserFormDialog({ open, onOpenChange, onSuccess }: Props) {
 
   const validate = (): boolean => {
     const errs: Record<string, string> = {}
-    if (!form.name.trim()) errs.name = 'Nome e obrigatorio.'
-    if (!form.email.trim()) errs.email = 'E-mail e obrigatorio.'
-    if (!form.password) errs.password = 'Senha e obrigatoria.'
-    if (form.password.length < 8) errs.password = 'A senha deve ter no minimo 8 caracteres.'
-    if (form.password !== form.passwordConfirm) errs.passwordConfirm = 'As senhas nao conferem.'
+    if (!form.name.trim()) errs.name = 'Nome é obrigatório.'
+
+    if (!isEdit) {
+      if (!form.email.trim()) errs.email = 'E-mail é obrigatório.'
+      if (!form.password) errs.password = 'Senha é obrigatória.'
+      if (form.password.length < 8) errs.password = 'A senha deve ter no mínimo 8 caracteres.'
+      if (form.password !== form.passwordConfirm) errs.passwordConfirm = 'As senhas não conferem.'
+    } else {
+      if (form.password && form.password.length < 8)
+        errs.password = 'A senha deve ter no mínimo 8 caracteres.'
+      if (form.password && form.password !== form.passwordConfirm)
+        errs.passwordConfirm = 'As senhas não conferem.'
+    }
+
     setErrors(errs)
     return Object.keys(errs).length === 0
   }
@@ -67,18 +103,32 @@ export function UserFormDialog({ open, onOpenChange, onSuccess }: Props) {
 
     setLoading(true)
     try {
-      await createUser({
-        name: form.name.trim(),
-        email: form.email.trim(),
-        password: form.password,
-        passwordConfirm: form.passwordConfirm,
-        role: form.role,
-      })
+      if (isEdit && editingUser) {
+        const updateData: Record<string, any> = {
+          name: form.name.trim(),
+          role: form.role,
+        }
+        if (form.password) {
+          updateData.password = form.password
+          updateData.passwordConfirm = form.passwordConfirm
+        }
+        await updateUser(editingUser.id, updateData)
+        toast({ title: 'Usuário atualizado com sucesso!' })
+      } else {
+        await createUser({
+          name: form.name.trim(),
+          email: form.email.trim(),
+          password: form.password,
+          passwordConfirm: form.passwordConfirm,
+          role: form.role as any,
+        })
+        toast({ title: 'Usuário criado com sucesso!' })
+      }
       onSuccess()
       onOpenChange(false)
     } catch (err) {
       toast({
-        title: 'Erro ao criar usuario',
+        title: isEdit ? 'Erro ao atualizar usuário' : 'Erro ao criar usuário',
         description: getErrorMessage(err),
         variant: 'destructive',
       })
@@ -91,7 +141,7 @@ export function UserFormDialog({ open, onOpenChange, onSuccess }: Props) {
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="sm:max-w-md">
         <DialogHeader>
-          <DialogTitle>Criar Usuario</DialogTitle>
+          <DialogTitle>{isEdit ? 'Editar Usuário' : 'Criar Usuário'}</DialogTitle>
         </DialogHeader>
         <form onSubmit={handleSubmit} className="space-y-3">
           <div>
@@ -100,36 +150,48 @@ export function UserFormDialog({ open, onOpenChange, onSuccess }: Props) {
               required
               value={form.name}
               onChange={(e) => set('name', e.target.value)}
-              placeholder="Nome do usuario"
+              placeholder="Nome do usuário"
             />
             {errors.name && <p className="text-xs text-red-500 mt-1">{errors.name}</p>}
           </div>
+
+          {!isEdit && (
+            <div>
+              <Label className="text-xs font-semibold">E-mail *</Label>
+              <Input
+                required
+                type="email"
+                value={form.email}
+                onChange={(e) => set('email', e.target.value)}
+                placeholder="usuario@exemplo.com"
+              />
+              {errors.email && <p className="text-xs text-red-500 mt-1">{errors.email}</p>}
+            </div>
+          )}
+
+          {isEdit && (
+            <div>
+              <Label className="text-xs font-semibold">E-mail</Label>
+              <Input value={form.email} disabled className="bg-slate-100" />
+            </div>
+          )}
+
           <div>
-            <Label className="text-xs font-semibold">E-mail *</Label>
+            <Label className="text-xs font-semibold">
+              {isEdit ? 'Nova Senha (deixe em branco para manter)' : 'Senha *'}
+            </Label>
             <Input
-              required
-              type="email"
-              value={form.email}
-              onChange={(e) => set('email', e.target.value)}
-              placeholder="usuario@exemplo.com"
-            />
-            {errors.email && <p className="text-xs text-red-500 mt-1">{errors.email}</p>}
-          </div>
-          <div>
-            <Label className="text-xs font-semibold">Senha *</Label>
-            <Input
-              required
               type="password"
               value={form.password}
               onChange={(e) => set('password', e.target.value)}
-              placeholder="Minimo 8 caracteres"
+              placeholder={isEdit ? '••••••••' : 'Mínimo 8 caracteres'}
             />
             {errors.password && <p className="text-xs text-red-500 mt-1">{errors.password}</p>}
           </div>
+
           <div>
-            <Label className="text-xs font-semibold">Confirmar Senha *</Label>
+            <Label className="text-xs font-semibold">Confirmar Senha</Label>
             <Input
-              required
               type="password"
               value={form.passwordConfirm}
               onChange={(e) => set('passwordConfirm', e.target.value)}
@@ -139,24 +201,35 @@ export function UserFormDialog({ open, onOpenChange, onSuccess }: Props) {
               <p className="text-xs text-red-500 mt-1">{errors.passwordConfirm}</p>
             )}
           </div>
+
           <div>
-            <Label className="text-xs font-semibold">Tipo de Usuario</Label>
+            <Label className="text-xs font-semibold">Tipo de Usuário *</Label>
             <Select value={form.role} onValueChange={(val) => set('role', val)}>
               <SelectTrigger>
                 <SelectValue placeholder="Selecione o tipo" />
               </SelectTrigger>
               <SelectContent>
-                <SelectItem value="user">Usuario</SelectItem>
-                <SelectItem value="admin">Administrador</SelectItem>
+                {ROLE_OPTIONS.map((r) => (
+                  <SelectItem key={r.value} value={r.value}>
+                    {r.label}
+                  </SelectItem>
+                ))}
               </SelectContent>
             </Select>
           </div>
+
           <DialogFooter>
             <Button type="button" variant="outline" onClick={() => onOpenChange(false)}>
               Cancelar
             </Button>
             <Button type="submit" className="bg-blue-600" disabled={loading}>
-              {loading ? 'Criando...' : 'Criar Usuario'}
+              {loading
+                ? isEdit
+                  ? 'Salvando...'
+                  : 'Criando...'
+                : isEdit
+                  ? 'Salvar Alterações'
+                  : 'Criar Usuário'}
             </Button>
           </DialogFooter>
         </form>

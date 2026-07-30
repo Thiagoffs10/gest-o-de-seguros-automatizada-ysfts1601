@@ -4,7 +4,7 @@ routerAdd(
   (e) => {
     const auth = e.auth
     if (!auth) return e.unauthorizedError('auth required')
-    if (auth.getString('role') !== 'admin') return e.forbiddenError('admin only')
+    if (auth.getString('role') !== 'Admin') return e.forbiddenError('admin only')
 
     const body = e.requestInfo().body || {}
 
@@ -22,7 +22,8 @@ routerAdd(
 
     if (emailExists) return e.badRequestError('Este e-mail ja esta cadastrado.')
 
-    var role = body.role === 'admin' ? 'admin' : 'user'
+    var validRoles = ['Admin', 'Gerente', 'Operador', 'Visualizador']
+    var role = validRoles.indexOf(body.role) >= 0 ? body.role : 'Operador'
 
     var usersCol = $app.findCollectionByNameOrId('users')
     var record = new Record(usersCol)
@@ -44,6 +45,7 @@ routerAdd(
       email: record.getString('email'),
       role: record.getString('role'),
       created: record.getString('created'),
+      updated: record.getString('updated'),
     })
   },
   $apis.requireAuth(),

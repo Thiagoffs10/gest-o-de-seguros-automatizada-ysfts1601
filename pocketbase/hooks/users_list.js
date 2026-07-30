@@ -15,8 +15,9 @@ routerAdd(
         id: r.id,
         name: r.getString('name') || '',
         email: r.getString('email') || '',
-        role: r.getString('role') || 'user',
+        role: r.getString('role') || 'Operador',
         created: r.getString('created') || '',
+        updated: r.getString('updated') || '',
       })
     }
 

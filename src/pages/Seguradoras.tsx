@@ -13,6 +13,7 @@ import { Card } from '@/components/ui/card'
 import { SeguradoraFormDialog } from '@/components/SeguradoraFormDialog'
 import { useRealtime } from '@/hooks/use-realtime'
 import { useToast } from '@/hooks/use-toast'
+import { usePermissions } from '@/hooks/use-permissions'
 import { extractFieldErrors, getErrorMessage, type FieldErrors } from '@/lib/pocketbase/errors'
 import {
   AlertDialog,
@@ -27,6 +28,7 @@ import {
 
 export default function Seguradoras() {
   const { toast } = useToast()
+  const { can } = usePermissions()
   const [seguradoras, setSeguradoras] = useState<Seguradora[]>([])
   const [search, setSearch] = useState('')
   const [isModalOpen, setIsModalOpen] = useState(false)
@@ -113,16 +115,18 @@ export default function Seguradoras() {
             Cadastre seguradoras e configure o percentual de imposto.
           </p>
         </div>
-        <Button
-          className="bg-blue-600 hover:bg-blue-700"
-          onClick={() => {
-            setEditing(undefined)
-            setFieldErrors({})
-            setIsModalOpen(true)
-          }}
-        >
-          <Plus className="w-4 h-4 mr-2" /> Nova Seguradora
-        </Button>
+        {can('seguradoras', 'create') && (
+          <Button
+            className="bg-blue-600 hover:bg-blue-700"
+            onClick={() => {
+              setEditing(undefined)
+              setFieldErrors({})
+              setIsModalOpen(true)
+            }}
+          >
+            <Plus className="w-4 h-4 mr-2" /> Nova Seguradora
+          </Button>
+        )}
       </div>
 
       <div className="relative max-w-md">
@@ -161,26 +165,30 @@ export default function Seguradoras() {
                     </td>
                     <td className="p-3.5">
                       <div className="flex justify-end gap-1">
-                        <Button
-                          variant="ghost"
-                          size="sm"
-                          className="text-blue-600 hover:text-blue-800"
-                          onClick={() => {
-                            setEditing(s)
-                            setFieldErrors({})
-                            setIsModalOpen(true)
-                          }}
-                        >
-                          <Pencil className="w-4 h-4" />
-                        </Button>
-                        <Button
-                          variant="ghost"
-                          size="sm"
-                          className="text-red-600 hover:text-red-800"
-                          onClick={() => setDeleteId(s.id)}
-                        >
-                          <Trash2 className="w-4 h-4" />
-                        </Button>
+                        {can('seguradoras', 'update') && (
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            className="text-blue-600 hover:text-blue-800"
+                            onClick={() => {
+                              setEditing(s)
+                              setFieldErrors({})
+                              setIsModalOpen(true)
+                            }}
+                          >
+                            <Pencil className="w-4 h-4" />
+                          </Button>
+                        )}
+                        {can('seguradoras', 'delete') && (
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            className="text-red-600 hover:text-red-800"
+                            onClick={() => setDeleteId(s.id)}
+                          >
+                            <Trash2 className="w-4 h-4" />
+                          </Button>
+                        )}
                       </div>
                     </td>
                   </tr>

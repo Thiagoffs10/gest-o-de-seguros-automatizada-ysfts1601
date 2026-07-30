@@ -32,6 +32,7 @@ import { buildFilterString } from '@/lib/constants'
 import { exportPoliciesToCsv } from '@/lib/export-utils'
 import { useToast } from '@/hooks/use-toast'
 import { useRealtime } from '@/hooks/use-realtime'
+import { usePermissions } from '@/hooks/use-permissions'
 import { extractFieldErrors, getErrorMessage, type FieldErrors } from '@/lib/pocketbase/errors'
 
 type DialogMode = 'create' | 'edit' | 'renew' | null
@@ -39,6 +40,7 @@ type DialogMode = 'create' | 'edit' | 'renew' | null
 export default function Policies() {
   const navigate = useNavigate()
   const { toast } = useToast()
+  const { can } = usePermissions()
   const [policies, setPolicies] = useState<Policy[]>([])
   const [clients, setClients] = useState<Client[]>([])
   const [seguradoras, setSeguradoras] = useState<Seguradora[]>([])
@@ -194,16 +196,18 @@ export default function Policies() {
           <Button variant="outline" onClick={() => exportPoliciesToCsv(policies)}>
             <Download className="w-4 h-4 mr-2" /> Exportar Carteira (Excel)
           </Button>
-          <Button
-            className="bg-blue-600 hover:bg-blue-700"
-            onClick={() => {
-              setSelectedPolicy(null)
-              setFieldErrors({})
-              setDialogMode('create')
-            }}
-          >
-            <Plus className="w-4 h-4 mr-2" /> Nova Apólice
-          </Button>
+          {can('policies', 'create') && (
+            <Button
+              className="bg-blue-600 hover:bg-blue-700"
+              onClick={() => {
+                setSelectedPolicy(null)
+                setFieldErrors({})
+                setDialogMode('create')
+              }}
+            >
+              <Plus className="w-4 h-4 mr-2" /> Nova Apólice
+            </Button>
+          )}
         </div>
       </div>
 
@@ -331,33 +335,39 @@ export default function Policies() {
                         >
                           Detalhes
                         </Button>
-                        <Button
-                          variant="ghost"
-                          size="sm"
-                          className="text-blue-600"
-                          onClick={() => handleEdit(p)}
-                          title="Editar"
-                        >
-                          <Pencil className="w-3.5 h-3.5" />
-                        </Button>
-                        <Button
-                          variant="ghost"
-                          size="sm"
-                          className="text-amber-600"
-                          onClick={() => handleRenew(p)}
-                          title="Renovar"
-                        >
-                          <RefreshCw className="w-3.5 h-3.5" />
-                        </Button>
-                        <Button
-                          variant="ghost"
-                          size="sm"
-                          className="text-red-600"
-                          onClick={() => handleDeleteClick(p)}
-                          title="Excluir"
-                        >
-                          <Trash2 className="w-3.5 h-3.5" />
-                        </Button>
+                        {can('policies', 'update') && (
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            className="text-blue-600"
+                            onClick={() => handleEdit(p)}
+                            title="Editar"
+                          >
+                            <Pencil className="w-3.5 h-3.5" />
+                          </Button>
+                        )}
+                        {can('policies', 'create') && (
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            className="text-amber-600"
+                            onClick={() => handleRenew(p)}
+                            title="Renovar"
+                          >
+                            <RefreshCw className="w-3.5 h-3.5" />
+                          </Button>
+                        )}
+                        {can('policies', 'delete') && (
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            className="text-red-600"
+                            onClick={() => handleDeleteClick(p)}
+                            title="Excluir"
+                          >
+                            <Trash2 className="w-3.5 h-3.5" />
+                          </Button>
+                        )}
                       </div>
                     </td>
                   </tr>

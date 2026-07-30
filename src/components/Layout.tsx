@@ -18,6 +18,7 @@ import {
 import logoImg from '@/assets/cred10mixlogooficialfundobranco4k-12574.jpg'
 import { useAuth } from '@/hooks/use-auth'
 import { useRealtime } from '@/hooks/use-realtime'
+import { usePermissions } from '@/hooks/use-permissions'
 import { getReminders, updateReminder } from '@/services/reminders'
 import { Reminder } from '@/types'
 import { Avatar, AvatarFallback } from '@/components/ui/avatar'
@@ -31,6 +32,7 @@ export default function Layout() {
   const navigate = useNavigate()
   const [isMobileOpen, setIsMobileOpen] = useState(false)
   const [reminders, setReminders] = useState<Reminder[]>([])
+  const { can } = usePermissions()
 
   const fetchPendingReminders = async () => {
     try {
@@ -63,7 +65,7 @@ export default function Layout() {
     { title: 'Financeiro', path: '/financeiro', icon: Wallet },
     { title: 'Lembretes', path: '/lembretes', icon: Bell, badge: reminders.length },
     { title: 'Comunicação', path: '/comunicacao', icon: Send },
-    ...(user?.role === 'admin' ? [{ title: 'Usuários', path: '/usuarios', icon: UserCog }] : []),
+    ...(user?.role === 'Admin' ? [{ title: 'Usuários', path: '/usuarios', icon: UserCog }] : []),
     { title: 'Configurações', path: '/configuracoes', icon: Settings },
   ]
 
@@ -195,14 +197,16 @@ export default function Layout() {
                           </span>
                         </div>
                         <p className="text-slate-700">{rem.message}</p>
-                        <Button
-                          variant="ghost"
-                          size="sm"
-                          className="h-6 text-[11px] text-blue-600 hover:text-blue-800 self-end p-0"
-                          onClick={() => handleMarkAsSent(rem.id)}
-                        >
-                          Marcar como concluído
-                        </Button>
+                        {can('reminders', 'update') && (
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            className="h-6 text-[11px] text-blue-600 hover:text-blue-800 self-end p-0"
+                            onClick={() => handleMarkAsSent(rem.id)}
+                          >
+                            Marcar como concluído
+                          </Button>
+                        )}
                       </div>
                     ))
                   )}

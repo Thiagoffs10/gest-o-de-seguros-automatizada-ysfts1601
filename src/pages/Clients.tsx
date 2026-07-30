@@ -24,9 +24,11 @@ import { GlobalFilters } from '@/components/GlobalFilters'
 import { buildFilterString } from '@/lib/constants'
 import { useToast } from '@/hooks/use-toast'
 import { useRealtime } from '@/hooks/use-realtime'
+import { usePermissions } from '@/hooks/use-permissions'
 
 export default function Clients() {
   const { toast } = useToast()
+  const { can } = usePermissions()
   const [clients, setClients] = useState<Client[]>([])
   const [search, setSearch] = useState('')
   const [isModalOpen, setIsModalOpen] = useState(false)
@@ -167,9 +169,11 @@ export default function Clients() {
           <Button variant="outline" onClick={handleExport} disabled={exportLoading}>
             <Download className="w-4 h-4 mr-2" /> Exportar para Excel
           </Button>
-          <Button className="bg-blue-600 hover:bg-blue-700" onClick={() => setIsModalOpen(true)}>
-            <UserPlus className="w-4 h-4 mr-2" /> Adicionar Cliente
-          </Button>
+          {can('clients', 'create') && (
+            <Button className="bg-blue-600 hover:bg-blue-700" onClick={() => setIsModalOpen(true)}>
+              <UserPlus className="w-4 h-4 mr-2" /> Adicionar Cliente
+            </Button>
+          )}
         </div>
       </div>
 
@@ -253,24 +257,28 @@ export default function Clients() {
                     </td>
                     <td className="p-3.5 text-right">
                       <div className="flex items-center justify-end gap-1">
-                        <Button
-                          variant="ghost"
-                          size="sm"
-                          className="text-blue-600 hover:text-blue-700 hover:bg-blue-50"
-                          onClick={() => handleEditClick(c)}
-                        >
-                          <Pencil className="w-4 h-4" />
-                          <span className="ml-1">Editar</span>
-                        </Button>
-                        <Button
-                          variant="ghost"
-                          size="sm"
-                          className="text-red-600 hover:text-red-700 hover:bg-red-50"
-                          onClick={() => handleDeleteClick(c)}
-                        >
-                          <Trash2 className="w-4 h-4" />
-                          <span className="ml-1">Excluir</span>
-                        </Button>
+                        {can('clients', 'update') && (
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            className="text-blue-600 hover:text-blue-700 hover:bg-blue-50"
+                            onClick={() => handleEditClick(c)}
+                          >
+                            <Pencil className="w-4 h-4" />
+                            <span className="ml-1">Editar</span>
+                          </Button>
+                        )}
+                        {can('clients', 'delete') && (
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            className="text-red-600 hover:text-red-700 hover:bg-red-50"
+                            onClick={() => handleDeleteClick(c)}
+                          >
+                            <Trash2 className="w-4 h-4" />
+                            <span className="ml-1">Excluir</span>
+                          </Button>
+                        )}
                       </div>
                     </td>
                   </tr>

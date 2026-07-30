@@ -18,9 +18,11 @@ import {
 } from '@/components/ui/select'
 import { Badge } from '@/components/ui/badge'
 import { useToast } from '@/hooks/use-toast'
+import { usePermissions } from '@/hooks/use-permissions'
 
 export default function Communication() {
   const { toast } = useToast()
+  const { can } = usePermissions()
   const [clients, setClients] = useState<Client[]>([])
   const [policies, setPolicies] = useState<Policy[]>([])
   const [comms, setComms] = useState<CommType[]>([])
@@ -196,9 +198,12 @@ export default function Communication() {
             <Button
               className="w-full bg-blue-600 hover:bg-blue-700 font-bold"
               onClick={handleOpenClientApp}
+              disabled={!can('communications', 'create')}
             >
               <Send className="w-4 h-4 mr-2" />
-              Abrir no {type === 'WhatsApp' ? 'WhatsApp Web' : 'Gerenciador de E-mail'}
+              {can('communications', 'create')
+                ? `Abrir no ${type === 'WhatsApp' ? 'WhatsApp Web' : 'Gerenciador de E-mail'}`
+                : 'Sem permissão para enviar comunicações'}
             </Button>
           </CardContent>
         </Card>

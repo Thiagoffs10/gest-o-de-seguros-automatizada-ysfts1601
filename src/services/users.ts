@@ -38,3 +38,19 @@ export const updatePassword = async (userId: string, newPassword: string): Promi
 export const reauthenticate = async (email: string, password: string): Promise<void> => {
   await pb.collection('users').authWithPassword(email, password)
 }
+
+export const updateUser = async (
+  id: string,
+  data: {
+    name?: string
+    role?: 'Admin' | 'Gerente' | 'Operador' | 'Visualizador'
+    password?: string
+    passwordConfirm?: string
+  },
+): Promise<User> => {
+  return pb.send(`/backend/v1/users/${id}`, {
+    method: 'PUT',
+    body: JSON.stringify(data),
+    headers: { 'Content-Type': 'application/json' },
+  })
+}
