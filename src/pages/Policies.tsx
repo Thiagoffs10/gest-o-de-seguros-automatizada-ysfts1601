@@ -1,6 +1,6 @@
 import { useEffect, useState, useCallback } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { Search, Plus, Download, Car, Pencil, RefreshCw, Trash2 } from 'lucide-react'
+import { Search, Plus, Download, Car, Pencil, RefreshCw, Trash2, X } from 'lucide-react'
 import {
   getPolicies,
   createPolicy,
@@ -64,8 +64,15 @@ export default function Policies() {
       if (statusFilter !== 'ALL')
         filter = filter ? `${filter} && status = "${statusFilter}"` : `status = "${statusFilter}"`
       if (search) {
-        const q = `policy_number ~ "${search}" || insurance_company ~ "${search}"`
-        filter = filter ? `${filter} && (${q})` : q
+        const sanitized = search.replace(/"/g, '')
+        const matchingClients = await getClients(sanitized)
+        const clientIds = matchingClients.map((c) => c.id)
+        if (clientIds.length === 0) {
+          setPolicies([])
+          return
+        }
+        const clientFilter = clientIds.map((id) => `client = "${id}"`).join(' || ')
+        filter = filter ? `${filter} && (${clientFilter})` : clientFilter
       }
       if (placaSearch) {
         const q = `placa ~ "${placaSearch}"`
@@ -79,7 +86,10 @@ export default function Policies() {
   }, [search, placaSearch, statusFilter, filters])
 
   useEffect(() => {
-    loadData()
+    const timer = setTimeout(() => {
+      loadData()
+    }, 300)
+    return () => clearTimeout(timer)
   }, [loadData])
   useRealtime('policies', () => loadData())
 
@@ -211,11 +221,21 @@ export default function Policies() {
         <div className="relative flex-1">
           <Search className="w-4 h-4 absolute left-3 top-3 text-slate-400" />
           <Input
-            placeholder="Buscar por nº da apólice ou seguradora..."
-            className="pl-9"
+            placeholder="Buscar por CPF ou CNPJ do cliente..."
+            className="pl-9 pr-9"
             value={search}
             onChange={(e) => setSearch(e.target.value)}
           />
+          {search && (
+            <button
+              type="button"
+              onClick={() => setSearch('')}
+              className="absolute right-3 top-3 text-slate-400 hover:text-slate-600 transition-colors"
+              aria-label="Limpar busca"
+            >
+              <X className="w-4 h-4" />
+            </button>
+          )}
         </div>
         <div className="relative flex-1">
           <Car className="w-4 h-4 absolute left-3 top-3 text-slate-400" />
@@ -261,7 +281,9 @@ export default function Policies() {
               {policies.length === 0 ? (
                 <tr>
                   <td colSpan={10} className="text-center p-6 text-slate-500">
-                    Nenhuma apólice encontrada.
+                    {search
+                      ? 'Nenhuma apólice encontrada para o CPF/CNPJ informado.'
+                      : 'Nenhuma apólice encontrada.'}
                   </td>
                 </tr>
               ) : (
