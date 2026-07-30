@@ -1,6 +1,6 @@
 import { useEffect, useState, useCallback } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { Search, UserPlus, Phone, Mail, Building2, User } from 'lucide-react'
+import { Search, UserPlus, Phone, Mail, Building2, User, X } from 'lucide-react'
 import { getClients, createClient } from '@/services/clients'
 import { formatDocumentLabel } from '@/lib/document-validators'
 import { Client, FilterState } from '@/types'
@@ -69,11 +69,21 @@ export default function Clients() {
       <div className="relative max-w-md">
         <Search className="w-4 h-4 absolute left-3 top-3 text-slate-400" />
         <Input
-          placeholder="Buscar por nome, e-mail ou CPF..."
-          className="pl-9"
+          placeholder="Buscar por CPF ou CNPJ..."
+          className="pl-9 pr-9"
           value={search}
           onChange={(e) => setSearch(e.target.value)}
         />
+        {search && (
+          <button
+            type="button"
+            onClick={() => setSearch('')}
+            className="absolute right-3 top-3 text-slate-400 hover:text-slate-600 transition-colors"
+            aria-label="Limpar busca"
+          >
+            <X className="w-4 h-4" />
+          </button>
+        )}
       </div>
 
       <Card className="shadow-sm overflow-hidden border">
@@ -95,7 +105,7 @@ export default function Clients() {
               {clients.length === 0 ? (
                 <tr>
                   <td colSpan={8} className="text-center p-6 text-slate-500">
-                    Nenhum cliente encontrado.
+                    Nenhum cliente encontrado{search ? ` para "${search}"` : '.'}
                   </td>
                 </tr>
               ) : (
