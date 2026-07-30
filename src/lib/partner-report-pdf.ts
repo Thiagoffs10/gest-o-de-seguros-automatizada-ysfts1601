@@ -40,7 +40,7 @@ export function generatePartnerReportPDF(data: PartnerReportData) {
     )
     .join('')
 
-  const html = `<!DOCTYPE html><html><head><title>Relatório de Comissões</title>
+  const html = `<!DOCTYPE html><html><head><title>Relatório de Comissões de Parceiros</title>
 <style>
 *{margin:0;padding:0;box-sizing:border-box}
 body{font-family:Arial,sans-serif;padding:30px;color:#1e293b}
@@ -73,8 +73,8 @@ tr:nth-child(even){background:#f8fafc}
 </div>
 <table>
 <thead><tr>
-<th>Nome do Cliente</th><th>Seguradora</th><th>Tipo de Seguro</th>
-<th class="right">Valor Líquido</th><th class="center">% Repasse</th>
+<th>Nome</th><th>Seguradora</th><th>Tipo de Seguro</th>
+<th class="right">Valor Líquido</th><th class="center">Percentual de Repasse</th>
 <th class="right">Valor do Repasse</th><th class="center">Status</th>
 </tr></thead>
 <tbody>${rows}</tbody>

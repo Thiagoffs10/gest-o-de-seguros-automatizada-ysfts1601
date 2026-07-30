@@ -1,6 +1,6 @@
 import { useEffect, useState, useCallback, useMemo } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { ArrowLeft, FileDown, Search } from 'lucide-react'
+import { ArrowLeft, FileDown } from 'lucide-react'
 import { getPolicies } from '@/services/policies'
 import { getParceiros } from '@/services/parceiros'
 import { Policy, Parceiro } from '@/types'
@@ -122,7 +122,7 @@ export default function PartnerReport() {
           <ArrowLeft className="w-4 h-4 mr-1" /> Voltar
         </Button>
         <div>
-          <h1 className="text-2xl font-bold text-slate-900">Relatório de Comissões</h1>
+          <h1 className="text-2xl font-bold text-slate-900">Relatório de Comissões de Parceiros</h1>
           <p className="text-slate-500 text-sm">Comissões de parceiros — pagas e pendentes.</p>
         </div>
       </div>
@@ -131,24 +131,22 @@ export default function PartnerReport() {
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
           <div>
             <Label className="text-xs font-semibold">Parceiro</Label>
-            <div className="flex gap-1">
-              <Select value={selectedPartner} onValueChange={setSelectedPartner}>
-                <SelectTrigger>
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="all">Todos os parceiros</SelectItem>
-                  {filteredParceiros.map((p) => (
-                    <SelectItem key={p.id} value={p.id}>
-                      {p.nome}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
+            <Select value={selectedPartner} onValueChange={setSelectedPartner}>
+              <SelectTrigger>
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">Todos os parceiros</SelectItem>
+                {filteredParceiros.map((p) => (
+                  <SelectItem key={p.id} value={p.id}>
+                    {p.nome}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
             <Input
               className="mt-1 text-xs"
-              placeholder="Buscar parceiro..."
+              placeholder="Filtrar parceiro por nome..."
               value={partnerSearch}
               onChange={(e) => setPartnerSearch(e.target.value)}
             />
@@ -187,12 +185,12 @@ export default function PartnerReport() {
           <table className="w-full text-left text-sm text-slate-700">
             <thead className="bg-slate-100 text-slate-600 font-semibold border-b">
               <tr>
-                <th className="p-3.5">Cliente</th>
+                <th className="p-3.5">Nome do Cliente</th>
                 <th className="p-3.5">Seguradora</th>
-                <th className="p-3.5">Tipo</th>
-                <th className="p-3.5 text-right">Vl. Líquido</th>
-                <th className="p-3.5 text-center">% Repasse</th>
-                <th className="p-3.5 text-right">Vl. Repasse</th>
+                <th className="p-3.5">Tipo de Seguro</th>
+                <th className="p-3.5 text-right">Valor Líquido</th>
+                <th className="p-3.5 text-center">Percentual de Repasse</th>
+                <th className="p-3.5 text-right">Valor do Repasse</th>
                 <th className="p-3.5 text-center">Status</th>
               </tr>
             </thead>
@@ -210,11 +208,11 @@ export default function PartnerReport() {
                     <td className="p-3.5">{e.seguradoraName}</td>
                     <td className="p-3.5">{e.tipoSeguro}</td>
                     <td className="p-3.5 text-right font-bold">
-                      R$ {e.valorLiquido.toLocaleString('pt-BR')}
+                      R$ {e.valorLiquido.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
                     </td>
                     <td className="p-3.5 text-center">{e.repassePercent}%</td>
                     <td className="p-3.5 text-right font-bold text-blue-600">
-                      R$ {e.valorRepasse.toLocaleString('pt-BR')}
+                      R$ {e.valorRepasse.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
                     </td>
                     <td className="p-3.5 text-center">
                       <Badge className={e.status === 'Pago' ? 'bg-emerald-500' : 'bg-amber-500'}>
@@ -232,12 +230,14 @@ export default function PartnerReport() {
       <div className="flex justify-end gap-4">
         <div className="bg-emerald-50 border border-emerald-200 rounded-lg px-4 py-2 text-sm">
           <span className="text-emerald-700 font-semibold">Total Pago: </span>
-          <span className="font-bold text-emerald-900">R$ {totalPaid.toLocaleString('pt-BR')}</span>
+          <span className="font-bold text-emerald-900">
+            R$ {totalPaid.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
+          </span>
         </div>
         <div className="bg-amber-50 border border-amber-200 rounded-lg px-4 py-2 text-sm">
           <span className="text-amber-700 font-semibold">Total Em Aberto: </span>
           <span className="font-bold text-amber-900">
-            R$ {totalPending.toLocaleString('pt-BR')}
+            R$ {totalPending.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
           </span>
         </div>
       </div>

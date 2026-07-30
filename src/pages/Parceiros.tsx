@@ -17,6 +17,7 @@ import { Card } from '@/components/ui/card'
 import { PartnerFormDialog } from '@/components/PartnerFormDialog'
 import { useRealtime } from '@/hooks/use-realtime'
 import { useToast } from '@/hooks/use-toast'
+import { getErrorMessage } from '@/lib/pocketbase/errors'
 import {
   AlertDialog,
   AlertDialogAction,
@@ -65,11 +66,15 @@ export default function Parceiros() {
   const handleCreate = async (formData: any) => {
     try {
       await createParceiro(formData)
-      toast({ title: 'Parceiro cadastrado!' })
+      toast({ title: 'Parceiro cadastrado com sucesso!' })
       setIsModalOpen(false)
       loadData()
     } catch (err: any) {
-      toast({ title: 'Erro', description: err.message, variant: 'destructive' })
+      toast({
+        title: 'Erro ao cadastrar',
+        description: getErrorMessage(err),
+        variant: 'destructive',
+      })
     }
   }
 
@@ -82,7 +87,11 @@ export default function Parceiros() {
       setEditing(undefined)
       loadData()
     } catch (err: any) {
-      toast({ title: 'Erro', description: err.message, variant: 'destructive' })
+      toast({
+        title: 'Erro ao atualizar',
+        description: getErrorMessage(err),
+        variant: 'destructive',
+      })
     }
   }
 
@@ -94,7 +103,7 @@ export default function Parceiros() {
       setDeleteId(null)
       loadData()
     } catch (err: any) {
-      toast({ title: 'Erro', description: err.message, variant: 'destructive' })
+      toast({ title: 'Erro ao excluir', description: getErrorMessage(err), variant: 'destructive' })
     }
   }
 
@@ -139,12 +148,12 @@ export default function Parceiros() {
           <table className="w-full text-left text-sm text-slate-700">
             <thead className="bg-slate-100 text-slate-600 font-semibold border-b">
               <tr>
-                <th className="p-3.5">ID</th>
+                <th className="p-3.5">Cód.</th>
                 <th className="p-3.5">Nome</th>
                 <th className="p-3.5">CPF</th>
                 <th className="p-3.5">Telefone</th>
                 <th className="p-3.5">E-mail</th>
-                <th className="p-3.5">Dados Bancários/PIX</th>
+                <th className="p-3.5">Dados Bancários / PIX</th>
                 <th className="p-3.5 text-right">Ações</th>
               </tr>
             </thead>
@@ -158,7 +167,9 @@ export default function Parceiros() {
               ) : (
                 paginated.map((p) => (
                   <tr key={p.id} className="hover:bg-slate-50/80 transition-colors">
-                    <td className="p-3.5 font-bold text-blue-600">{p.partner_code || '-'}</td>
+                    <td className="p-3.5 font-bold text-blue-600">
+                      {p.partner_code ? `#${p.partner_code}` : '-'}
+                    </td>
                     <td className="p-3.5 font-semibold text-slate-900">{p.nome}</td>
                     <td className="p-3.5 text-slate-600">{p.cpf || '-'}</td>
                     <td className="p-3.5 text-slate-600">{p.telefone || '-'}</td>
@@ -169,7 +180,7 @@ export default function Parceiros() {
                         <Button
                           variant="ghost"
                           size="sm"
-                          className="text-blue-600"
+                          className="text-blue-600 hover:text-blue-800"
                           onClick={() => {
                             setEditing(p)
                             setIsModalOpen(true)
@@ -180,7 +191,7 @@ export default function Parceiros() {
                         <Button
                           variant="ghost"
                           size="sm"
-                          className="text-red-600"
+                          className="text-red-600 hover:text-red-800"
                           onClick={() => setDeleteId(p.id)}
                         >
                           <Trash2 className="w-4 h-4" />
