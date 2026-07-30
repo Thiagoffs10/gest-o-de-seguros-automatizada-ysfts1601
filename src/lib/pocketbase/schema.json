@@ -1,5 +1,5 @@
 {
-  "generatedAt": "2026-07-30T03:16:35.397Z",
+  "generatedAt": "2026-07-30T12:55:38.236Z",
   "collections": [
     {
       "name": "users",
@@ -149,6 +149,19 @@
         },
         {
           "name": "estado",
+          "type": "text",
+          "required": false,
+          "system": false
+        },
+        {
+          "name": "tipo_pessoa",
+          "type": "select",
+          "required": true,
+          "system": false,
+          "selectValues": ["PF", "PJ"]
+        },
+        {
+          "name": "cnpj",
           "type": "text",
           "required": false,
           "system": false

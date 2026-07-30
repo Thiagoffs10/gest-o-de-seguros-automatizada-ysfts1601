@@ -4,7 +4,7 @@ import { Client } from '@/types'
 export const getClients = async (searchQuery?: string, filterString?: string) => {
   let filter = filterString || ''
   if (searchQuery) {
-    const q = `name ~ "${searchQuery}" || email ~ "${searchQuery}" || cpf ~ "${searchQuery}"`
+    const q = `name ~ "${searchQuery}" || email ~ "${searchQuery}" || cpf ~ "${searchQuery}" || cnpj ~ "${searchQuery}"`
     filter = filter ? `${filter} && (${q})` : q
   }
   return pb.collection('clients').getFullList<Client>({

@@ -3,6 +3,8 @@ export interface Client {
   client_code?: number
   name: string
   cpf?: string
+  cnpj?: string
+  tipo_pessoa?: 'PF' | 'PJ'
   email?: string
   phone?: string
   cep?: string

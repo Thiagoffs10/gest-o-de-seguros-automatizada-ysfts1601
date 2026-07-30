@@ -10,6 +10,7 @@ import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Textarea } from '@/components/ui/textarea'
 import { Button } from '@/components/ui/button'
+import { RadioGroup, RadioGroupItem } from '@/components/ui/radio-group'
 import {
   Select,
   SelectContent,
@@ -19,6 +20,7 @@ import {
 } from '@/components/ui/select'
 import { BRAZILIAN_STATES } from '@/lib/constants'
 import { lookupCep } from '@/lib/cep'
+import { isValidCpf, isValidCnpj, maskCpf, maskCnpj } from '@/lib/document-validators'
 import { Client } from '@/types'
 
 interface Props {
@@ -29,6 +31,23 @@ interface Props {
   title?: string
 }
 
+const EMPTY_FORM = {
+  tipo_pessoa: 'PF' as 'PF' | 'PJ',
+  name: '',
+  cpf: '',
+  cnpj: '',
+  email: '',
+  phone: '',
+  cep: '',
+  rua: '',
+  numero: '',
+  bairro: '',
+  cidade: '',
+  estado: '',
+  birth_date: '',
+  notes: '',
+}
+
 export function ClientFormDialog({
   open,
   onOpenChange,
@@ -36,27 +55,17 @@ export function ClientFormDialog({
   initialData,
   title = 'Adicionar Novo Cliente',
 }: Props) {
-  const [form, setForm] = useState({
-    name: '',
-    cpf: '',
-    email: '',
-    phone: '',
-    cep: '',
-    rua: '',
-    numero: '',
-    bairro: '',
-    cidade: '',
-    estado: '',
-    birth_date: '',
-    notes: '',
-  })
+  const [form, setForm] = useState(EMPTY_FORM)
+  const [errors, setErrors] = useState<Record<string, string>>({})
   const [loading, setLoading] = useState(false)
 
   useEffect(() => {
     if (initialData) {
       setForm({
+        tipo_pessoa: (initialData.tipo_pessoa as 'PF' | 'PJ') || 'PF',
         name: initialData.name || '',
         cpf: initialData.cpf || '',
+        cnpj: initialData.cnpj || '',
         email: initialData.email || '',
         phone: initialData.phone || '',
         cep: initialData.cep || '',
@@ -69,21 +78,9 @@ export function ClientFormDialog({
         notes: initialData.notes || '',
       })
     } else {
-      setForm({
-        name: '',
-        cpf: '',
-        email: '',
-        phone: '',
-        cep: '',
-        rua: '',
-        numero: '',
-        bairro: '',
-        cidade: '',
-        estado: '',
-        birth_date: '',
-        notes: '',
-      })
+      setForm(EMPTY_FORM)
     }
+    setErrors({})
   }, [initialData, open])
 
   const handleCepBlur = async () => {
@@ -100,14 +97,57 @@ export function ClientFormDialog({
     }
   }
 
+  const validate = (): boolean => {
+    const errs: Record<string, string> = {}
+    if (!form.name.trim()) errs.name = 'Nome é obrigatório'
+
+    if (form.tipo_pessoa === 'PF') {
+      if (!form.cpf.trim()) {
+        errs.cpf = 'CPF é obrigatório para Pessoa Física'
+      } else if (!isValidCpf(form.cpf)) {
+        errs.cpf = 'CPF inválido'
+      }
+    } else {
+      if (!form.cnpj.trim()) {
+        errs.cnpj = 'CNPJ é obrigatório para Pessoa Jurídica'
+      } else if (!isValidCnpj(form.cnpj)) {
+        errs.cnpj = 'CNPJ inválido'
+      }
+    }
+
+    setErrors(errs)
+    return Object.keys(errs).length === 0
+  }
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
+    if (!validate()) return
     setLoading(true)
-    await onSubmit(form)
+    const payload = { ...form }
+    if (payload.tipo_pessoa === 'PF') {
+      payload.cnpj = ''
+    } else {
+      payload.cpf = ''
+      payload.birth_date = ''
+    }
+    await onSubmit(payload)
     setLoading(false)
   }
 
   const set = (key: string, val: string) => setForm((prev) => ({ ...prev, [key]: val }))
+
+  const handleTipoPessoaChange = (val: 'PF' | 'PJ') => {
+    setForm((prev) => ({
+      ...prev,
+      tipo_pessoa: val,
+      cpf: val === 'PF' ? prev.cpf : '',
+      cnpj: val === 'PJ' ? prev.cnpj : '',
+      birth_date: val === 'PF' ? prev.birth_date : '',
+    }))
+    setErrors({})
+  }
+
+  const isPF = form.tipo_pessoa === 'PF'
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
@@ -116,20 +156,58 @@ export function ClientFormDialog({
           <DialogTitle>{title}</DialogTitle>
         </DialogHeader>
         <form onSubmit={handleSubmit} className="space-y-3">
+          <div>
+            <Label className="text-xs font-semibold mb-1.5 block">Tipo de Pessoa</Label>
+            <RadioGroup
+              value={form.tipo_pessoa}
+              onValueChange={(v) => handleTipoPessoaChange(v as 'PF' | 'PJ')}
+              className="flex gap-6"
+            >
+              <div className="flex items-center space-x-2">
+                <RadioGroupItem value="PF" id="tipo-pf" />
+                <Label htmlFor="tipo-pf" className="text-sm font-normal cursor-pointer">
+                  Pessoa Física (PF)
+                </Label>
+              </div>
+              <div className="flex items-center space-x-2">
+                <RadioGroupItem value="PJ" id="tipo-pj" />
+                <Label htmlFor="tipo-pj" className="text-sm font-normal cursor-pointer">
+                  Pessoa Jurídica (PJ)
+                </Label>
+              </div>
+            </RadioGroup>
+          </div>
+
           <div className="grid grid-cols-2 gap-2">
             <div>
-              <Label className="text-xs font-semibold">Nome Completo *</Label>
+              <Label className="text-xs font-semibold">
+                {isPF ? 'Nome Completo *' : 'Razão Social *'}
+              </Label>
               <Input required value={form.name} onChange={(e) => set('name', e.target.value)} />
             </div>
-            <div>
-              <Label className="text-xs font-semibold">CPF</Label>
-              <Input
-                value={form.cpf}
-                onChange={(e) => set('cpf', e.target.value)}
-                placeholder="000.000.000-00"
-              />
-            </div>
+            {isPF ? (
+              <div>
+                <Label className="text-xs font-semibold">CPF *</Label>
+                <Input
+                  value={form.cpf}
+                  onChange={(e) => set('cpf', maskCpf(e.target.value))}
+                  placeholder="000.000.000-00"
+                />
+                {errors.cpf && <p className="text-xs text-red-500 mt-0.5">{errors.cpf}</p>}
+              </div>
+            ) : (
+              <div>
+                <Label className="text-xs font-semibold">CNPJ *</Label>
+                <Input
+                  value={form.cnpj}
+                  onChange={(e) => set('cnpj', maskCnpj(e.target.value))}
+                  placeholder="00.000.000/0000-00"
+                />
+                {errors.cnpj && <p className="text-xs text-red-500 mt-0.5">{errors.cnpj}</p>}
+              </div>
+            )}
           </div>
+
           <div className="grid grid-cols-2 gap-2">
             <div>
               <Label className="text-xs font-semibold">E-mail</Label>
@@ -144,6 +222,7 @@ export function ClientFormDialog({
               <Input value={form.phone} onChange={(e) => set('phone', e.target.value)} />
             </div>
           </div>
+
           <div className="grid grid-cols-3 gap-2">
             <div>
               <Label className="text-xs font-semibold">CEP</Label>
@@ -190,14 +269,18 @@ export function ClientFormDialog({
               </Select>
             </div>
           </div>
-          <div>
-            <Label className="text-xs font-semibold">Data de Nascimento</Label>
-            <Input
-              type="date"
-              value={form.birth_date}
-              onChange={(e) => set('birth_date', e.target.value)}
-            />
-          </div>
+
+          {isPF && (
+            <div>
+              <Label className="text-xs font-semibold">Data de Nascimento</Label>
+              <Input
+                type="date"
+                value={form.birth_date}
+                onChange={(e) => set('birth_date', e.target.value)}
+              />
+            </div>
+          )}
+
           <div>
             <Label className="text-xs font-semibold">Observações</Label>
             <Textarea value={form.notes} onChange={(e) => set('notes', e.target.value)} />

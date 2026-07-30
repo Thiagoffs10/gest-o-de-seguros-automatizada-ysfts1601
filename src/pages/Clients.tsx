@@ -1,7 +1,8 @@
 import { useEffect, useState, useCallback } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { Search, UserPlus, Phone, Mail } from 'lucide-react'
+import { Search, UserPlus, Phone, Mail, Building2, User } from 'lucide-react'
 import { getClients, createClient } from '@/services/clients'
+import { formatDocumentLabel } from '@/lib/document-validators'
 import { Client, FilterState } from '@/types'
 import { Input } from '@/components/ui/input'
 import { Button } from '@/components/ui/button'
@@ -81,8 +82,9 @@ export default function Clients() {
             <thead className="bg-slate-100 text-slate-600 font-semibold border-b">
               <tr>
                 <th className="p-3.5">Código</th>
+                <th className="p-3.5">Tipo</th>
                 <th className="p-3.5">Nome</th>
-                <th className="p-3.5">CPF</th>
+                <th className="p-3.5">Documento</th>
                 <th className="p-3.5">E-mail</th>
                 <th className="p-3.5">Telefone</th>
                 <th className="p-3.5">Cidade/UF</th>
@@ -92,7 +94,7 @@ export default function Clients() {
             <tbody className="divide-y divide-slate-100">
               {clients.length === 0 ? (
                 <tr>
-                  <td colSpan={7} className="text-center p-6 text-slate-500">
+                  <td colSpan={8} className="text-center p-6 text-slate-500">
                     Nenhum cliente encontrado.
                   </td>
                 </tr>
@@ -104,8 +106,21 @@ export default function Clients() {
                     onClick={() => navigate(`/clientes/${c.id}`)}
                   >
                     <td className="p-3.5 font-bold text-blue-600">{c.client_code || '-'}</td>
+                    <td className="p-3.5">
+                      <span className="inline-flex items-center gap-1 text-xs font-semibold px-2 py-0.5 rounded-full bg-slate-100 text-slate-700">
+                        {c.tipo_pessoa === 'PJ' ? (
+                          <>
+                            <Building2 className="w-3 h-3" /> PJ
+                          </>
+                        ) : (
+                          <>
+                            <User className="w-3 h-3" /> PF
+                          </>
+                        )}
+                      </span>
+                    </td>
                     <td className="p-3.5 font-semibold text-slate-900">{c.name}</td>
-                    <td className="p-3.5 text-slate-600">{c.cpf || '-'}</td>
+                    <td className="p-3.5 text-slate-600">{formatDocumentLabel(c)}</td>
                     <td className="p-3.5 text-slate-600">
                       <span className="flex items-center gap-1.5">
                         <Mail className="w-3.5 h-3.5 text-slate-400" />

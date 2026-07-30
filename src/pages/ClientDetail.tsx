@@ -1,9 +1,10 @@
 import { useEffect, useState, useCallback } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
-import { User, Phone, Mail, MapPin, FileText, Plus, Edit, Hash } from 'lucide-react'
+import { User, Phone, Mail, MapPin, FileText, Plus, Edit, Hash, Building2 } from 'lucide-react'
 import { getClient, updateClient } from '@/services/clients'
 import { getPolicies, createPolicy } from '@/services/policies'
 import { getSeguradoras } from '@/services/seguradoras'
+import { formatDocumentLabel } from '@/lib/document-validators'
 import { Client, Policy, Seguradora } from '@/types'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
@@ -115,9 +116,22 @@ export default function ClientDetail() {
             ← Voltar para Clientes
           </Button>
           <h1 className="text-2xl font-bold text-slate-900">{client.name}</h1>
-          <p className="text-sm text-slate-500 flex items-center gap-1 mt-1">
-            <Hash className="w-3 h-3" /> Código: {client.client_code || 'N/A'}
-          </p>
+          <div className="flex items-center gap-3 mt-1">
+            <p className="text-sm text-slate-500 flex items-center gap-1">
+              <Hash className="w-3 h-3" /> Código: {client.client_code || 'N/A'}
+            </p>
+            <span className="inline-flex items-center gap-1 text-xs font-semibold px-2 py-0.5 rounded-full bg-slate-100 text-slate-700">
+              {client.tipo_pessoa === 'PJ' ? (
+                <>
+                  <Building2 className="w-3 h-3" /> PJ
+                </>
+              ) : (
+                <>
+                  <User className="w-3 h-3" /> PF
+                </>
+              )}
+            </span>
+          </div>
         </div>
         <div className="flex gap-2">
           <Button variant="outline" onClick={() => setIsEditOpen(true)}>
@@ -156,8 +170,8 @@ export default function ClientDetail() {
           <div className="flex items-center gap-2">
             <User className="w-4 h-4 text-slate-400" />
             <div>
-              <p className="text-xs text-slate-500">CPF</p>
-              <p className="font-semibold">{client.cpf || 'Não informado'}</p>
+              <p className="text-xs text-slate-500">Documento</p>
+              <p className="font-semibold">{formatDocumentLabel(client)}</p>
             </div>
           </div>
           <div className="flex items-center gap-2">
@@ -187,6 +201,17 @@ export default function ClientDetail() {
               </p>
             </div>
           </div>
+          {client.tipo_pessoa !== 'PJ' && client.birth_date && (
+            <div className="flex items-center gap-2">
+              <User className="w-4 h-4 text-slate-400" />
+              <div>
+                <p className="text-xs text-slate-500">Data de Nascimento</p>
+                <p className="font-semibold">
+                  {new Date(client.birth_date).toLocaleDateString('pt-BR')}
+                </p>
+              </div>
+            </div>
+          )}
         </CardContent>
       </Card>
 

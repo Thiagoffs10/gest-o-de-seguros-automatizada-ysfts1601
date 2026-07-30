@@ -73,8 +73,14 @@ export function ClientAutocomplete({
               >
                 <div className="flex flex-col truncate pr-2">
                   <span className="font-medium text-slate-900 truncate">{client.name}</span>
-                  {client.cpf && (
-                    <span className="text-[10px] text-slate-500">CPF: {client.cpf}</span>
+                  {client.tipo_pessoa === 'PJ' ? (
+                    client.cnpj ? (
+                      <span className="text-[10px] text-slate-500">CNPJ: {client.cnpj}</span>
+                    ) : null
+                  ) : (
+                    client.cpf && (
+                      <span className="text-[10px] text-slate-500">CPF: {client.cpf}</span>
+                    )
                   )}
                 </div>
                 {value === client.id && <Check className="h-4 w-4 shrink-0 text-blue-600" />}
