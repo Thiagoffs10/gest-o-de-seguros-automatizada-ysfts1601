@@ -1,5 +1,6 @@
 import { Navigate } from 'react-router-dom'
 import { useAuth } from '@/hooks/use-auth'
+import { ErrorBoundary } from '@/components/ErrorBoundary'
 
 export default function Index() {
   const { isAuthenticated, loading } = useAuth()
@@ -15,5 +16,9 @@ export default function Index() {
     )
   }
 
-  return <Navigate to={isAuthenticated ? '/dashboard' : '/login'} replace />
+  return (
+    <ErrorBoundary>
+      <Navigate to={isAuthenticated ? '/dashboard' : '/login'} replace />
+    </ErrorBoundary>
+  )
 }
