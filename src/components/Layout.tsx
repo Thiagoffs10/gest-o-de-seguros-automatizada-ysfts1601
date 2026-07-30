@@ -12,6 +12,7 @@ import {
   Menu,
   X,
   ShieldCheck,
+  Handshake,
 } from 'lucide-react'
 import { useAuth } from '@/hooks/use-auth'
 import { useRealtime } from '@/hooks/use-realtime'
@@ -55,6 +56,7 @@ export default function Layout() {
     { title: 'Dashboard', path: '/dashboard', icon: LayoutDashboard },
     { title: 'Clientes', path: '/clientes', icon: Users },
     { title: 'Apólices', path: '/apolices', icon: FileText },
+    { title: 'Parceiros', path: '/parceiros', icon: Handshake },
     { title: 'Financeiro', path: '/financeiro', icon: Wallet },
     { title: 'Lembretes', path: '/lembretes', icon: Bell, badge: reminders.length },
     { title: 'Comunicação', path: '/comunicacao', icon: Send },

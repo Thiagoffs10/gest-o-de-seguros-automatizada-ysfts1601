@@ -19,6 +19,7 @@ import {
 import { Checkbox } from '@/components/ui/checkbox'
 import { TIPOS_DE_SEGURO, TIPOS_DE_VENDA } from '@/lib/constants'
 import { Client, Seguradora, Parceiro } from '@/types'
+import { ClientAutocomplete } from '@/components/ClientAutocomplete'
 
 interface Props {
   open: boolean
@@ -93,19 +94,12 @@ export function PolicyFormDialog({
         <form onSubmit={handleSubmit} className="space-y-3">
           <div>
             <Label className="text-xs font-semibold">Cliente *</Label>
-            <Select value={form.client} onValueChange={(v) => set('client', v)}>
-              <SelectTrigger>
-                <SelectValue placeholder="Selecione o segurado" />
-              </SelectTrigger>
-              <SelectContent>
-                {clients.map((c) => (
-                  <SelectItem key={c.id} value={c.id}>
-                    {c.client_code ? `#${c.client_code} - ` : ''}
-                    {c.name}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
+            <ClientAutocomplete
+              clients={clients}
+              value={form.client}
+              onChange={(v) => set('client', v)}
+              placeholder="Buscar segurado por nome..."
+            />
           </div>
           <div className="grid grid-cols-2 gap-2">
             <div>
