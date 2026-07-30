@@ -1,53 +1,77 @@
-import { useEffect, useState } from 'react'
-import { DollarSign, Wallet, AlertCircle, CheckCircle2 } from 'lucide-react'
-import { getPayments, updatePayment } from '@/services/payments'
-import { Payment } from '@/types'
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
+import { useEffect, useState, useCallback } from 'react'
+import { Edit2 } from 'lucide-react'
+import { getPolicies, updatePolicyFinancial } from '@/services/policies'
+import { getParceiros } from '@/services/parceiros'
+import { Policy, Parceiro, FilterState } from '@/types'
+import { Card, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
-import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer } from 'recharts'
+import { GlobalFilters } from '@/components/GlobalFilters'
+import { FinancialSummaryCards } from '@/components/FinancialSummaryCards'
+import { CommissionEditDialog, FinancialEditData } from '@/components/CommissionEditDialog'
+import { buildFilterString } from '@/lib/constants'
 import { useToast } from '@/hooks/use-toast'
+import { useRealtime } from '@/hooks/use-realtime'
+
+const calcCommission = (p: Policy) =>
+  ((p.commission_percent || 0) / 100) * (p.valor_liquido || p.premium_amount || 0)
+const calcRepasse = (p: Policy) =>
+  ((p.valor_repasse || 0) / 100) * (p.valor_liquido || p.premium_amount || 0)
+const fmtMoney = (v: number) =>
+  v.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })
 
 export default function Financial() {
   const { toast } = useToast()
-  const [payments, setPayments] = useState<Payment[]>([])
+  const [policies, setPolicies] = useState<Policy[]>([])
+  const [parceiros, setParceiros] = useState<Parceiro[]>([])
+  const [filters, setFilters] = useState<FilterState>({})
+  const [editPolicy, setEditPolicy] = useState<Policy | null>(null)
+  const [saving, setSaving] = useState(false)
 
-  const loadPayments = async () => {
+  const loadData = useCallback(async () => {
     try {
-      const data = await getPayments()
-      setPayments(data)
+      const filter = buildFilterString('', filters, 'start_date')
+      const [pols, pars] = await Promise.all([getPolicies(filter), getParceiros()])
+      setPolicies(pols)
+      setParceiros(pars)
     } catch {
       /* intentionally ignored */
     }
-  }
+  }, [filters])
 
   useEffect(() => {
-    loadPayments()
-  }, [])
+    loadData()
+  }, [loadData])
+  useRealtime('policies', () => loadData())
 
-  const totalReceived = payments
-    .filter((p) => p.status === 'Pago')
-    .reduce((sum, p) => sum + p.amount, 0)
-  const totalPending = payments
-    .filter((p) => p.status === 'Pendente')
-    .reduce((sum, p) => sum + p.amount, 0)
-  const totalOverdue = payments
-    .filter((p) => p.status === 'Atrasado')
-    .reduce((sum, p) => sum + p.amount, 0)
+  const totalGross = policies.reduce((s, p) => s + (p.valor_bruto || 0), 0)
+  const totalNet = policies.reduce((s, p) => s + (p.valor_liquido || p.premium_amount || 0), 0)
+  const commReceived = policies
+    .filter((p) => p.comissao_recebida)
+    .reduce((s, p) => s + calcCommission(p), 0)
+  const commPending = policies
+    .filter((p) => !p.comissao_recebida)
+    .reduce((s, p) => s + calcCommission(p), 0)
+  const partnerPols = policies.filter((p) => p.tipo_de_venda === 'Parceiro')
+  const repassePaid = partnerPols
+    .filter((p) => p.pago_parceiro)
+    .reduce((s, p) => s + calcRepasse(p), 0)
+  const repassePending = partnerPols
+    .filter((p) => !p.pago_parceiro)
+    .reduce((s, p) => s + calcRepasse(p), 0)
 
-  const chartData = [
-    { name: 'Recebido', valor: totalReceived },
-    { name: 'Pendente', valor: totalPending },
-    { name: 'Atrasado', valor: totalOverdue },
-  ]
-
-  const handleMarkAsPaid = async (id: string) => {
+  const handleSave = async (data: FinancialEditData) => {
+    if (!editPolicy) return
+    setSaving(true)
     try {
-      await updatePayment(id, { status: 'Pago', paid_date: new Date().toISOString() })
-      toast({ title: 'Pagamento marcado como recebido!' })
-      loadPayments()
+      await updatePolicyFinancial(editPolicy.id, data)
+      toast({ title: 'Atualizado com sucesso!' })
+      setEditPolicy(null)
+      loadData()
     } catch (err: any) {
-      toast({ title: 'Erro ao atualizar', description: err.message, variant: 'destructive' })
+      toast({ title: 'Erro ao salvar', description: err.message, variant: 'destructive' })
+    } finally {
+      setSaving(false)
     }
   }
 
@@ -55,122 +79,169 @@ export default function Financial() {
     <div className="space-y-6">
       <div>
         <h1 className="text-2xl font-bold text-slate-900">Controle Financeiro</h1>
-        <p className="text-slate-500 text-sm">Gestão de recebimentos de prêmios e parcelamentos.</p>
+        <p className="text-slate-500 text-sm">
+          Gestão de comissões, repasses e performance financeira.
+        </p>
       </div>
 
-      <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-        <Card className="shadow-sm">
-          <CardHeader className="flex flex-row items-center justify-between pb-2">
-            <CardTitle className="text-sm font-medium text-slate-600">Total Arrecadado</CardTitle>
-            <CheckCircle2 className="w-5 h-5 text-emerald-600" />
-          </CardHeader>
-          <CardContent>
-            <div className="text-2xl font-bold text-emerald-700">
-              R$ {totalReceived.toLocaleString('pt-BR')}
-            </div>
-            <p className="text-xs text-slate-500 mt-1">Pagamentos confirmados</p>
-          </CardContent>
-        </Card>
+      <FinancialSummaryCards
+        totalGross={totalGross}
+        totalNet={totalNet}
+        commReceived={commReceived}
+        commPending={commPending}
+        repassePaid={repassePaid}
+        repassePending={repassePending}
+      />
 
-        <Card className="shadow-sm">
-          <CardHeader className="flex flex-row items-center justify-between pb-2">
-            <CardTitle className="text-sm font-medium text-slate-600">A Receber</CardTitle>
-            <Wallet className="w-5 h-5 text-blue-600" />
-          </CardHeader>
-          <CardContent>
-            <div className="text-2xl font-bold text-blue-700">
-              R$ {totalPending.toLocaleString('pt-BR')}
-            </div>
-            <p className="text-xs text-slate-500 mt-1">Parcelas a vencer</p>
-          </CardContent>
-        </Card>
-
-        <Card className="shadow-sm border-red-200 bg-red-50/20">
-          <CardHeader className="flex flex-row items-center justify-between pb-2">
-            <CardTitle className="text-sm font-medium text-slate-600">Em Atraso</CardTitle>
-            <AlertCircle className="w-5 h-5 text-red-600" />
-          </CardHeader>
-          <CardContent>
-            <div className="text-2xl font-bold text-red-700">
-              R$ {totalOverdue.toLocaleString('pt-BR')}
-            </div>
-            <p className="text-xs text-red-600 mt-1">Inadimplência pendente</p>
-          </CardContent>
-        </Card>
+      <div className="flex flex-wrap items-center justify-between gap-2">
+        <GlobalFilters
+          filters={filters}
+          onFilterChange={setFilters}
+          showPartnerFilter
+          parceiros={parceiros}
+        />
+        <Button variant="outline" size="sm" onClick={() => setFilters({})}>
+          Limpar Filtros
+        </Button>
       </div>
-
-      <Card className="p-4 shadow-sm">
-        <h3 className="font-bold text-base text-slate-800 mb-4">
-          Visão Comparativa de Valores (R$)
-        </h3>
-        <div className="h-60">
-          <ResponsiveContainer width="100%" height="100%">
-            <BarChart data={chartData}>
-              <XAxis dataKey="name" stroke="#64748b" fontSize={12} />
-              <YAxis stroke="#64748b" fontSize={12} />
-              <Tooltip />
-              <Bar dataKey="valor" fill="#2563eb" radius={[4, 4, 0, 0]} />
-            </BarChart>
-          </ResponsiveContainer>
-        </div>
-      </Card>
 
       <Card className="shadow-sm overflow-hidden border">
         <CardHeader>
-          <CardTitle className="text-base font-bold">Listagem de Pagamentos</CardTitle>
+          <CardTitle className="text-base font-bold">Gestão de Comissões</CardTitle>
         </CardHeader>
         <div className="overflow-x-auto">
           <table className="w-full text-left text-sm text-slate-700">
             <thead className="bg-slate-100 text-slate-600 font-semibold border-b">
               <tr>
-                <th className="p-3.5">Apólice</th>
-                <th className="p-3.5">Cliente</th>
-                <th className="p-3.5">Valor</th>
-                <th className="p-3.5">Vencimento</th>
-                <th className="p-3.5">Status</th>
-                <th className="p-3.5 text-right">Ação</th>
+                <th className="p-3">Apólice</th>
+                <th className="p-3">Cliente</th>
+                <th className="p-3">Seguradora</th>
+                <th className="p-3">Tipo</th>
+                <th className="p-3 text-right">Bruto</th>
+                <th className="p-3 text-right">Líquido</th>
+                <th className="p-3 text-center">Com. %</th>
+                <th className="p-3 text-right">Valor Comissão</th>
+                <th className="p-3 text-center">Recebida</th>
+                <th className="p-3">Data Receb.</th>
+                <th className="p-3 text-right">Ação</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-100">
-              {payments.map((p) => (
-                <tr key={p.id} className="hover:bg-slate-50">
-                  <td className="p-3.5 font-bold">
-                    {p.expand?.policy?.policy_number || 'Apólice'}
-                  </td>
-                  <td className="p-3.5">{p.expand?.policy?.expand?.client?.name || '-'}</td>
-                  <td className="p-3.5 font-bold">R$ {p.amount?.toLocaleString('pt-BR')}</td>
-                  <td className="p-3.5">{new Date(p.due_date).toLocaleDateString('pt-BR')}</td>
-                  <td className="p-3.5">
-                    <Badge
-                      className={
-                        p.status === 'Pago'
-                          ? 'bg-emerald-500'
-                          : p.status === 'Atrasado'
-                            ? 'bg-red-500'
-                            : 'bg-amber-500'
-                      }
-                    >
-                      {p.status}
-                    </Badge>
-                  </td>
-                  <td className="p-3.5 text-right">
-                    {p.status !== 'Pago' && (
-                      <Button
-                        size="sm"
-                        variant="outline"
-                        className="text-emerald-700 hover:bg-emerald-50"
-                        onClick={() => handleMarkAsPaid(p.id)}
-                      >
-                        Confirmar Recebimento
-                      </Button>
-                    )}
+              {policies.length === 0 ? (
+                <tr>
+                  <td colSpan={11} className="text-center p-6 text-slate-500">
+                    Nenhuma apólice encontrada.
                   </td>
                 </tr>
-              ))}
+              ) : (
+                policies.map((p) => (
+                  <tr key={p.id} className="hover:bg-slate-50/80">
+                    <td className="p-3 font-bold text-slate-900">{p.policy_number}</td>
+                    <td className="p-3">{p.expand?.client?.name || '-'}</td>
+                    <td className="p-3">
+                      {p.expand?.seguradora?.nome || p.insurance_company || '-'}
+                    </td>
+                    <td className="p-3">{p.tipo_de_seguro || p.coverage_type}</td>
+                    <td className="p-3 text-right">R$ {fmtMoney(p.valor_bruto || 0)}</td>
+                    <td className="p-3 text-right font-bold">
+                      R$ {fmtMoney(p.valor_liquido || p.premium_amount || 0)}
+                    </td>
+                    <td className="p-3 text-center">{p.commission_percent || 0}%</td>
+                    <td className="p-3 text-right font-bold text-blue-600">
+                      R$ {fmtMoney(calcCommission(p))}
+                    </td>
+                    <td className="p-3 text-center">
+                      <Badge className={p.comissao_recebida ? 'bg-emerald-500' : 'bg-amber-500'}>
+                        {p.comissao_recebida ? 'Recebida' : 'Pendente'}
+                      </Badge>
+                    </td>
+                    <td className="p-3 text-xs">
+                      {p.data_recebimento_comissao
+                        ? new Date(p.data_recebimento_comissao).toLocaleDateString('pt-BR')
+                        : '-'}
+                    </td>
+                    <td className="p-3 text-right">
+                      <Button size="sm" variant="ghost" onClick={() => setEditPolicy(p)}>
+                        <Edit2 className="w-3.5 h-3.5" />
+                      </Button>
+                    </td>
+                  </tr>
+                ))
+              )}
             </tbody>
           </table>
         </div>
       </Card>
+
+      <Card className="shadow-sm overflow-hidden border">
+        <CardHeader>
+          <CardTitle className="text-base font-bold">Repasses de Parceiros</CardTitle>
+        </CardHeader>
+        <div className="overflow-x-auto">
+          <table className="w-full text-left text-sm text-slate-700">
+            <thead className="bg-slate-100 text-slate-600 font-semibold border-b">
+              <tr>
+                <th className="p-3">Apólice</th>
+                <th className="p-3">Cliente</th>
+                <th className="p-3">Parceiro</th>
+                <th className="p-3 text-right">Líquido</th>
+                <th className="p-3 text-center">Repasse %</th>
+                <th className="p-3 text-right">Valor Repasse</th>
+                <th className="p-3 text-center">Pago</th>
+                <th className="p-3">Data Pagto</th>
+                <th className="p-3 text-right">Ação</th>
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-slate-100">
+              {partnerPols.length === 0 ? (
+                <tr>
+                  <td colSpan={9} className="text-center p-6 text-slate-500">
+                    Nenhuma apólice de parceiro encontrada.
+                  </td>
+                </tr>
+              ) : (
+                partnerPols.map((p) => (
+                  <tr key={p.id} className="hover:bg-slate-50/80">
+                    <td className="p-3 font-bold text-slate-900">{p.policy_number}</td>
+                    <td className="p-3">{p.expand?.client?.name || '-'}</td>
+                    <td className="p-3">{p.expand?.parceiro?.nome || '-'}</td>
+                    <td className="p-3 text-right font-bold">
+                      R$ {fmtMoney(p.valor_liquido || p.premium_amount || 0)}
+                    </td>
+                    <td className="p-3 text-center">{p.valor_repasse || 0}%</td>
+                    <td className="p-3 text-right font-bold text-blue-600">
+                      R$ {fmtMoney(calcRepasse(p))}
+                    </td>
+                    <td className="p-3 text-center">
+                      <Badge className={p.pago_parceiro ? 'bg-emerald-500' : 'bg-amber-500'}>
+                        {p.pago_parceiro ? 'Pago' : 'Pendente'}
+                      </Badge>
+                    </td>
+                    <td className="p-3 text-xs">
+                      {p.data_pagamento_parceiro
+                        ? new Date(p.data_pagamento_parceiro).toLocaleDateString('pt-BR')
+                        : '-'}
+                    </td>
+                    <td className="p-3 text-right">
+                      <Button size="sm" variant="ghost" onClick={() => setEditPolicy(p)}>
+                        <Edit2 className="w-3.5 h-3.5" />
+                      </Button>
+                    </td>
+                  </tr>
+                ))
+              )}
+            </tbody>
+          </table>
+        </div>
+      </Card>
+
+      <CommissionEditDialog
+        open={!!editPolicy}
+        onOpenChange={(open) => !open && setEditPolicy(null)}
+        policy={editPolicy}
+        onSave={handleSave}
+        saving={saving}
+      />
     </div>
   )
 }

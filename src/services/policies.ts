@@ -104,6 +104,18 @@ export const updatePolicy = async (id: string, data: Partial<Policy>) => {
   return pb.collection('policies').update<Policy>(id, cleanData)
 }
 
+export const updatePolicyFinancial = async (
+  id: string,
+  data: {
+    comissao_recebida?: boolean
+    data_recebimento_comissao?: string | null
+    pago_parceiro?: boolean
+    data_pagamento_parceiro?: string | null
+  },
+) => {
+  return pb.collection('policies').update<Policy>(id, data)
+}
+
 export const deletePolicy = async (id: string) => {
   return pb.collection('policies').delete(id)
 }
