@@ -13,6 +13,7 @@ import {
   X,
   Handshake,
   Building2,
+  UserCog,
 } from 'lucide-react'
 import logoImg from '@/assets/cred10mixlogooficialfundobranco4k-12574.jpg'
 import { useAuth } from '@/hooks/use-auth'
@@ -62,6 +63,7 @@ export default function Layout() {
     { title: 'Financeiro', path: '/financeiro', icon: Wallet },
     { title: 'Lembretes', path: '/lembretes', icon: Bell, badge: reminders.length },
     { title: 'Comunicação', path: '/comunicacao', icon: Send },
+    ...(user?.role === 'admin' ? [{ title: 'Usuários', path: '/usuarios', icon: UserCog }] : []),
     { title: 'Configurações', path: '/configuracoes', icon: Settings },
   ]
 

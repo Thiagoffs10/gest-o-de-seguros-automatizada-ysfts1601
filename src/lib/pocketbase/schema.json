@@ -1,11 +1,11 @@
 {
-  "generatedAt": "2026-07-30T14:19:46.062Z",
+  "generatedAt": "2026-07-30T16:18:08.939Z",
   "collections": [
     {
       "name": "users",
       "type": "auth",
       "apiRules": {
-        "list": "id = @request.auth.id",
+        "list": "id = @request.auth.id || @request.auth.role = \"admin\"",
         "view": "id = @request.auth.id",
         "create": "",
         "update": "id = @request.auth.id",
@@ -37,6 +37,13 @@
           "required": false,
           "system": false,
           "autodateTriggers": ["onCreate", "onUpdate"]
+        },
+        {
+          "name": "role",
+          "type": "select",
+          "required": true,
+          "system": false,
+          "selectValues": ["admin", "user"]
         }
       ],
       "indexes": [

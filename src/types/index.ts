@@ -1,3 +1,12 @@
+export interface User {
+  id: string
+  name?: string
+  email: string
+  role?: 'admin' | 'user'
+  created: string
+  updated: string
+}
+
 export interface Client {
   id: string
   client_code?: number

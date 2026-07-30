@@ -1,4 +1,5 @@
 import { useState } from 'react'
+import { useNavigate } from 'react-router-dom'
 import { User, Bell, Key, Shield } from 'lucide-react'
 import { useAuth } from '@/hooks/use-auth'
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card'
@@ -12,6 +13,7 @@ import pb from '@/lib/pocketbase/client'
 export default function Settings() {
   const { user } = useAuth()
   const { toast } = useToast()
+  const navigate = useNavigate()
 
   const [name, setName] = useState(user?.name || '')
   const [remindRenewals, setRemindRenewals] = useState(true)
@@ -55,9 +57,14 @@ export default function Settings() {
               <Label>E-mail Cadastrado</Label>
               <Input value={user?.email || ''} disabled className="bg-slate-100" />
             </div>
-            <Button type="submit" className="bg-blue-600">
-              Salvar Perfil
-            </Button>
+            <div className="flex gap-3">
+              <Button type="submit" className="bg-blue-600">
+                Salvar Perfil
+              </Button>
+              <Button type="button" variant="outline" onClick={() => navigate('/alterar-senha')}>
+                <Key className="w-4 h-4 mr-2" /> Alterar Senha
+              </Button>
+            </div>
           </form>
         </CardContent>
       </Card>

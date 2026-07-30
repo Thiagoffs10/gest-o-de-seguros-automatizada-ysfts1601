@@ -21,6 +21,8 @@ import Financial from '@/pages/Financial'
 import RemindersPage from '@/pages/RemindersPage'
 import Communication from '@/pages/Communication'
 import Settings from '@/pages/Settings'
+import ChangePassword from '@/pages/ChangePassword'
+import UsersPage from '@/pages/Users'
 import NotFound from '@/pages/NotFound'
 
 const App = () => (
@@ -46,6 +48,8 @@ const App = () => (
               <Route path="/financeiro" element={<Financial />} />
               <Route path="/lembretes" element={<RemindersPage />} />
               <Route path="/comunicacao" element={<Communication />} />
+              <Route path="/alterar-senha" element={<ChangePassword />} />
+              <Route path="/usuarios" element={<UsersPage />} />
               <Route path="/configuracoes" element={<Settings />} />
             </Route>
           </Route>
