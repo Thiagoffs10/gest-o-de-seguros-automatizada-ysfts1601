@@ -1,12 +1,24 @@
-/* Home Page - Replace this page layout, components, content, behavior with what you want and translate to the language of the user */
-const Index = () => {
+import { useEffect } from 'react'
+import { useNavigate } from 'react-router-dom'
+import { useAuth } from '@/hooks/use-auth'
+
+export default function Index() {
+  const { isAuthenticated, loading } = useAuth()
+  const navigate = useNavigate()
+
+  useEffect(() => {
+    if (!loading) {
+      if (isAuthenticated) {
+        navigate('/dashboard', { replace: true })
+      } else {
+        navigate('/login', { replace: true })
+      }
+    }
+  }, [isAuthenticated, loading, navigate])
+
   return (
-    <div className="container mx-auto py-8 px-4">
-      <h1 className="text-3xl font-bold mb-6">
-        This is a example page ready to be rewritten with your own content
-      </h1>
+    <div className="flex min-h-screen items-center justify-center bg-slate-900 text-white">
+      <p className="text-sm font-medium">Redirecionando...</p>
     </div>
   )
 }
-
-export default Index

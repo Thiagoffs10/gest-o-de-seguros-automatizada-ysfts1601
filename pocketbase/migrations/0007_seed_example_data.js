@@ -1,0 +1,86 @@
+migrate(
+  (app) => {
+    try {
+      if (app.countRecords('clients') > 0) return
+    } catch (_) {
+      return
+    }
+
+    const clientsCol = app.findCollectionByNameOrId('clients')
+    const c1 = new Record(clientsCol)
+    c1.set('name', 'Carlos Eduardo Silva')
+    c1.set('email', 'carlos.silva@email.com')
+    c1.set('phone', '11987654321')
+    c1.set('address', 'Av. Paulista, 1000, Apt 42 - São Paulo / SP')
+    c1.set('birth_date', '1985-05-15 00:00:00.000Z')
+    c1.set('notes', 'Cliente VIP, possui frota de veículos.')
+    app.save(c1)
+
+    const c2 = new Record(clientsCol)
+    c2.set('name', 'Mariana Oliveira Santos')
+    c2.set('email', 'mariana.santos@email.com')
+    c2.set('phone', '21998877665')
+    c2.set('address', 'Rua Visconde de Pirajá, 250 - Rio de Janeiro / RJ')
+    c2.set('birth_date', '1992-11-20 00:00:00.000Z')
+    c2.set('notes', 'Prefere comunicação por WhatsApp.')
+    app.save(c2)
+
+    const policiesCol = app.findCollectionByNameOrId('policies')
+    const p1 = new Record(policiesCol)
+    p1.set('client', c1.id)
+    p1.set('insurance_company', 'Porto Seguro')
+    p1.set('policy_number', 'PS-2025-8891')
+    p1.set('coverage_type', 'Auto')
+    p1.set('premium_amount', 3400)
+    p1.set('start_date', '2025-01-10 00:00:00.000Z')
+    p1.set('end_date', '2026-01-10 00:00:00.000Z')
+    p1.set('renewal_date', '2025-12-11 00:00:00.000Z')
+    p1.set('status', 'Ativa')
+    p1.set('commission', 15)
+    p1.set('notes', 'Honda Civic 2023 - Cobertura Total')
+    app.save(p1)
+
+    const p2 = new Record(policiesCol)
+    p2.set('client', c2.id)
+    p2.set('insurance_company', 'Bradesco Seguros')
+    p2.set('policy_number', 'BR-2025-3012')
+    p2.set('coverage_type', 'Residencial')
+    p2.set('premium_amount', 1850)
+    p2.set('start_date', '2025-02-01 00:00:00.000Z')
+    p2.set('end_date', '2026-02-01 00:00:00.000Z')
+    p2.set('renewal_date', '2026-01-02 00:00:00.000Z')
+    p2.set('status', 'Renovação Pendente')
+    p2.set('commission', 20)
+    p2.set('notes', 'Apartamento Ipanema')
+    app.save(p2)
+
+    const paymentsCol = app.findCollectionByNameOrId('payments')
+    const pay1 = new Record(paymentsCol)
+    pay1.set('policy', p1.id)
+    pay1.set('amount', 850)
+    pay1.set('due_date', '2025-01-10 00:00:00.000Z')
+    pay1.set('paid_date', '2025-01-08 00:00:00.000Z')
+    pay1.set('status', 'Pago')
+    pay1.set('payment_method', 'Cartão')
+    app.save(pay1)
+
+    const pay2 = new Record(paymentsCol)
+    pay2.set('policy', p2.id)
+    pay2.set('amount', 1850)
+    pay2.set('due_date', '2025-02-15 00:00:00.000Z')
+    pay2.set('status', 'Atrasado')
+    pay2.set('payment_method', 'Boleto')
+    app.save(pay2)
+
+    const remindersCol = app.findCollectionByNameOrId('reminders')
+    const r1 = new Record(remindersCol)
+    r1.set('type', 'Renovação')
+    r1.set('client', c2.id)
+    r1.set('policy', p2.id)
+    r1.set('date', new Date().toISOString())
+    r1.set('message', 'Aviso de renovação para Apólice BR-2025-3012 - Residencial Bradesco')
+    r1.set('sent', false)
+    app.save(r1)
+  },
+  (app) => {},
+)
