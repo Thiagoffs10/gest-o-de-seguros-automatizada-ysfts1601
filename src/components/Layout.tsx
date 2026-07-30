@@ -11,9 +11,9 @@ import {
   LogOut,
   Menu,
   X,
-  ShieldCheck,
   Handshake,
 } from 'lucide-react'
+import logoImg from '@/assets/cred10mixlogooficialtransparente4k-13c6c.png'
 import { useAuth } from '@/hooks/use-auth'
 import { useRealtime } from '@/hooks/use-realtime'
 import { getReminders, updateReminder } from '@/services/reminders'
@@ -70,12 +70,20 @@ export default function Layout() {
       {/* Sidebar Desktop */}
       <aside className="hidden lg:flex w-[260px] flex-col bg-[#1e293b] text-white p-4 shadow-lg shrink-0">
         <div className="flex items-center gap-3 px-3 py-4 border-b border-slate-700/60 mb-6">
-          <div className="p-2 bg-blue-600 rounded-lg">
-            <ShieldCheck className="w-6 h-6 text-white" />
+          <div className="p-1 bg-slate-900/80 rounded-lg flex items-center justify-center border border-slate-700/50 shrink-0">
+            <img
+              src={logoImg}
+              alt="CRED10MIX CORRETORA DE SEGUROS"
+              className="h-10 w-auto object-contain"
+            />
           </div>
-          <div>
-            <h1 className="font-bold text-base tracking-wide leading-tight">SeguroControl</h1>
-            <p className="text-xs text-slate-400">Gestão de Corretora</p>
+          <div className="min-w-0">
+            <h1 className="font-bold text-xs tracking-wider text-amber-400 leading-tight truncate">
+              CRED10MIX
+            </h1>
+            <p className="text-[10px] font-semibold text-slate-300 tracking-tight leading-snug">
+              CORRETORA DE SEGUROS
+            </p>
           </div>
         </div>
 
@@ -228,9 +236,16 @@ export default function Layout() {
             />
             <div className="relative flex w-[260px] flex-col bg-[#1e293b] text-white p-4 z-10">
               <div className="flex items-center justify-between pb-4 border-b border-slate-700/60 mb-4">
-                <div className="flex items-center gap-2">
-                  <ShieldCheck className="w-6 h-6 text-blue-500" />
-                  <span className="font-bold text-base">SeguroControl</span>
+                <div className="flex items-center gap-2.5">
+                  <img src={logoImg} alt="CRED10MIX Logo" className="h-8 w-auto object-contain" />
+                  <div className="flex flex-col">
+                    <span className="font-bold text-xs tracking-wider text-amber-400">
+                      CRED10MIX
+                    </span>
+                    <span className="text-[9px] font-semibold text-slate-300">
+                      CORRETORA DE SEGUROS
+                    </span>
+                  </div>
                 </div>
                 <Button
                   variant="ghost"
@@ -288,7 +303,8 @@ export default function Layout() {
         </main>
 
         <footer className="py-4 text-center text-xs text-slate-500 border-t bg-white">
-          © 2025 Corretora de Seguros – Todos os direitos reservados.
+          © {new Date().getFullYear()} CRED10MIX CORRETORA DE SEGUROS – Todos os direitos
+          reservados.
         </footer>
       </div>
     </div>

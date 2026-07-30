@@ -1,6 +1,7 @@
 import { useState } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { ShieldCheck, Mail, Lock, User } from 'lucide-react'
+import { Mail, Lock, User } from 'lucide-react'
+import logoImg from '@/assets/cred10mixlogooficialtransparente4k-13c6c.png'
 import { useAuth } from '@/hooks/use-auth'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -39,7 +40,10 @@ export default function Login() {
           variant: 'destructive',
         })
       } else {
-        toast({ title: 'Conta criada!', description: 'Bem-vindo ao SeguroControl.' })
+        toast({
+          title: 'Conta criada!',
+          description: 'Bem-vindo à CRED10MIX CORRETORA DE SEGUROS.',
+        })
         navigate('/dashboard')
       }
     } else {
@@ -61,18 +65,22 @@ export default function Login() {
     <div className="min-h-screen flex items-center justify-center p-4 bg-gradient-to-br from-blue-900 via-blue-800 to-slate-900">
       <Card className="w-full max-w-md shadow-2xl border-none">
         <CardHeader className="text-center pb-2">
-          <div className="flex justify-center mb-2">
-            <div className="p-3 bg-blue-600 rounded-xl text-white shadow-lg">
-              <ShieldCheck className="w-8 h-8" />
+          <div className="flex justify-center mb-3">
+            <div className="p-4 bg-slate-950/90 rounded-2xl shadow-xl border border-slate-800 flex items-center justify-center max-w-[280px] w-full">
+              <img
+                src={logoImg}
+                alt="CRED10MIX CORRETORA DE SEGUROS"
+                className="h-16 w-auto object-contain drop-shadow"
+              />
             </div>
           </div>
-          <CardTitle className="text-2xl font-bold text-slate-900">
-            {isRegister ? 'Criar Conta de Corretor' : 'Gestão de Seguros'}
+          <CardTitle className="text-xl font-extrabold text-slate-900 tracking-tight uppercase">
+            CRED10MIX CORRETORA DE SEGUROS
           </CardTitle>
-          <CardDescription>
+          <CardDescription className="text-xs text-slate-600 font-medium mt-1">
             {isRegister
-              ? 'Preencha seus dados para criar acesso'
-              : 'Entre com suas credenciais para acessar o painel'}
+              ? 'Preencha seus dados para criar acesso ao sistema'
+              : 'Painel de Gestão de Seguros e Controle de Apólices'}
           </CardDescription>
         </CardHeader>
 

@@ -1,3 +1,5 @@
+import logoImg from '@/assets/cred10mixlogooficialtransparente4k-13c6c.png'
+
 export interface PartnerReportEntry {
   clientName: string
   seguradoraName: string
@@ -65,14 +67,19 @@ export function generatePartnerReportPDF(data: PartnerReportData) {
     )
     .join('')
 
-  const html = `<!DOCTYPE html><html><head><title>Relatório de Comissões de Parceiros</title>
+  const html = `<!DOCTYPE html><html><head><title>Relatório de Comissões - CRED10MIX CORRETORA DE SEGUROS</title>
 <style>
 *{margin:0;padding:0;box-sizing:border-box}
 body{font-family:Arial,sans-serif;padding:30px;color:#1e293b}
-.header{text-align:center;margin-bottom:24px;border-bottom:3px solid #2563eb;padding-bottom:16px}
-.header h1{font-size:22px;color:#1e293b;margin-bottom:4px}
-.header p{font-size:13px;color:#64748b}
-.header .partner{font-size:15px;font-weight:bold;color:#2563eb;margin-top:4px}
+.header{display:flex;align-items:center;justify-content:space-between;margin-bottom:24px;border-bottom:3px solid #2563eb;padding-bottom:16px}
+.header-brand{display:flex;align-items:center;gap:16px}
+.logo-box{background:#0f172a;padding:8px 14px;border-radius:8px;display:flex;align-items:center;justify-content:center}
+.header-logo{height:50px;width:auto;object-fit:contain}
+.header-titles h1{font-size:18px;color:#0f172a;font-weight:800;line-height:1.2;letter-spacing:-0.2px}
+.header-titles p{font-size:13px;color:#475569;margin-top:3px;font-weight:600}
+.header-meta{text-align:right}
+.header-meta .date{font-size:12px;color:#64748b}
+.header-meta .partner{font-size:14px;font-weight:bold;color:#2563eb;margin-top:4px}
 .partner-header{margin-bottom:20px;padding:16px 20px;background:#f1f5f9;border-left:4px solid #2563eb;border-radius:6px}
 .partner-header h2{font-size:16px;color:#1e293b;margin-bottom:10px}
 .partner-grid{display:flex;flex-wrap:wrap;gap:6px 30px}
@@ -97,9 +104,19 @@ tr:nth-child(even){background:#f8fafc}
 @media print{body{padding:15px}}
 </style></head><body>
 <div class="header">
-<h1>Relatório de Comissões de Parceiros</h1>
-<p>Gerado em ${dateStr} às ${timeStr}</p>
-<p class="partner">${data.partnerName}</p>
+  <div class="header-brand">
+    <div class="logo-box">
+      <img src="${logoImg}" alt="CRED10MIX CORRETORA DE SEGUROS" class="header-logo" />
+    </div>
+    <div class="header-titles">
+      <h1>CRED10MIX CORRETORA DE SEGUROS</h1>
+      <p>Relatório de Comissões de Parceiros</p>
+    </div>
+  </div>
+  <div class="header-meta">
+    <div class="date">Gerado em ${dateStr} às ${timeStr}</div>
+    <div class="partner">${data.partnerName}</div>
+  </div>
 </div>
 ${partnerHeader}
 <table>
@@ -114,7 +131,7 @@ ${partnerHeader}
 <div class="total-box paid"><div class="label">Total Pago</div><div class="amount">R$ ${fmt(data.totalPaid)}</div></div>
 <div class="total-box pending"><div class="label">Total Em Aberto</div><div class="amount">R$ ${fmt(data.totalPending)}</div></div>
 </div>
-<div class="footer">Documento gerado por SeguroControl — Sistema de Gestão de Corretora de Seguros</div>
+<div class="footer">Documento gerado por CRED10MIX CORRETORA DE SEGUROS — Sistema de Gestão de Seguros</div>
 <script>window.onload=function(){setTimeout(function(){window.print()},300)}</script>
 </body></html>`
 
