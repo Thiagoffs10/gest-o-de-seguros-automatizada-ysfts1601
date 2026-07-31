@@ -73,7 +73,7 @@ export default function Layout() {
     { title: 'Seguradoras', path: '/seguradoras', icon: Building2 },
     { title: 'Financeiro', path: '/financeiro', icon: Wallet },
     ...(can('custos_fixos', 'read')
-      ? [{ title: 'Custos Fixos', path: '/custos-fixos', icon: Receipt }]
+      ? [{ title: 'Custos', path: '/custos-fixos', icon: Receipt }]
       : []),
     { title: 'Lembretes', path: '/lembretes', icon: Bell, badge: reminders.length },
     { title: 'Comunicação', path: '/comunicacao', icon: Send },

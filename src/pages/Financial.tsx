@@ -35,6 +35,7 @@ export default function Financial() {
   const [seguradoras, setSeguradoras] = useState<Seguradora[]>([])
   const [filters, setFilters] = useState<FilterState>({})
   const [statusFilter, setStatusFilter] = useState('ALL')
+  const [commFilter, setCommFilter] = useState('ALL')
   const [editPolicy, setEditPolicy] = useState<Policy | null>(null)
   const [saving, setSaving] = useState(false)
 
@@ -43,6 +44,11 @@ export default function Financial() {
       let filter = buildFilterString('', filters, 'start_date')
       if (statusFilter !== 'ALL') {
         filter = filter ? `${filter} && status = "${statusFilter}"` : `status = "${statusFilter}"`
+      }
+      if (commFilter === 'received') {
+        filter = filter ? `${filter} && comissao_recebida = true` : `comissao_recebida = true`
+      } else if (commFilter === 'pending') {
+        filter = filter ? `${filter} && comissao_recebida = false` : `comissao_recebida = false`
       }
       const [pols, pars, segs] = await Promise.all([
         getPolicies(filter),
@@ -55,7 +61,7 @@ export default function Financial() {
     } catch {
       /* intentionally ignored */
     }
-  }, [filters, statusFilter])
+  }, [filters, statusFilter, commFilter])
 
   useEffect(() => {
     loadData()
@@ -134,12 +140,23 @@ export default function Financial() {
               <SelectItem value="Cancelada">Cancelada</SelectItem>
             </SelectContent>
           </Select>
+          <Select value={commFilter} onValueChange={setCommFilter}>
+            <SelectTrigger className="w-[180px]">
+              <SelectValue placeholder="Comissão" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="ALL">Todas as Comissões</SelectItem>
+              <SelectItem value="received">Recebidas</SelectItem>
+              <SelectItem value="pending">Pendentes</SelectItem>
+            </SelectContent>
+          </Select>
           <Button
             variant="outline"
             size="sm"
             onClick={() => {
               setFilters({})
               setStatusFilter('ALL')
+              setCommFilter('ALL')
             }}
           >
             Limpar Filtros

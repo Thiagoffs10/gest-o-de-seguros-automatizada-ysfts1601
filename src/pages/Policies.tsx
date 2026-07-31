@@ -362,7 +362,9 @@ export default function Policies() {
                     <td className="p-3.5 font-bold">
                       R$ {(p.valor_liquido || p.premium_amount)?.toLocaleString('pt-BR')}
                     </td>
-                    <td className="p-3.5">{p.commission_percent || p.commission || 0}%</td>
+                    <td className="p-3.5">
+                      R$ {(p.commission || 0).toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
+                    </td>
                     <td className="p-3.5">
                       <Badge
                         className={

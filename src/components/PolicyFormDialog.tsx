@@ -32,6 +32,7 @@ const DEFAULT_FORM = {
   modelo_veiculo: '',
   valor_bruto: 0,
   valor_liquido: 0,
+  commission_percent: 0,
   commission: 0,
   iss: 0,
   tipo_de_venda: 'Produção Própria',
@@ -94,6 +95,7 @@ export function PolicyFormDialog({
         modelo_veiculo: initialData.modelo_veiculo || '',
         valor_bruto: initialData.valor_bruto || 0,
         valor_liquido: initialData.valor_liquido || initialData.premium_amount || 0,
+        commission_percent: initialData.commission_percent || 0,
         commission: initialData.commission || 0,
         iss: initialData.iss || 0,
         tipo_de_venda: initialData.tipo_de_venda || 'Produção Própria',
@@ -125,12 +127,10 @@ export function PolicyFormDialog({
 
   useEffect(() => {
     if (skipAuto.current) return
-    const calc =
-      form.valor_bruto != null
-        ? Math.max(0, form.valor_bruto - (form.valor_bruto * (impostoPercentual || 0)) / 100)
-        : 0
-    set('valor_liquido', calc)
-  }, [form.valor_bruto, form.seguradora, impostoPercentual])
+    const v = form.valor_liquido != null ? Number(form.valor_liquido) : 0
+    const p = form.commission_percent != null ? Number(form.commission_percent) : 0
+    set('commission', Math.max(0, (v * p) / 100))
+  }, [form.valor_liquido, form.commission_percent])
 
   useEffect(() => {
     if (skipAuto.current) return
@@ -273,12 +273,18 @@ export function PolicyFormDialog({
                 value={form.valor_liquido}
                 onChange={(e) => set('valor_liquido', Number(e.target.value))}
               />
-              {form.seguradora && (
-                <p className="text-xs text-slate-500 mt-0.5">ISS: {impostoPercentual}%</p>
-              )}
             </div>
           </div>
-          <div className="grid grid-cols-3 gap-2">
+          <div className="grid grid-cols-2 gap-2">
+            <div>
+              <Label className="text-xs font-semibold">% Comissão</Label>
+              <Input
+                type="number"
+                step="0.01"
+                value={form.commission_percent}
+                onChange={(e) => set('commission_percent', Number(e.target.value))}
+              />
+            </div>
             <div>
               <Label className="text-xs font-semibold">Comissão Bruta (R$)</Label>
               <Input
@@ -288,6 +294,8 @@ export function PolicyFormDialog({
                 onChange={(e) => set('commission', Number(e.target.value))}
               />
             </div>
+          </div>
+          <div className="grid grid-cols-2 gap-2">
             <div>
               <Label className="text-xs font-semibold">ISS (R$)</Label>
               <Input
@@ -296,6 +304,9 @@ export function PolicyFormDialog({
                 value={form.iss}
                 onChange={(e) => set('iss', Number(e.target.value))}
               />
+              {form.seguradora && (
+                <p className="text-xs text-slate-500 mt-0.5">Imposto: {impostoPercentual}%</p>
+              )}
             </div>
             <div>
               <Label className="text-xs font-semibold">Com. Líquida</Label>
