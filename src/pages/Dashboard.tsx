@@ -36,6 +36,38 @@ import {
   Cell,
 } from 'recharts'
 
+const COVERAGE_MAP: Record<string, string> = {
+  Auto: 'Automóveis',
+  Vida: 'Vidas',
+  Residencial: 'Residenciais',
+  Empresarial: 'Empresariais',
+  Saúde: 'Saúde',
+  Condomínio: 'Condomínios',
+  Viagem: 'Viagens',
+  Outros: 'Outros',
+}
+
+const COVERAGE_TYPES = [
+  'Auto',
+  'Vida',
+  'Residencial',
+  'Empresarial',
+  'Saúde',
+  'Condomínio',
+  'Viagem',
+  'Outros',
+]
+const COLORS = [
+  '#2563eb',
+  '#10b981',
+  '#f59e0b',
+  '#8b5cf6',
+  '#ec4899',
+  '#06b6d4',
+  '#f97316',
+  '#64748b',
+]
+
 export default function Dashboard() {
   const navigate = useNavigate()
   const [clients, setClients] = useState<Client[]>([])
@@ -74,32 +106,41 @@ export default function Dashboard() {
   useRealtime('payments', () => loadData())
   useRealtime('custos_fixos', () => loadData())
 
+  const period = useMemo(() => computePeriodFromFilters(filters), [filters])
+
+  const periodPolicies = useMemo(
+    () => policies.filter((p) => isDateInPeriod(period, p.start_date)),
+    [policies, period],
+  )
+
   const activePolicies = policies.filter((p) => p.status === 'Ativa')
   const pendingRenewals = policies.filter((p) => p.status === 'Renovação Pendente')
-  const overduePayments = payments.filter((p) => p.status === 'Atrasado')
 
   const pendingCommissions = useMemo(() => computePendingCommissions(policies), [policies])
 
-  const period = useMemo(() => computePeriodFromFilters(filters), [filters])
-
   const metrics = useMemo(
     () => calculateFinancialMetrics(policies, custosFixos, period),
-    [policies, custosFixos, period, filters],
+    [policies, custosFixos, period],
   )
 
   const topCustos = useMemo(() => {
     const monthCustos = custosFixos.filter((c) => isDateInPeriod(period, c.data))
     return [...monthCustos].sort((a, b) => (b.valor || 0) - (a.valor || 0)).slice(0, 5)
-  }, [custosFixos, period, filters])
+  }, [custosFixos, period])
 
-  const coverageTypes = ['Auto', 'Vida', 'Residencial', 'Empresarial', 'Saúde', 'Outros']
-  const pieData = coverageTypes
-    .map((type) => ({
-      name: type,
-      value: policies.filter((p) => p.coverage_type === type || p.tipo_de_seguro === type).length,
-    }))
-    .filter((d) => d.value > 0)
-  const COLORS = ['#2563eb', '#10b981', '#f59e0b', '#8b5cf6', '#ec4899', '#64748b']
+  const pieData = useMemo(() => {
+    return COVERAGE_TYPES.map((type, idx) => {
+      const count = periodPolicies.filter(
+        (p) => p.coverage_type === type || p.tipo_de_seguro === type,
+      ).length
+      return {
+        name: type,
+        displayName: COVERAGE_MAP[type] || type,
+        value: count,
+        color: COLORS[idx % COLORS.length],
+      }
+    }).filter((d) => d.value > 0)
+  }, [periodPolicies])
 
   const monthlyData = useMemo(() => {
     const months = [
@@ -116,14 +157,15 @@ export default function Dashboard() {
       'Nov',
       'Dez',
     ]
-    const year = new Date().getFullYear()
     const counts = new Array(12).fill(0)
-    policies.forEach((p) => {
-      const d = new Date(p.created)
-      if (d.getFullYear() === year) counts[d.getMonth()]++
+    periodPolicies.forEach((p) => {
+      const d = new Date(p.start_date || p.created)
+      if (!isNaN(d.getTime())) {
+        counts[d.getMonth()]++
+      }
     })
     return months.map((m, i) => ({ month: m, value: counts[i] }))
-  }, [policies])
+  }, [periodPolicies])
 
   if (loading)
     return <div className="text-slate-500 py-8 text-center">Carregando informações...</div>
@@ -165,7 +207,7 @@ export default function Dashboard() {
           onClick={() =>
             setFilters({
               year: String(new Date().getFullYear()),
-              month: String(new Date().getMonth() + 1),
+              month: 'ALL',
             })
           }
         >
@@ -229,10 +271,14 @@ export default function Dashboard() {
       <DevTrackingPanel policies={policies} period={period} totalReceitas={metrics.totalReceitas} />
 
       <Card className="shadow-sm p-5">
-        <div className="flex items-center gap-2 mb-4">
-          <TrendingUp className="w-5 h-5 text-blue-600" />
-          <h3 className="text-base font-bold text-slate-800">Resumo de Lucro</h3>
-          <span className="text-xs text-slate-500 ml-2">Período: {period.label}</span>
+        <div className="flex items-center justify-between mb-4">
+          <div className="flex items-center gap-2">
+            <TrendingUp className="w-5 h-5 text-blue-600" />
+            <h3 className="text-base font-bold text-slate-800">Resumo de Lucro</h3>
+          </div>
+          <span className="text-xs font-medium text-slate-500 bg-slate-100 px-2.5 py-1 rounded">
+            {period.label}
+          </span>
         </div>
         <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 mb-4">
           <div className="bg-slate-50 rounded-lg p-3 border">
@@ -274,9 +320,10 @@ export default function Dashboard() {
 
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
         <Card className="p-4 shadow-sm">
-          <h3 className="text-base font-bold text-slate-800 mb-4">
-            Apólices Emitidas por Mês ({new Date().getFullYear()})
-          </h3>
+          <div className="flex items-center justify-between mb-4">
+            <h3 className="text-base font-bold text-slate-800">Apólices no Período</h3>
+            <span className="text-xs text-slate-500">{period.label}</span>
+          </div>
           <div className="h-64">
             <ResponsiveContainer width="100%" height="100%">
               <BarChart data={monthlyData}>
@@ -288,30 +335,54 @@ export default function Dashboard() {
             </ResponsiveContainer>
           </div>
         </Card>
+
         <Card className="p-4 shadow-sm">
-          <h3 className="text-base font-bold text-slate-800 mb-4">Distribuição por Cobertura</h3>
-          <div className="h-64 flex items-center justify-center">
+          <div className="flex items-center justify-between mb-4">
+            <h3 className="text-base font-bold text-slate-800">Distribuição por Cobertura</h3>
+            <span className="text-xs text-slate-500">{period.label}</span>
+          </div>
+          <div className="h-64 flex flex-col sm:flex-row items-center justify-between gap-4">
             {pieData.length === 0 ? (
-              <p className="text-sm text-slate-500">Nenhuma apólice registrada.</p>
+              <div className="w-full h-full flex items-center justify-center text-sm text-slate-500">
+                Nenhuma apólice cadastrada no período.
+              </div>
             ) : (
-              <ResponsiveContainer width="100%" height="100%">
-                <PieChart>
-                  <Pie
-                    data={pieData}
-                    dataKey="value"
-                    nameKey="name"
-                    cx="50%"
-                    cy="50%"
-                    outerRadius={80}
-                    label
-                  >
-                    {pieData.map((_, index) => (
-                      <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />
-                    ))}
-                  </Pie>
-                  <Tooltip />
-                </PieChart>
-              </ResponsiveContainer>
+              <>
+                <div className="w-full sm:w-1/2 h-full">
+                  <ResponsiveContainer width="100%" height="100%">
+                    <PieChart>
+                      <Pie
+                        data={pieData}
+                        dataKey="value"
+                        nameKey="displayName"
+                        cx="50%"
+                        cy="50%"
+                        innerRadius={40}
+                        outerRadius={75}
+                        paddingAngle={3}
+                      >
+                        {pieData.map((entry) => (
+                          <Cell key={`cell-${entry.name}`} fill={entry.color} />
+                        ))}
+                      </Pie>
+                      <Tooltip formatter={(value, name) => [`${value} apólice(s)`, name]} />
+                    </PieChart>
+                  </ResponsiveContainer>
+                </div>
+                <div className="w-full sm:w-1/2 flex flex-col justify-center gap-2.5 pl-2 overflow-y-auto max-h-56">
+                  {pieData.map((item) => (
+                    <div key={item.name} className="flex items-center gap-2.5 text-sm">
+                      <span
+                        className="w-3 h-3 rounded-full shrink-0"
+                        style={{ backgroundColor: item.color }}
+                      />
+                      <span className="font-semibold text-slate-800">
+                        {item.value} {item.displayName}
+                      </span>
+                    </div>
+                  ))}
+                </div>
+              </>
             )}
           </div>
         </Card>

@@ -52,23 +52,51 @@ export function computePeriod(
       label: `${formatBRDate(dateFrom)} a ${formatBRDate(dateTo)}`,
     }
   }
-  if (month && year) {
-    const m = String(month).padStart(2, '0')
+
+  const isMonthAll = !month || month === 'ALL' || month === 'todos' || month === ''
+  const isYearAll = !year || year === 'ALL' || year === 'todos' || year === ''
+
+  if (isMonthAll && isYearAll) {
     return {
-      start: `${year}-${m}-01`,
-      end: computeFirstDayNextMonth(parseInt(year), parseInt(month)),
-      endInclusive: false,
-      label: `${MONTH_NAMES[parseInt(month) - 1]} ${year}`,
+      start: '1970-01-01',
+      end: '2099-12-31',
+      endInclusive: true,
+      label: 'Período Total',
     }
   }
-  if (year) {
+
+  if (isMonthAll && year && year !== 'ALL') {
     return {
       start: `${year}-01-01`,
-      end: `${parseInt(year) + 1}-01-01`,
+      end: `${parseInt(year, 10) + 1}-01-01`,
       endInclusive: false,
       label: `Ano de ${year}`,
     }
   }
+
+  if (month && month !== 'ALL' && isYearAll) {
+    const currentYear = new Date().getFullYear()
+    const m = String(month).padStart(2, '0')
+    const monthIdx = parseInt(month, 10) - 1
+    return {
+      start: `${currentYear}-${m}-01`,
+      end: computeFirstDayNextMonth(currentYear, parseInt(month, 10)),
+      endInclusive: false,
+      label: `${MONTH_NAMES[monthIdx] || ''} ${currentYear}`,
+    }
+  }
+
+  if (month && month !== 'ALL' && year && year !== 'ALL') {
+    const m = String(month).padStart(2, '0')
+    const monthIdx = parseInt(month, 10) - 1
+    return {
+      start: `${year}-${m}-01`,
+      end: computeFirstDayNextMonth(parseInt(year, 10), parseInt(month, 10)),
+      endInclusive: false,
+      label: `${MONTH_NAMES[monthIdx] || ''} ${year}`,
+    }
+  }
+
   const now = new Date()
   const m = String(now.getMonth() + 1).padStart(2, '0')
   return {
@@ -95,6 +123,9 @@ export function isDateInPeriod(period: DatePeriod, dateStr?: string): boolean {
 }
 
 export function buildPocketBaseDateFilter(field: string, period: DatePeriod): string {
+  if (period.start === '1970-01-01' && period.end === '2099-12-31') {
+    return ''
+  }
   if (period.endInclusive) {
     return `${field} >= "${period.start}" && ${field} <= "${period.end}"`
   }

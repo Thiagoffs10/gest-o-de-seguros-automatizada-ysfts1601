@@ -54,12 +54,13 @@ export function GlobalFilters({
       </div>
       <div>
         <Label className="text-xs">Ano</Label>
-        <Select value={filters.year || ''} onValueChange={(v) => update('year', v)}>
-          <SelectTrigger className="w-[100px]">
+        <Select value={filters.year || 'ALL'} onValueChange={(v) => update('year', v)}>
+          <SelectTrigger className="w-[110px]">
             <SelectValue placeholder="Ano" />
           </SelectTrigger>
           <SelectContent>
-            {YEARS.map((y) => (
+            <SelectItem value="ALL">Todos</SelectItem>
+            {YEARS.filter((y) => y !== 'ALL').map((y) => (
               <SelectItem key={y} value={y}>
                 {y}
               </SelectItem>
@@ -69,8 +70,8 @@ export function GlobalFilters({
       </div>
       <div>
         <Label className="text-xs">Mês</Label>
-        <Select value={filters.month || ''} onValueChange={(v) => update('month', v)}>
-          <SelectTrigger className="w-[130px]">
+        <Select value={filters.month || 'ALL'} onValueChange={(v) => update('month', v)}>
+          <SelectTrigger className="w-[140px]">
             <SelectValue placeholder="Mês" />
           </SelectTrigger>
           <SelectContent>

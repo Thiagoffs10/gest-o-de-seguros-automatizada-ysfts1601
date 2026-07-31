@@ -1,6 +1,6 @@
 import { useEffect, useState, useMemo } from 'react'
 import { Navigate } from 'react-router-dom'
-import { Mail, Cake, RefreshCw, Users, Send, ChevronRight, CheckCircle2 } from 'lucide-react'
+import { Mail, Cake, RefreshCw, Users, Send, ChevronRight, FileText } from 'lucide-react'
 import { getClients } from '@/services/clients'
 import { getPolicies } from '@/services/policies'
 import { createCommunication } from '@/services/communications'
@@ -11,6 +11,9 @@ import { useAuth } from '@/hooks/use-auth'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
+import { Input } from '@/components/ui/input'
+import { Textarea } from '@/components/ui/textarea'
+import { Label } from '@/components/ui/label'
 import {
   Dialog,
   DialogContent,
@@ -21,7 +24,7 @@ import {
 import { useToast } from '@/hooks/use-toast'
 import { usePermissions } from '@/hooks/use-permissions'
 
-type TemplateId = 'aniversario' | 'renovacao'
+type TemplateId = 'aniversario' | 'renovacao' | 'personalizado'
 type FilterId = 'aniversariantes' | 'renovacao' | 'todos'
 
 export default function EnvioEmMassa() {
@@ -31,7 +34,9 @@ export default function EnvioEmMassa() {
   const [clients, setClients] = useState<Client[]>([])
   const [policies, setPolicies] = useState<Policy[]>([])
   const [template, setTemplate] = useState<TemplateId | null>(null)
-  const [filter, setFilter] = useState<FilterId | null>(null)
+  const [customSubject, setCustomSubject] = useState('')
+  const [customBody, setCustomBody] = useState('')
+  const [filter, setFilter] = useState<FilterId | null>('todos')
   const [showConfirm, setShowConfirm] = useState(false)
   const [sendStep, setSendStep] = useState(-1)
   const [sentCount, setSentCount] = useState(0)
@@ -70,6 +75,17 @@ export default function EnvioEmMassa() {
   }, [clients, policies, filter])
 
   const getPersonalizedData = (client: Client) => {
+    if (template === 'personalizado') {
+      const clientPolicy = policies.find((p) => p.client === client.id)
+      const vars: Record<string, string> = {
+        nome_cliente: client.name || '',
+        numero_apolice: clientPolicy?.policy_number || '',
+      }
+      return {
+        subject: personalizeTemplate(customSubject, vars),
+        body: personalizeTemplate(customBody, vars),
+      }
+    }
     const tpl = template ? EMAIL_TEMPLATES[template] : null
     if (!tpl) return { subject: '', body: '' }
     const clientPolicy = policies.find((p) => p.client === client.id)
@@ -83,8 +99,16 @@ export default function EnvioEmMassa() {
     }
   }
 
+  const isFormValid = useMemo(() => {
+    if (!template || filteredClients.length === 0) return false
+    if (template === 'personalizado') {
+      return customSubject.trim().length > 0 && customBody.trim().length > 0
+    }
+    return true
+  }, [template, filteredClients.length, customSubject, customBody])
+
   const handleSend = () => {
-    if (!template || filteredClients.length === 0) return
+    if (!isFormValid) return
     setShowConfirm(true)
   }
 
@@ -133,6 +157,7 @@ export default function EnvioEmMassa() {
 
   const currentClient = sendStep >= 0 ? filteredClients[sendStep] : null
   const tpl = template ? EMAIL_TEMPLATES[template] : null
+  const displaySubject = template === 'personalizado' ? customSubject : tpl?.subject || ''
 
   return (
     <div className="space-y-6">
@@ -149,24 +174,72 @@ export default function EnvioEmMassa() {
             <CardTitle className="text-base">1. Escolha o Modelo</CardTitle>
           </CardHeader>
           <CardContent className="space-y-3">
-            {(['aniversario', 'renovacao'] as TemplateId[]).map((id) => {
-              const t = EMAIL_TEMPLATES[id]
-              const Icon = id === 'aniversario' ? Cake : RefreshCw
+            {[
+              {
+                id: 'aniversario' as TemplateId,
+                label: EMAIL_TEMPLATES.aniversario.name,
+                icon: Cake,
+                desc: EMAIL_TEMPLATES.aniversario.subject,
+              },
+              {
+                id: 'renovacao' as TemplateId,
+                label: EMAIL_TEMPLATES.renovacao.name,
+                icon: RefreshCw,
+                desc: EMAIL_TEMPLATES.renovacao.subject,
+              },
+              {
+                id: 'personalizado' as TemplateId,
+                label: 'Modelo Personalizado',
+                icon: FileText,
+                desc: 'Crie um assunto e mensagem customizados',
+              },
+            ].map((t) => {
+              const Icon = t.icon
               return (
                 <button
-                  key={id}
-                  onClick={() => setTemplate(id)}
-                  className={`w-full text-left p-3 rounded-lg border-2 transition-colors ${template === id ? 'border-blue-500 bg-blue-50' : 'border-slate-200 hover:border-slate-300'}`}
+                  key={t.id}
+                  onClick={() => setTemplate(t.id)}
+                  className={`w-full text-left p-3 rounded-lg border-2 transition-colors ${template === t.id ? 'border-blue-500 bg-blue-50' : 'border-slate-200 hover:border-slate-300'}`}
                 >
                   <div className="flex items-center gap-2 mb-1">
                     <Icon className="w-4 h-4 text-blue-600" />
-                    <span className="font-semibold text-sm">{t.name}</span>
+                    <span className="font-semibold text-sm">{t.label}</span>
                   </div>
-                  <p className="text-xs text-slate-500 truncate">{t.subject}</p>
+                  <p className="text-xs text-slate-500 truncate">{t.desc}</p>
                 </button>
               )
             })}
-            {template && (
+
+            {template === 'personalizado' && (
+              <div className="mt-3 p-4 bg-slate-50 rounded-lg border space-y-3">
+                <div>
+                  <Label className="text-xs font-semibold text-slate-700">Assunto *</Label>
+                  <Input
+                    value={customSubject}
+                    onChange={(e) => setCustomSubject(e.target.value)}
+                    placeholder="Ex: Comunicado Especial CRED10MIX"
+                    className="mt-1 bg-white text-sm"
+                  />
+                </div>
+                <div>
+                  <Label className="text-xs font-semibold text-slate-700">Mensagem *</Label>
+                  <Textarea
+                    value={customBody}
+                    onChange={(e) => setCustomBody(e.target.value)}
+                    placeholder="Digite a mensagem para os clientes..."
+                    rows={4}
+                    className="mt-1 bg-white text-sm"
+                  />
+                  <p className="text-[11px] text-slate-500 mt-1">
+                    Variáveis disponíveis:{' '}
+                    <code className="bg-slate-200 px-1 rounded">${'{nome_cliente}'}</code>,{' '}
+                    <code className="bg-slate-200 px-1 rounded">${'{numero_apolice}'}</code>
+                  </p>
+                </div>
+              </div>
+            )}
+
+            {template && template !== 'personalizado' && (
               <div className="mt-2 p-3 bg-slate-50 rounded-lg">
                 <p className="text-xs font-semibold text-slate-600 mb-1">Prévia do corpo:</p>
                 <p className="text-xs text-slate-600 whitespace-pre-wrap line-clamp-4">
@@ -179,7 +252,7 @@ export default function EnvioEmMassa() {
 
         <Card className="shadow-sm">
           <CardHeader>
-            <CardTitle className="text-base">2. Escolha o Filtro</CardTitle>
+            <CardTitle className="text-base">2. Escolha o Filtro (Destinatários)</CardTitle>
           </CardHeader>
           <CardContent className="space-y-3">
             {[
@@ -222,7 +295,7 @@ export default function EnvioEmMassa() {
             </CardTitle>
             <Button
               className="bg-blue-600 hover:bg-blue-700"
-              disabled={!template || !can('communications', 'create')}
+              disabled={!isFormValid || !can('communications', 'create')}
               onClick={handleSend}
             >
               <Send className="w-4 h-4 mr-2" /> Enviar
@@ -251,14 +324,15 @@ export default function EnvioEmMassa() {
           </DialogHeader>
           <div className="space-y-2 py-2">
             <p className="text-sm text-slate-700">
-              Você está prestes a enviar <strong>{filteredClients.length} emails</strong> com o tema{' '}
-              <strong>{tpl?.name}</strong>.
+              Você está prestes a enviar <strong>{filteredClients.length} e-mails</strong>{' '}
+              utilizando o tema{' '}
+              <strong>{template === 'personalizado' ? 'Modelo Personalizado' : tpl?.name}</strong>.
             </p>
             <p className="text-sm text-slate-500">
-              Assunto: <em>{tpl?.subject.replace(/\$\{[^}]+\}/g, '...')}</em>
+              Assunto: <em>{displaySubject}</em>
             </p>
             <p className="text-xs text-slate-400">
-              O sistema abrirá seu cliente de email para cada cliente, um por vez.
+              O sistema abrirá seu cliente de e-mail para cada cliente e registrará as comunicações.
             </p>
           </div>
           <DialogFooter>
@@ -290,15 +364,17 @@ export default function EnvioEmMassa() {
                 <p className="font-semibold text-sm">{currentClient.name}</p>
                 <p className="text-xs text-slate-500">{currentClient.email}</p>
               </div>
-              <div className="p-3 border rounded-lg">
+              <div className="p-3 border rounded-lg max-h-48 overflow-y-auto">
                 <p className="text-xs font-semibold text-slate-600 mb-1">Assunto:</p>
-                <p className="text-sm">{getPersonalizedData(currentClient).subject}</p>
-                <p className="text-xs font-semibold text-slate-600 mt-2 mb-1">Corpo:</p>
+                <p className="text-sm font-medium mb-2">
+                  {getPersonalizedData(currentClient).subject}
+                </p>
+                <p className="text-xs font-semibold text-slate-600 mb-1">Corpo:</p>
                 <p className="text-xs text-slate-600 whitespace-pre-wrap">
                   {getPersonalizedData(currentClient).body}
                 </p>
               </div>
-              <div className="flex items-center justify-between">
+              <div className="flex items-center justify-between pt-2">
                 <span className="text-xs text-slate-400">Enviados: {sentCount}</span>
                 <div className="flex gap-2">
                   <Button variant="outline" onClick={() => setSendStep(-1)}>
