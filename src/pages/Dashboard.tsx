@@ -23,7 +23,7 @@ import { DevTrackingPanel } from '@/components/DevTrackingPanel'
 import { useRealtime } from '@/hooks/use-realtime'
 import { formatCurrency } from '@/lib/utils'
 import { computePeriodFromFilters, isDateInPeriod } from '@/lib/date-filter'
-import { calculateFinancialMetrics } from '@/lib/financial-calcs'
+import { calculateFinancialMetrics, computePendingCommissions } from '@/lib/financial-calcs'
 import {
   BarChart,
   Bar,
@@ -78,13 +78,7 @@ export default function Dashboard() {
   const pendingRenewals = policies.filter((p) => p.status === 'Renovação Pendente')
   const overduePayments = payments.filter((p) => p.status === 'Atrasado')
 
-  const pendingCommissions = useMemo(
-    () =>
-      policies
-        .filter((p) => !p.comissao_recebida)
-        .reduce((s, p) => s + ((p.commission || 0) - (p.iss || 0)), 0),
-    [policies],
-  )
+  const pendingCommissions = useMemo(() => computePendingCommissions(policies), [policies])
 
   const period = useMemo(() => computePeriodFromFilters(filters), [filters])
 

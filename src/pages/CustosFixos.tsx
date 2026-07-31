@@ -24,11 +24,13 @@ import { useToast } from '@/hooks/use-toast'
 import { useRealtime } from '@/hooks/use-realtime'
 import { usePermissions } from '@/hooks/use-permissions'
 import { getErrorMessage } from '@/lib/pocketbase/errors'
+import { computePeriodFromFilters, buildPocketBaseDateFilter } from '@/lib/date-filter'
 import {
-  computePeriodFromFilters,
-  isDateInPeriod,
-  buildPocketBaseDateFilter,
-} from '@/lib/date-filter'
+  computeReceivedCommissions,
+  computePaidRepasses,
+  computeCosts,
+  computeNetProfit,
+} from '@/lib/financial-calcs'
 import { DevTrackingPanel } from '@/components/DevTrackingPanel'
 
 type SortField = 'data' | 'valor'
@@ -86,27 +88,10 @@ export default function CustosFixos() {
   useRealtime('policies', () => loadData())
 
   const { totalReceitas, totalRepasses, totalCustos, lucroLiquido } = useMemo(() => {
-    const totalReceitas = policies
-      .filter(
-        (p) =>
-          p.comissao_recebida &&
-          p.data_recebimento_comissao &&
-          isDateInPeriod(effectivePeriod, p.data_recebimento_comissao),
-      )
-      .reduce((s, p) => s + (p.commission || 0) - (p.iss || 0), 0)
-    const totalRepasses = policies
-      .filter(
-        (p) =>
-          p.tipo_de_venda === 'Parceiro' &&
-          (p.parceiro || p.expand?.parceiro) &&
-          (p.valor_repasse || 0) > 0 &&
-          p.pago_parceiro &&
-          p.data_pagamento_parceiro &&
-          isDateInPeriod(effectivePeriod, p.data_pagamento_parceiro),
-      )
-      .reduce((s, p) => s + (p.valor_repasse || 0), 0)
-    const totalCustos = costs.reduce((s, c) => s + (c.valor || 0), 0)
-    const lucroLiquido = totalReceitas - totalRepasses - totalCustos
+    const totalReceitas = computeReceivedCommissions(policies, effectivePeriod)
+    const totalRepasses = computePaidRepasses(policies, effectivePeriod)
+    const totalCustos = computeCosts(costs, effectivePeriod)
+    const lucroLiquido = computeNetProfit(totalReceitas, totalRepasses, totalCustos)
     return { totalReceitas, totalRepasses, totalCustos, lucroLiquido }
   }, [policies, costs, effectivePeriod])
 

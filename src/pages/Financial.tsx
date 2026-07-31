@@ -15,6 +15,18 @@ import { useToast } from '@/hooks/use-toast'
 import { useRealtime } from '@/hooks/use-realtime'
 import { usePermissions } from '@/hooks/use-permissions'
 import { computePeriodFromFilters, isDateInPeriod } from '@/lib/date-filter'
+import {
+  calcNetCommission,
+  computeReceivedCommissions,
+  computePendingCommissions,
+  computePaidRepasses,
+  computePendingRepasses,
+  computeCosts,
+  computeNetProfit,
+  computeTotalGross,
+  computeTotalNet,
+  getPartnerPolicies,
+} from '@/lib/financial-calcs'
 import { DevTrackingPanel } from '@/components/DevTrackingPanel'
 import { PortfolioExportButton } from '@/components/PortfolioExportButton'
 import {
@@ -25,7 +37,6 @@ import {
   SelectValue,
 } from '@/components/ui/select'
 
-const calcNetCommission = (p: Policy) => (p.commission || 0) - (p.iss || 0)
 const fmtMoney = (v: number) =>
   v.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })
 
@@ -111,49 +122,15 @@ export default function Financial() {
     totalCustos,
     lucroLiquido,
   } = useMemo(() => {
-    const totalGross = policies.reduce((s, p) => s + (p.valor_bruto || 0), 0)
-    const totalNet = policies.reduce((s, p) => s + (p.valor_liquido || p.premium_amount || 0), 0)
-    const commReceived = tablePolicies
-      .filter(
-        (p) =>
-          p.comissao_recebida &&
-          p.data_recebimento_comissao &&
-          isDateInPeriod(period, p.data_recebimento_comissao),
-      )
-      .reduce((s, p) => s + calcNetCommission(p), 0)
-    const commPending = tablePolicies
-      .filter((p) => !p.comissao_recebida)
-      .reduce((s, p) => s + calcNetCommission(p), 0)
-    const partnerPols = tablePolicies.filter(
-      (p) =>
-        p.tipo_de_venda === 'Parceiro' &&
-        (p.parceiro || p.expand?.parceiro) &&
-        (p.valor_repasse || 0) > 0,
-    )
-    const repassePaid = tablePolicies
-      .filter(
-        (p) =>
-          p.tipo_de_venda === 'Parceiro' &&
-          (p.parceiro || p.expand?.parceiro) &&
-          (p.valor_repasse || 0) > 0 &&
-          p.pago_parceiro &&
-          p.data_pagamento_parceiro &&
-          isDateInPeriod(period, p.data_pagamento_parceiro),
-      )
-      .reduce((s, p) => s + (p.valor_repasse || 0), 0)
-    const repassePending = tablePolicies
-      .filter(
-        (p) =>
-          p.tipo_de_venda === 'Parceiro' &&
-          (p.parceiro || p.expand?.parceiro) &&
-          (p.valor_repasse || 0) > 0 &&
-          !p.pago_parceiro,
-      )
-      .reduce((s, p) => s + (p.valor_repasse || 0), 0)
-    const totalCustos = custosFixos
-      .filter((c) => isDateInPeriod(period, c.data))
-      .reduce((s, c) => s + (c.valor || 0), 0)
-    const lucroLiquido = commReceived - repassePaid - totalCustos
+    const totalGross = computeTotalGross(policies)
+    const totalNet = computeTotalNet(policies)
+    const commReceived = computeReceivedCommissions(tablePolicies, period)
+    const commPending = computePendingCommissions(tablePolicies)
+    const partnerPols = getPartnerPolicies(tablePolicies)
+    const repassePaid = computePaidRepasses(tablePolicies, period)
+    const repassePending = computePendingRepasses(tablePolicies)
+    const totalCustos = computeCosts(custosFixos, period)
+    const lucroLiquido = computeNetProfit(commReceived, repassePaid, totalCustos)
     return {
       totalGross,
       totalNet,
