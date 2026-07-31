@@ -91,7 +91,7 @@ export default function CustosFixos() {
       return {
         start: dateFrom,
         end: dateTo,
-        label: `${formatBRDate(dateFrom)} – ${formatBRDate(dateTo)}`,
+        label: `${formatBRDate(dateFrom)} a ${formatBRDate(dateTo)}`,
       }
     }
     if (month && year) {
@@ -104,7 +104,7 @@ export default function CustosFixos() {
       }
     }
     if (year) {
-      return { start: `${year}-01-01`, end: `${year}-12-31`, label: year }
+      return { start: `${year}-01-01`, end: `${year}-12-31`, label: `Ano de ${year}` }
     }
     const now = new Date()
     const m = String(now.getMonth() + 1).padStart(2, '0')
@@ -145,7 +145,14 @@ export default function CustosFixos() {
     .filter((p) => p.comissao_recebida && isInPeriod(p.data_recebimento_comissao))
     .reduce((s, p) => s + (p.commission || 0) - (p.iss || 0), 0)
   const totalRepasses = policies
-    .filter((p) => p.pago_parceiro && isInPeriod(p.data_pagamento_parceiro))
+    .filter(
+      (p) =>
+        p.tipo_de_venda === 'Parceiro' &&
+        (p.parceiro || p.expand?.parceiro) &&
+        (p.valor_repasse || 0) > 0 &&
+        p.pago_parceiro &&
+        isInPeriod(p.data_pagamento_parceiro),
+    )
     .reduce((s, p) => s + (p.valor_repasse || 0), 0)
   const totalCustos = costs.reduce((s, c) => s + (c.valor || 0), 0)
   const lucroLiquido = totalReceitas - totalRepasses - totalCustos
@@ -255,7 +262,7 @@ export default function CustosFixos() {
         <Card className="shadow-sm p-4">
           <p className="text-xs text-slate-500">Total de Receitas</p>
           <p className="text-lg font-bold text-emerald-700">R$ {fmt(totalReceitas)}</p>
-          <p className="text-[10px] text-slate-400 mt-0.5">{effectivePeriod.label}</p>
+          <p className="text-[10px] text-slate-400 mt-0.5">Período: {effectivePeriod.label}</p>
         </Card>
         <Card className="shadow-sm p-4">
           <p className="text-xs text-slate-500">Total de Repasses</p>

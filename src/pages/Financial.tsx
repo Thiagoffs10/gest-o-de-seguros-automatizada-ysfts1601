@@ -88,6 +88,9 @@ export default function Financial() {
   const isDateInPeriod = (dateStr?: string): boolean => {
     if (!dateStr) return false
     const d = String(dateStr).split(' ')[0]
+    if (filters.dateFrom && filters.dateTo) {
+      return d >= filters.dateFrom && d <= filters.dateTo
+    }
     if (filters.dateFrom && d < filters.dateFrom) return false
     if (filters.dateTo && d > filters.dateTo) return false
     if (filters.year) {
@@ -120,15 +123,20 @@ export default function Financial() {
     [allPolicies, filters, statusFilter, commFilter],
   )
 
+  const tablePolicies = useMemo(
+    () => allPolicies.filter((p) => applyNonDateFilters(p)),
+    [allPolicies, statusFilter, commFilter, filters],
+  )
+
   const periodLabel = useMemo(() => {
     if (filters.dateFrom && filters.dateTo) {
-      return `${formatBRDate(filters.dateFrom)} – ${formatBRDate(filters.dateTo)}`
+      return `${formatBRDate(filters.dateFrom)} a ${formatBRDate(filters.dateTo)}`
     }
     if (filters.month && filters.year) {
       return `${MONTH_NAMES[parseInt(filters.month) - 1]} ${filters.year}`
     }
     if (filters.year) {
-      return filters.year
+      return `Ano de ${filters.year}`
     }
     const now = new Date()
     return `${MONTH_NAMES[now.getMonth()]} ${now.getFullYear()}`
@@ -136,7 +144,7 @@ export default function Financial() {
 
   const totalGross = policies.reduce((s, p) => s + (p.valor_bruto || 0), 0)
   const totalNet = policies.reduce((s, p) => s + (p.valor_liquido || p.premium_amount || 0), 0)
-  const commReceived = allPolicies
+  const commReceived = tablePolicies
     .filter(
       (p) =>
         p.comissao_recebida &&
@@ -144,18 +152,34 @@ export default function Financial() {
         isDateInPeriod(p.data_recebimento_comissao),
     )
     .reduce((s, p) => s + calcNetCommission(p), 0)
-  const commPending = allPolicies
+  const commPending = tablePolicies
     .filter((p) => !p.comissao_recebida)
     .reduce((s, p) => s + calcNetCommission(p), 0)
-  const partnerPols = policies.filter((p) => p.tipo_de_venda === 'Parceiro')
-  const repassePaid = allPolicies
+  const partnerPols = tablePolicies.filter(
+    (p) =>
+      p.tipo_de_venda === 'Parceiro' &&
+      (p.parceiro || p.expand?.parceiro) &&
+      (p.valor_repasse || 0) > 0,
+  )
+  const repassePaid = tablePolicies
     .filter(
       (p) =>
-        p.pago_parceiro && p.data_pagamento_parceiro && isDateInPeriod(p.data_pagamento_parceiro),
+        p.tipo_de_venda === 'Parceiro' &&
+        (p.parceiro || p.expand?.parceiro) &&
+        (p.valor_repasse || 0) > 0 &&
+        p.pago_parceiro &&
+        p.data_pagamento_parceiro &&
+        isDateInPeriod(p.data_pagamento_parceiro),
     )
     .reduce((s, p) => s + (p.valor_repasse || 0), 0)
-  const repassePending = allPolicies
-    .filter((p) => p.tipo_de_venda === 'Parceiro' && !p.pago_parceiro)
+  const repassePending = tablePolicies
+    .filter(
+      (p) =>
+        p.tipo_de_venda === 'Parceiro' &&
+        (p.parceiro || p.expand?.parceiro) &&
+        (p.valor_repasse || 0) > 0 &&
+        !p.pago_parceiro,
+    )
     .reduce((s, p) => s + (p.valor_repasse || 0), 0)
   const totalCustos = custosFixos
     .filter((c) => isDateInPeriod(c.data))
@@ -274,14 +298,14 @@ export default function Financial() {
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-100">
-              {policies.length === 0 ? (
+              {tablePolicies.length === 0 ? (
                 <tr>
                   <td colSpan={12} className="text-center p-6 text-slate-500">
                     Nenhuma apólice encontrada.
                   </td>
                 </tr>
               ) : (
-                policies.map((p) => (
+                tablePolicies.map((p) => (
                   <tr key={p.id} className="hover:bg-slate-50/80">
                     <td className="p-3 font-bold text-slate-900">{p.policy_number}</td>
                     <td className="p-3">{p.expand?.client?.name || '-'}</td>

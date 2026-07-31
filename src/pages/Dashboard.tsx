@@ -122,7 +122,12 @@ export default function Dashboard() {
     const paidRepasses = policies
       .filter(
         (p) =>
-          p.pago_parceiro && p.data_pagamento_parceiro && isDateInMonth(p.data_pagamento_parceiro),
+          p.tipo_de_venda === 'Parceiro' &&
+          (p.parceiro || p.expand?.parceiro) &&
+          (p.valor_repasse || 0) > 0 &&
+          p.pago_parceiro &&
+          p.data_pagamento_parceiro &&
+          isDateInMonth(p.data_pagamento_parceiro),
       )
       .reduce((sum, p) => sum + (p.valor_repasse || 0), 0)
     const lucroBruto = receivedCommissions - paidRepasses
