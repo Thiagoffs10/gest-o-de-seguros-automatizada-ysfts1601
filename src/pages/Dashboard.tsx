@@ -8,20 +8,22 @@ import {
   Plus,
   HelpCircle,
   TrendingUp,
-  Calendar,
 } from 'lucide-react'
 import { useNavigate } from 'react-router-dom'
 import { getClients } from '@/services/clients'
 import { getPolicies } from '@/services/policies'
 import { getPayments } from '@/services/payments'
 import { getCustosFixos } from '@/services/custos-fixos'
-import { Client, Policy, Payment, CustoFixo } from '@/types'
+import { Client, Policy, Payment, CustoFixo, FilterState } from '@/types'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { SecretsGuideDialog } from '@/components/SecretsGuideDialog'
+import { GlobalFilters } from '@/components/GlobalFilters'
+import { DevTrackingPanel } from '@/components/DevTrackingPanel'
 import { useRealtime } from '@/hooks/use-realtime'
 import { formatCurrency } from '@/lib/utils'
-import { computePeriod, isDateInPeriod } from '@/lib/date-filter'
+import { computePeriodFromFilters, isDateInPeriod } from '@/lib/date-filter'
+import { calculateFinancialMetrics } from '@/lib/financial-calcs'
 import {
   BarChart,
   Bar,
@@ -40,7 +42,10 @@ export default function Dashboard() {
   const [policies, setPolicies] = useState<Policy[]>([])
   const [payments, setPayments] = useState<Payment[]>([])
   const [custosFixos, setCustosFixos] = useState<CustoFixo[]>([])
-  const [selectedMonth, setSelectedMonth] = useState(new Date().toISOString().slice(0, 7))
+  const [filters, setFilters] = useState<FilterState>({
+    year: String(new Date().getFullYear()),
+    month: String(new Date().getMonth() + 1),
+  })
   const [loading, setLoading] = useState(true)
 
   const loadData = async () => {
@@ -77,14 +82,21 @@ export default function Dashboard() {
     () =>
       policies
         .filter((p) => !p.comissao_recebida)
-        .reduce((sum, p) => sum + ((p.commission || 0) - (p.iss || 0)), 0),
+        .reduce((s, p) => s + ((p.commission || 0) - (p.iss || 0)), 0),
     [policies],
   )
 
-  const period = useMemo(() => {
-    const [y, m] = selectedMonth.split('-')
-    return computePeriod(m, y)
-  }, [selectedMonth])
+  const period = useMemo(() => computePeriodFromFilters(filters), [filters])
+
+  const metrics = useMemo(
+    () => calculateFinancialMetrics(policies, custosFixos, period),
+    [policies, custosFixos, period, filters],
+  )
+
+  const topCustos = useMemo(() => {
+    const monthCustos = custosFixos.filter((c) => isDateInPeriod(period, c.data))
+    return [...monthCustos].sort((a, b) => (b.valor || 0) - (a.valor || 0)).slice(0, 5)
+  }, [custosFixos, period, filters])
 
   const coverageTypes = ['Auto', 'Vida', 'Residencial', 'Empresarial', 'Saúde', 'Outros']
   const pieData = coverageTypes
@@ -94,40 +106,6 @@ export default function Dashboard() {
     }))
     .filter((d) => d.value > 0)
   const COLORS = ['#2563eb', '#10b981', '#f59e0b', '#8b5cf6', '#ec4899', '#64748b']
-
-  const profitData = useMemo(() => {
-    const receivedCommissions = policies
-      .filter(
-        (p) =>
-          p.comissao_recebida &&
-          p.data_recebimento_comissao &&
-          isDateInPeriod(period, p.data_recebimento_comissao),
-      )
-      .reduce((sum, p) => sum + ((p.commission || 0) - (p.iss || 0)), 0)
-    const paidRepasses = policies
-      .filter(
-        (p) =>
-          p.tipo_de_venda === 'Parceiro' &&
-          (p.parceiro || p.expand?.parceiro) &&
-          (p.valor_repasse || 0) > 0 &&
-          p.pago_parceiro &&
-          p.data_pagamento_parceiro &&
-          isDateInPeriod(period, p.data_pagamento_parceiro),
-      )
-      .reduce((sum, p) => sum + (p.valor_repasse || 0), 0)
-    const lucroBruto = receivedCommissions - paidRepasses
-
-    const monthCustos = custosFixos.filter((c) => isDateInPeriod(period, c.data))
-    const custosFixosMes = monthCustos.reduce((sum, c) => sum + (c.valor || 0), 0)
-    const lucroLiquido = lucroBruto - custosFixosMes
-
-    return {
-      lucroBruto,
-      custosFixosMes,
-      lucroLiquido,
-      topCustos: [...monthCustos].sort((a, b) => (b.valor || 0) - (a.valor || 0)).slice(0, 5),
-    }
-  }, [policies, custosFixos, period])
 
   const monthlyData = useMemo(() => {
     const months = [
@@ -152,8 +130,6 @@ export default function Dashboard() {
     })
     return months.map((m, i) => ({ month: m, value: counts[i] }))
   }, [policies])
-
-  const periodLabel = period.label
 
   if (loading)
     return <div className="text-slate-500 py-8 text-center">Carregando informações...</div>
@@ -185,6 +161,22 @@ export default function Dashboard() {
             Nova Apólice
           </Button>
         </div>
+      </div>
+
+      <div className="flex flex-wrap items-center justify-between gap-2">
+        <GlobalFilters filters={filters} onFilterChange={setFilters} />
+        <Button
+          variant="outline"
+          size="sm"
+          onClick={() =>
+            setFilters({
+              year: String(new Date().getFullYear()),
+              month: String(new Date().getMonth() + 1),
+            })
+          }
+        >
+          Limpar Filtros
+        </Button>
       </div>
 
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
@@ -240,48 +232,39 @@ export default function Dashboard() {
         </Card>
       </div>
 
+      <DevTrackingPanel policies={policies} period={period} totalReceitas={metrics.totalReceitas} />
+
       <Card className="shadow-sm p-5">
-        <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3 mb-4">
-          <div className="flex items-center gap-2">
-            <TrendingUp className="w-5 h-5 text-blue-600" />
-            <h3 className="text-base font-bold text-slate-800">Resumo de Lucro</h3>
-            <span className="text-xs text-slate-500 ml-2">Período: {periodLabel}</span>
-          </div>
-          <div className="flex items-center gap-2">
-            <Calendar className="w-4 h-4 text-slate-400" />
-            <input
-              type="month"
-              value={selectedMonth}
-              onChange={(e) => setSelectedMonth(e.target.value)}
-              className="text-sm border border-slate-200 rounded-md px-2 py-1 focus:outline-none focus:ring-2 focus:ring-blue-500"
-            />
-          </div>
+        <div className="flex items-center gap-2 mb-4">
+          <TrendingUp className="w-5 h-5 text-blue-600" />
+          <h3 className="text-base font-bold text-slate-800">Resumo de Lucro</h3>
+          <span className="text-xs text-slate-500 ml-2">Período: {period.label}</span>
         </div>
         <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 mb-4">
           <div className="bg-slate-50 rounded-lg p-3 border">
-            <p className="text-xs text-slate-500 font-medium">Lucro Bruto</p>
+            <p className="text-xs text-slate-500 font-medium">Receitas (Comissões Recebidas)</p>
             <p className="text-xl font-bold text-slate-900">
-              R$ {formatCurrency(profitData.lucroBruto)}
+              R$ {formatCurrency(metrics.totalReceitas)}
             </p>
           </div>
           <div className="bg-amber-50 rounded-lg p-3 border border-amber-100">
-            <p className="text-xs text-amber-600 font-medium">Custos Fixos do Mês</p>
+            <p className="text-xs text-amber-600 font-medium">Repasses Pagos + Custos</p>
             <p className="text-xl font-bold text-amber-700">
-              R$ {formatCurrency(profitData.custosFixosMes)}
+              R$ {formatCurrency(metrics.totalRepasses + metrics.totalCustos)}
             </p>
           </div>
           <div className="bg-blue-50 rounded-lg p-3 border border-blue-100">
             <p className="text-xs text-blue-600 font-medium">Lucro Líquido</p>
             <p className="text-xl font-bold text-blue-700">
-              R$ {formatCurrency(profitData.lucroLiquido)}
+              R$ {formatCurrency(metrics.lucroLiquido)}
             </p>
           </div>
         </div>
-        {profitData.topCustos.length > 0 && (
+        {topCustos.length > 0 && (
           <div>
-            <p className="text-xs font-semibold text-slate-600 mb-2">Top 5 Custos do Mês</p>
+            <p className="text-xs font-semibold text-slate-600 mb-2">Top 5 Custos do Período</p>
             <div className="space-y-1.5">
-              {profitData.topCustos.map((c) => (
+              {topCustos.map((c) => (
                 <div
                   key={c.id}
                   className="flex justify-between items-center text-sm bg-slate-50 rounded px-3 py-1.5 border"

@@ -15,6 +15,8 @@ import { useToast } from '@/hooks/use-toast'
 import { useRealtime } from '@/hooks/use-realtime'
 import { usePermissions } from '@/hooks/use-permissions'
 import { computePeriodFromFilters, isDateInPeriod } from '@/lib/date-filter'
+import { DevTrackingPanel } from '@/components/DevTrackingPanel'
+import { PortfolioExportButton } from '@/components/PortfolioExportButton'
 import {
   Select,
   SelectContent,
@@ -185,11 +187,14 @@ export default function Financial() {
 
   return (
     <div className="space-y-6">
-      <div>
-        <h1 className="text-2xl font-bold text-slate-900">Controle Financeiro</h1>
-        <p className="text-slate-500 text-sm">
-          Gestão de comissões, repasses e performance financeira.
-        </p>
+      <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
+        <div>
+          <h1 className="text-2xl font-bold text-slate-900">Controle Financeiro</h1>
+          <p className="text-slate-500 text-sm">
+            Gestão de comissões, repasses e performance financeira.
+          </p>
+        </div>
+        <PortfolioExportButton policies={tablePolicies} />
       </div>
 
       <FinancialSummaryCards
@@ -203,6 +208,8 @@ export default function Financial() {
         lucroLiquido={lucroLiquido}
         periodLabel={periodLabel}
       />
+
+      <DevTrackingPanel policies={tablePolicies} period={period} totalReceitas={commReceived} />
 
       <div className="flex flex-wrap items-center justify-between gap-2">
         <GlobalFilters

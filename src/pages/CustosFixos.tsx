@@ -29,6 +29,7 @@ import {
   isDateInPeriod,
   buildPocketBaseDateFilter,
 } from '@/lib/date-filter'
+import { DevTrackingPanel } from '@/components/DevTrackingPanel'
 
 type SortField = 'data' | 'valor'
 type SortDir = 'asc' | 'desc'
@@ -177,6 +178,12 @@ export default function CustosFixos() {
           </Button>
         )}
       </div>
+
+      <DevTrackingPanel
+        policies={policies}
+        period={effectivePeriod}
+        totalReceitas={totalReceitas}
+      />
 
       <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
         <Card className="shadow-sm p-4">
