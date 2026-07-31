@@ -1,5 +1,5 @@
-import { useEffect, useState, useCallback } from 'react'
-import { Plus, Pencil, Trash2, ArrowUpDown } from 'lucide-react'
+import { useEffect, useState, useCallback, useMemo } from 'react'
+import { Plus, Pencil, Trash2, ArrowUpDown, Filter } from 'lucide-react'
 import {
   getCustosFixos,
   createCustoFixo,
@@ -12,6 +12,14 @@ import { Button } from '@/components/ui/button'
 import { Card } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
 import { Input } from '@/components/ui/input'
+import { Label } from '@/components/ui/label'
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select'
 import {
   Dialog,
   DialogContent,
@@ -24,6 +32,7 @@ import { useToast } from '@/hooks/use-toast'
 import { useRealtime } from '@/hooks/use-realtime'
 import { usePermissions } from '@/hooks/use-permissions'
 import { getErrorMessage } from '@/lib/pocketbase/errors'
+import { YEARS, MONTHS } from '@/lib/constants'
 
 type SortField = 'data' | 'valor'
 type SortDir = 'asc' | 'desc'
@@ -38,26 +47,37 @@ const CATEGORIA_COLORS: Record<string, string> = {
   Outros: 'bg-slate-100 text-slate-800',
 }
 
+const MONTH_NAMES = [
+  'Janeiro',
+  'Fevereiro',
+  'Março',
+  'Abril',
+  'Maio',
+  'Junho',
+  'Julho',
+  'Agosto',
+  'Setembro',
+  'Outubro',
+  'Novembro',
+  'Dezembro',
+]
+
 const fmt = (v: number) =>
   v.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })
 
-function getMonthStart(): string {
-  const now = new Date()
-  return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-01`
-}
-function getMonthEnd(): string {
-  const now = new Date()
-  const lastDay = new Date(now.getFullYear(), now.getMonth() + 1, 0).getDate()
-  return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(lastDay).padStart(2, '0')}`
-}
+const formatBRDate = (d: string) => d.split('-').reverse().join('/')
+
+const getLastDay = (year: number, month: number) => new Date(year, month, 0).getDate()
 
 export default function CustosFixos() {
   const { toast } = useToast()
   const { can } = usePermissions()
   const [costs, setCosts] = useState<CustoFixo[]>([])
   const [policies, setPolicies] = useState<Policy[]>([])
-  const [periodStart, setPeriodStart] = useState(getMonthStart)
-  const [periodEnd, setPeriodEnd] = useState(getMonthEnd)
+  const [month, setMonth] = useState(String(new Date().getMonth() + 1))
+  const [year, setYear] = useState(String(new Date().getFullYear()))
+  const [dateFrom, setDateFrom] = useState('')
+  const [dateTo, setDateTo] = useState('')
   const [isModalOpen, setIsModalOpen] = useState(false)
   const [editingItem, setEditingItem] = useState<Partial<CustoFixo> | null>(null)
   const [isEditOpen, setIsEditOpen] = useState(false)
@@ -66,13 +86,40 @@ export default function CustosFixos() {
   const [sortDir, setSortDir] = useState<SortDir>('desc')
   const [loading, setLoading] = useState(true)
 
+  const effectivePeriod = useMemo(() => {
+    if (dateFrom && dateTo) {
+      return {
+        start: dateFrom,
+        end: dateTo,
+        label: `${formatBRDate(dateFrom)} – ${formatBRDate(dateTo)}`,
+      }
+    }
+    if (month && year) {
+      const m = String(month).padStart(2, '0')
+      const lastDay = getLastDay(parseInt(year), parseInt(month))
+      return {
+        start: `${year}-${m}-01`,
+        end: `${year}-${m}-${String(lastDay).padStart(2, '0')}`,
+        label: `${MONTH_NAMES[parseInt(month) - 1]} ${year}`,
+      }
+    }
+    if (year) {
+      return { start: `${year}-01-01`, end: `${year}-12-31`, label: year }
+    }
+    const now = new Date()
+    const m = String(now.getMonth() + 1).padStart(2, '0')
+    const lastDay = getLastDay(now.getFullYear(), now.getMonth() + 1)
+    return {
+      start: `${now.getFullYear()}-${m}-01`,
+      end: `${now.getFullYear()}-${m}-${String(lastDay).padStart(2, '0')}`,
+      label: `${MONTH_NAMES[now.getMonth()]} ${now.getFullYear()}`,
+    }
+  }, [month, year, dateFrom, dateTo])
+
   const loadData = useCallback(async () => {
+    setLoading(true)
     try {
-      let costFilter = ''
-      if (periodStart && periodEnd)
-        costFilter = `data >= "${periodStart}" && data <= "${periodEnd}"`
-      else if (periodStart) costFilter = `data >= "${periodStart}"`
-      else if (periodEnd) costFilter = `data <= "${periodEnd}"`
+      const costFilter = `data >= "${effectivePeriod.start}" && data <= "${effectivePeriod.end}"`
       const [costsData, pols] = await Promise.all([getCustosFixos(costFilter), getPolicies('')])
       setCosts(costsData)
       setPolicies(pols)
@@ -80,7 +127,7 @@ export default function CustosFixos() {
       /* intentionally ignored */
     }
     setLoading(false)
-  }, [periodStart, periodEnd])
+  }, [effectivePeriod.start, effectivePeriod.end])
 
   useEffect(() => {
     loadData()
@@ -91,9 +138,7 @@ export default function CustosFixos() {
   const isInPeriod = (dateStr?: string) => {
     if (!dateStr) return false
     const d = String(dateStr).split(' ')[0]
-    if (periodStart && d < periodStart) return false
-    if (periodEnd && d > periodEnd) return false
-    return true
+    return d >= effectivePeriod.start && d <= effectivePeriod.end
   }
 
   const totalReceitas = policies
@@ -119,6 +164,38 @@ export default function CustosFixos() {
       setSortField(field)
       setSortDir('desc')
     }
+  }
+
+  const handleMonthChange = (v: string) => {
+    setMonth(v)
+    setDateFrom('')
+    setDateTo('')
+  }
+  const handleYearChange = (v: string) => {
+    setYear(v)
+    setDateFrom('')
+    setDateTo('')
+  }
+  const handleDateFromChange = (v: string) => {
+    setDateFrom(v)
+    if (v && dateTo) {
+      setMonth('')
+      setYear('')
+    }
+  }
+  const handleDateToChange = (v: string) => {
+    setDateTo(v)
+    if (v && dateFrom) {
+      setMonth('')
+      setYear('')
+    }
+  }
+  const handleClearFilters = () => {
+    const now = new Date()
+    setMonth(String(now.getMonth() + 1))
+    setYear(String(now.getFullYear()))
+    setDateFrom('')
+    setDateTo('')
   }
 
   const handleCreate = async (formData: any) => {
@@ -178,48 +255,80 @@ export default function CustosFixos() {
         <Card className="shadow-sm p-4">
           <p className="text-xs text-slate-500">Total de Receitas</p>
           <p className="text-lg font-bold text-emerald-700">R$ {fmt(totalReceitas)}</p>
+          <p className="text-[10px] text-slate-400 mt-0.5">{effectivePeriod.label}</p>
         </Card>
         <Card className="shadow-sm p-4">
           <p className="text-xs text-slate-500">Total de Repasses</p>
           <p className="text-lg font-bold text-amber-700">R$ {fmt(totalRepasses)}</p>
+          <p className="text-[10px] text-slate-400 mt-0.5">{effectivePeriod.label}</p>
         </Card>
         <Card className="shadow-sm p-4">
           <p className="text-xs text-slate-500">Total de Custos</p>
           <p className="text-lg font-bold text-red-700">R$ {fmt(totalCustos)}</p>
+          <p className="text-[10px] text-slate-400 mt-0.5">{effectivePeriod.label}</p>
         </Card>
         <Card className="shadow-sm p-4">
           <p className="text-xs text-slate-500">Lucro Líquido Real</p>
           <p className="text-lg font-bold text-blue-700">R$ {fmt(lucroLiquido)}</p>
+          <p className="text-[10px] text-slate-400 mt-0.5">{effectivePeriod.label}</p>
         </Card>
       </div>
 
-      <div className="flex flex-wrap items-center gap-3 p-3 bg-slate-50 rounded-lg border">
-        <span className="text-sm font-medium text-slate-600">Período:</span>
-        <Input
-          type="date"
-          value={periodStart}
-          onChange={(e) => setPeriodStart(e.target.value)}
-          className="w-auto"
-        />
-        <span className="text-slate-400 text-sm">até</span>
-        <Input
-          type="date"
-          value={periodEnd}
-          onChange={(e) => setPeriodEnd(e.target.value)}
-          className="w-auto"
-        />
-        {(periodStart || periodEnd) && (
-          <Button
-            variant="ghost"
-            size="sm"
-            onClick={() => {
-              setPeriodStart('')
-              setPeriodEnd('')
-            }}
-          >
-            Limpar
-          </Button>
-        )}
+      <div className="flex flex-wrap items-end gap-3 p-4 bg-slate-50 rounded-lg border">
+        <div className="flex items-center gap-2 text-sm font-semibold text-slate-600 mr-2">
+          <Filter className="w-4 h-4" /> Filtros:
+        </div>
+        <div>
+          <Label className="text-xs">Mês</Label>
+          <Select value={month} onValueChange={handleMonthChange}>
+            <SelectTrigger className="w-[130px]">
+              <SelectValue placeholder="Mês" />
+            </SelectTrigger>
+            <SelectContent>
+              {MONTHS.map((m) => (
+                <SelectItem key={m.value} value={m.value}>
+                  {m.label}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        </div>
+        <div>
+          <Label className="text-xs">Ano</Label>
+          <Select value={year} onValueChange={handleYearChange}>
+            <SelectTrigger className="w-[100px]">
+              <SelectValue placeholder="Ano" />
+            </SelectTrigger>
+            <SelectContent>
+              {YEARS.map((y) => (
+                <SelectItem key={y} value={y}>
+                  {y}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        </div>
+        <div>
+          <Label className="text-xs">De</Label>
+          <Input
+            type="date"
+            value={dateFrom}
+            onChange={(e) => handleDateFromChange(e.target.value)}
+            className="w-[150px]"
+          />
+        </div>
+        <div>
+          <Label className="text-xs">Até</Label>
+          <Input
+            type="date"
+            value={dateTo}
+            onChange={(e) => handleDateToChange(e.target.value)}
+            className="w-[150px]"
+          />
+        </div>
+        <Button variant="outline" size="sm" onClick={handleClearFilters}>
+          Limpar filtros
+        </Button>
       </div>
 
       <Card className="shadow-sm overflow-hidden border">
@@ -251,7 +360,7 @@ export default function CustosFixos() {
               {sortedCosts.length === 0 ? (
                 <tr>
                   <td colSpan={7} className="text-center p-6 text-slate-500">
-                    Nenhum custo cadastrado.
+                    Nenhum custo cadastrado no período.
                   </td>
                 </tr>
               ) : (
@@ -269,9 +378,7 @@ export default function CustosFixos() {
                         {c.tipo || 'Fixo'}
                       </Badge>
                     </td>
-                    <td className="p-3.5 font-bold">
-                      R$ {(c.valor || 0).toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
-                    </td>
+                    <td className="p-3.5 font-bold">R$ {fmt(c.valor || 0)}</td>
                     <td className="p-3.5">{new Date(c.data).toLocaleDateString('pt-BR')}</td>
                     <td className="p-3.5">
                       <Badge className={CATEGORIA_COLORS[c.categoria] || 'bg-slate-100'}>

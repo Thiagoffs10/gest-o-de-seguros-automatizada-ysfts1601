@@ -34,18 +34,18 @@ import {
 } from 'recharts'
 
 const MONTH_NAMES = [
-  'janeiro',
-  'fevereiro',
-  'março',
-  'abril',
-  'maio',
-  'junho',
-  'julho',
-  'agosto',
-  'setembro',
-  'outubro',
-  'novembro',
-  'dezembro',
+  'Janeiro',
+  'Fevereiro',
+  'Março',
+  'Abril',
+  'Maio',
+  'Junho',
+  'Julho',
+  'Agosto',
+  'Setembro',
+  'Outubro',
+  'Novembro',
+  'Dezembro',
 ]
 
 export default function Dashboard() {
@@ -164,7 +164,7 @@ export default function Dashboard() {
   }, [policies])
 
   const [year, monthNum] = selectedMonth.split('-').map(Number)
-  const periodLabel = `${MONTH_NAMES[monthNum - 1]}/${year}`
+  const periodLabel = `${MONTH_NAMES[monthNum - 1]} ${year}`
 
   if (loading)
     return <div className="text-slate-500 py-8 text-center">Carregando informações...</div>

@@ -3,7 +3,8 @@ import { Edit2 } from 'lucide-react'
 import { getPolicies, updatePolicyFinancial } from '@/services/policies'
 import { getParceiros } from '@/services/parceiros'
 import { getSeguradoras } from '@/services/seguradoras'
-import { Policy, Parceiro, Seguradora, FilterState } from '@/types'
+import { getCustosFixos } from '@/services/custos-fixos'
+import { Policy, Parceiro, Seguradora, CustoFixo, FilterState } from '@/types'
 import { Card, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
@@ -25,12 +26,30 @@ const calcNetCommission = (p: Policy) => (p.commission || 0) - (p.iss || 0)
 const fmtMoney = (v: number) =>
   v.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })
 
+const MONTH_NAMES = [
+  'Janeiro',
+  'Fevereiro',
+  'Março',
+  'Abril',
+  'Maio',
+  'Junho',
+  'Julho',
+  'Agosto',
+  'Setembro',
+  'Outubro',
+  'Novembro',
+  'Dezembro',
+]
+
+const formatBRDate = (d: string) => d.split('-').reverse().join('/')
+
 export default function Financial() {
   const { toast } = useToast()
   const { can } = usePermissions()
   const [allPolicies, setAllPolicies] = useState<Policy[]>([])
   const [parceiros, setParceiros] = useState<Parceiro[]>([])
   const [seguradoras, setSeguradoras] = useState<Seguradora[]>([])
+  const [custosFixos, setCustosFixos] = useState<CustoFixo[]>([])
   const [filters, setFilters] = useState<FilterState>({
     year: String(new Date().getFullYear()),
     month: String(new Date().getMonth() + 1),
@@ -42,15 +61,18 @@ export default function Financial() {
   const [loading, setLoading] = useState(true)
 
   const loadData = useCallback(async () => {
+    setLoading(true)
     try {
-      const [pols, pars, segs] = await Promise.all([
+      const [pols, pars, segs, custos] = await Promise.all([
         getPolicies(),
         getParceiros(),
         getSeguradoras(),
+        getCustosFixos(),
       ])
       setAllPolicies(pols)
       setParceiros(pars)
       setSeguradoras(segs)
+      setCustosFixos(custos)
     } catch {
       /* intentionally ignored */
     }
@@ -61,6 +83,7 @@ export default function Financial() {
     loadData()
   }, [loadData])
   useRealtime('policies', () => loadData())
+  useRealtime('custos_fixos', () => loadData())
 
   const isDateInPeriod = (dateStr?: string): boolean => {
     if (!dateStr) return false
@@ -97,34 +120,47 @@ export default function Financial() {
     [allPolicies, filters, statusFilter, commFilter],
   )
 
+  const periodLabel = useMemo(() => {
+    if (filters.dateFrom && filters.dateTo) {
+      return `${formatBRDate(filters.dateFrom)} – ${formatBRDate(filters.dateTo)}`
+    }
+    if (filters.month && filters.year) {
+      return `${MONTH_NAMES[parseInt(filters.month) - 1]} ${filters.year}`
+    }
+    if (filters.year) {
+      return filters.year
+    }
+    const now = new Date()
+    return `${MONTH_NAMES[now.getMonth()]} ${now.getFullYear()}`
+  }, [filters])
+
   const totalGross = policies.reduce((s, p) => s + (p.valor_bruto || 0), 0)
   const totalNet = policies.reduce((s, p) => s + (p.valor_liquido || p.premium_amount || 0), 0)
   const commReceived = allPolicies
     .filter(
       (p) =>
-        applyNonDateFilters(p) &&
         p.comissao_recebida &&
         p.data_recebimento_comissao &&
         isDateInPeriod(p.data_recebimento_comissao),
     )
     .reduce((s, p) => s + calcNetCommission(p), 0)
   const commPending = allPolicies
-    .filter((p) => applyNonDateFilters(p) && !p.comissao_recebida)
+    .filter((p) => !p.comissao_recebida)
     .reduce((s, p) => s + calcNetCommission(p), 0)
   const partnerPols = policies.filter((p) => p.tipo_de_venda === 'Parceiro')
   const repassePaid = allPolicies
     .filter(
       (p) =>
-        applyNonDateFilters(p) &&
-        p.tipo_de_venda === 'Parceiro' &&
-        p.pago_parceiro &&
-        p.data_pagamento_parceiro &&
-        isDateInPeriod(p.data_pagamento_parceiro),
+        p.pago_parceiro && p.data_pagamento_parceiro && isDateInPeriod(p.data_pagamento_parceiro),
     )
     .reduce((s, p) => s + (p.valor_repasse || 0), 0)
-  const repassePending = partnerPols
-    .filter((p) => !p.pago_parceiro)
+  const repassePending = allPolicies
+    .filter((p) => p.tipo_de_venda === 'Parceiro' && !p.pago_parceiro)
     .reduce((s, p) => s + (p.valor_repasse || 0), 0)
+  const totalCustos = custosFixos
+    .filter((c) => isDateInPeriod(c.data))
+    .reduce((s, c) => s + (c.valor || 0), 0)
+  const lucroLiquido = commReceived - repassePaid - totalCustos
 
   const handleSave = async (data: FinancialEditData) => {
     if (!editPolicy) return
@@ -160,6 +196,9 @@ export default function Financial() {
         commPending={commPending}
         repassePaid={repassePaid}
         repassePending={repassePending}
+        totalCustos={totalCustos}
+        lucroLiquido={lucroLiquido}
+        periodLabel={periodLabel}
       />
 
       <div className="flex flex-wrap items-center justify-between gap-2">
