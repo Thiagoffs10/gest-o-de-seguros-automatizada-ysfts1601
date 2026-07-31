@@ -107,6 +107,7 @@ export default function Policies() {
   useRealtime('policies', () => loadData())
 
   const handleSubmit = async (formData: any) => {
+    setFieldErrors({})
     try {
       if (dialogMode === 'edit' && selectedPolicy) {
         await updatePolicy(selectedPolicy.id, formData)

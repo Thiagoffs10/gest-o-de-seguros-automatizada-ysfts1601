@@ -90,6 +90,7 @@ export default function PolicyDetail() {
 
   const handleSubmit = async (formData: any) => {
     if (!policy) return
+    setFieldErrors({})
     try {
       if (dialogMode === 'edit') {
         await updatePolicy(policy.id, formData)

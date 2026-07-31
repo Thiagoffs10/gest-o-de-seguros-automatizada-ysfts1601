@@ -17,6 +17,7 @@ import {
   SelectValue,
 } from '@/components/ui/select'
 import { Textarea } from '@/components/ui/textarea'
+import { Loader2 } from 'lucide-react'
 import { TIPOS_DE_SEGURO, TIPOS_DE_VENDA } from '@/lib/constants'
 import { Client, Seguradora, Parceiro, Policy } from '@/types'
 import { ClientAutocomplete } from '@/components/ClientAutocomplete'
@@ -77,6 +78,7 @@ export function PolicyFormDialog({
 }: Props) {
   const [form, setForm] = useState<any>({ ...DEFAULT_FORM })
   const [loading, setLoading] = useState(false)
+  const [validationErrors, setValidationErrors] = useState<Record<string, string>>({})
   const skipAuto = useRef(true)
 
   useEffect(() => {
@@ -114,12 +116,22 @@ export function PolicyFormDialog({
     } else {
       setForm({ ...DEFAULT_FORM })
     }
+    setValidationErrors({})
     setTimeout(() => {
       skipAuto.current = false
     }, 0)
   }, [open, initialData])
 
-  const set = (key: string, val: any) => setForm((prev: any) => ({ ...prev, [key]: val }))
+  const set = (key: string, val: any) => {
+    setForm((prev: any) => ({ ...prev, [key]: val }))
+    if (validationErrors[key]) {
+      setValidationErrors((prev) => {
+        const next = { ...prev }
+        delete next[key]
+        return next
+      })
+    }
+  }
 
   const selectedSeguradora = seguradoras.find((s) => s.id === form.seguradora)
   const impostoPercentual = selectedSeguradora?.imposto_percentual ?? 0
@@ -157,12 +169,23 @@ export function PolicyFormDialog({
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
-    if (!form.client) return
+    const errs: Record<string, string> = {}
+    if (!form.client) errs.client = 'Selecione um cliente'
+    if (!form.policy_number?.trim()) errs.policy_number = 'Número da apólice é obrigatório'
+    if (!form.start_date) errs.start_date = 'Data de início é obrigatória'
+    if (!form.end_date) errs.end_date = 'Data de fim é obrigatória'
+    if (Object.keys(errs).length > 0) {
+      setValidationErrors(errs)
+      return
+    }
+    setValidationErrors({})
     setLoading(true)
     try {
       const endDate = new Date(form.end_date + 'T00:00:00')
       const renewalDate = new Date(endDate.getTime() - 30 * 86400000).toISOString().split('T')[0]
       await onSubmit({ ...form, renewal_date: renewalDate })
+    } catch {
+      setLoading(false)
     } finally {
       setLoading(false)
     }
@@ -185,7 +208,7 @@ export function PolicyFormDialog({
               onChange={(v: string) => set('client', v)}
               placeholder="Buscar cliente por nome..."
             />
-            <FieldErr message={err('client')} />
+            <FieldErr message={err('client') || validationErrors.client} />
           </div>
           <div className="grid grid-cols-2 gap-2">
             <div>
@@ -195,7 +218,7 @@ export function PolicyFormDialog({
                 value={form.policy_number}
                 onChange={(e) => set('policy_number', e.target.value)}
               />
-              <FieldErr message={err('policy_number')} />
+              <FieldErr message={err('policy_number') || validationErrors.policy_number} />
             </div>
             <div>
               <Label className="text-xs font-semibold">Seguradora</Label>
@@ -417,6 +440,7 @@ export function PolicyFormDialog({
               Cancelar
             </Button>
             <Button type="submit" className="bg-blue-600 hover:bg-blue-700" disabled={loading}>
+              {loading && <Loader2 className="w-4 h-4 mr-2 animate-spin" />}
               {loading ? 'Salvando...' : submitLabel}
             </Button>
           </DialogFooter>

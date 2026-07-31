@@ -98,6 +98,12 @@ export function preparePolicyPayload(data: Partial<Policy> & Record<string, any>
   // Remove expand helper property before sending to PocketBase
   delete payload.expand
 
+  // Remove system fields that should never be sent on create or update
+  delete payload.id
+  delete payload.created
+  delete payload.updated
+  delete payload.policy_code
+
   return payload
 }
 
