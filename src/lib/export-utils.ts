@@ -101,3 +101,50 @@ export function exportClientsToCsv(clients: Client[], policies: Policy[]) {
 
   downloadCsv('carteira-clientes.csv', headers, rows)
 }
+
+export function exportPoliciesToCsv(policies: Policy[]) {
+  const headers = [
+    'Código',
+    'Nº Apólice',
+    'Seguradora',
+    'Cliente',
+    'Tipo de Seguro',
+    'Placa',
+    'Modelo do Veículo',
+    'Valor Bruto',
+    'Valor Líquido',
+    'Comissão (%)',
+    'Comissão (Valor)',
+    'Status',
+    'Data Início',
+    'Data Fim',
+    'Data Renovação',
+  ]
+
+  const rows: (string | number)[][] = policies.map((p) => {
+    const valorBruto = p.valor_bruto || 0
+    const valorLiquido = p.valor_liquido || p.premium_amount || 0
+    const commissionPercent = p.commission_percent || p.commission || 0
+    const commissionValue = (commissionPercent / 100) * valorLiquido
+
+    return [
+      p.policy_code?.toString() || '',
+      p.policy_number || '',
+      p.expand?.seguradora?.nome || p.insurance_company || '',
+      p.expand?.client?.name || '',
+      p.tipo_de_seguro || p.coverage_type || '',
+      p.placa || '',
+      p.modelo_veiculo || '',
+      valorBruto,
+      valorLiquido,
+      commissionPercent,
+      commissionValue.toFixed(2),
+      p.status || '',
+      p.start_date || '',
+      p.end_date || '',
+      p.renewal_date || '',
+    ]
+  })
+
+  downloadCsv('apolices.csv', headers, rows)
+}
