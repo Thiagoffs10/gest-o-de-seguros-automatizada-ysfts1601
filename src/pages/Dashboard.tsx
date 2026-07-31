@@ -130,9 +130,10 @@ export default function Dashboard() {
 
   const pieData = useMemo(() => {
     return COVERAGE_TYPES.map((type, idx) => {
-      const count = periodPolicies.filter(
-        (p) => p.coverage_type === type || p.tipo_de_seguro === type,
-      ).length
+      const count = periodPolicies.filter((p) => {
+        const category = p.tipo_de_seguro || p.coverage_type || 'Outros'
+        return category === type
+      }).length
       return {
         name: type,
         displayName: COVERAGE_MAP[type] || type,
