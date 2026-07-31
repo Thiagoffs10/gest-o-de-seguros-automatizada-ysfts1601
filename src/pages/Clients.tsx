@@ -29,6 +29,7 @@ export default function Clients() {
   const [deleteLoading, setDeleteLoading] = useState(false)
   const [filters, setFilters] = useState<FilterState>({})
   const [exportLoading, setExportLoading] = useState(false)
+  const [loading, setLoading] = useState(true)
 
   const loadClients = useCallback(async () => {
     try {
@@ -39,6 +40,7 @@ export default function Clients() {
     } catch {
       /* intentionally ignored */
     }
+    setLoading(false)
   }, [search, filters])
 
   useEffect(() => {
@@ -174,7 +176,9 @@ export default function Clients() {
         )}
       </div>
 
-      {clients.length === 0 ? (
+      {loading ? (
+        <div className="text-center py-12 text-slate-500">Carregando informações...</div>
+      ) : clients.length === 0 ? (
         <div className="text-center py-12 text-slate-500">
           Nenhum cliente encontrado{search ? ` para "${search}"` : '.'}
         </div>

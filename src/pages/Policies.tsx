@@ -54,6 +54,7 @@ export default function Policies() {
   const [periodEnd, setPeriodEnd] = useState('')
   const [totalActiveCount, setTotalActiveCount] = useState(0)
   const [filters, setFilters] = useState<FilterState>({})
+  const [loading, setLoading] = useState(true)
   const [dialogMode, setDialogMode] = useState<DialogMode>(null)
   const [selectedPolicy, setSelectedPolicy] = useState<Policy | null>(null)
   const [fieldErrors, setFieldErrors] = useState<FieldErrors>({})
@@ -97,6 +98,11 @@ export default function Policies() {
     } catch {
       /* intentionally ignored */
     }
+    setLoading(false)
+  }, [search, placaSearch, statusFilter, filters, periodStart, periodEnd])
+
+  useEffect(() => {
+    setLoading(true)
   }, [search, placaSearch, statusFilter, filters, periodStart, periodEnd])
 
   useEffect(() => {
@@ -114,6 +120,13 @@ export default function Policies() {
         await updatePolicy(selectedPolicy.id, formData)
         toast({ title: 'Apólice atualizada com sucesso!' })
       } else {
+        if (dialogMode === 'renew' && selectedPolicy) {
+          const existingRenewals = await getPolicies(`previous_policy = "${selectedPolicy.id}"`)
+          if (existingRenewals.length > 0) {
+            toast({ title: 'Esta apólice já foi renovada!', variant: 'destructive' })
+            return
+          }
+        }
         const newPolicy = await createPolicy(formData)
         toast({ title: dialogMode === 'renew' ? 'Apólice renovada!' : 'Apólice cadastrada!' })
         if (dialogMode === 'renew') {
@@ -339,7 +352,13 @@ export default function Policies() {
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-100">
-              {policies.length === 0 ? (
+              {loading ? (
+                <tr>
+                  <td colSpan={10} className="text-center p-6 text-slate-500">
+                    Carregando informações...
+                  </td>
+                </tr>
+              ) : policies.length === 0 ? (
                 <tr>
                   <td colSpan={10} className="text-center p-6 text-slate-500">
                     {search

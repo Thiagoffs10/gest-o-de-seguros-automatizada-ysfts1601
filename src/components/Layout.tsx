@@ -41,7 +41,8 @@ export default function Layout() {
 
   const fetchPendingReminders = async () => {
     try {
-      const data = await getReminders('sent = false')
+      const today = new Date().toISOString().split('T')[0]
+      const data = await getReminders(`sent = false && date <= "${today}"`)
       setReminders(data)
     } catch {
       /* intentionally ignored */

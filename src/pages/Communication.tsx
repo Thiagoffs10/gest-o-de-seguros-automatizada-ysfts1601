@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react'
-import { Send, Mail, MessageSquare, Download, FileSpreadsheet } from 'lucide-react'
+import { Send, Mail, MessageSquare, FileSpreadsheet } from 'lucide-react'
 import { getClients } from '@/services/clients'
 import { getPolicies } from '@/services/policies'
 import { getCommunications, createCommunication } from '@/services/communications'
@@ -26,7 +26,6 @@ export default function Communication() {
   const [clients, setClients] = useState<Client[]>([])
   const [policies, setPolicies] = useState<Policy[]>([])
   const [comms, setComms] = useState<CommType[]>([])
-
   const [type, setType] = useState<'Email' | 'WhatsApp'>('WhatsApp')
   const [selectedClientId, setSelectedClientId] = useState('')
   const [subject, setSubject] = useState('')
@@ -47,10 +46,10 @@ export default function Communication() {
     loadData()
   }, [])
 
-  const handleSelectTemplate = (templateName: string) => {
-    const selectedClient = clients.find((c) => c.id === selectedClientId)
-    const clientName = selectedClient ? selectedClient.name : '[Nome do Cliente]'
+  const selectedClient = clients.find((c) => c.id === selectedClientId)
 
+  const handleSelectTemplate = (templateName: string) => {
+    const clientName = selectedClient ? selectedClient.name : '[Nome do Cliente]'
     if (templateName === 'renovacao') {
       setSubject('Lembrete de Renovação do seu Seguro')
       setBody(
@@ -63,8 +62,6 @@ export default function Communication() {
       )
     }
   }
-
-  const selectedClient = clients.find((c) => c.id === selectedClientId)
 
   const handleOpenClientApp = async () => {
     if (type === 'Email' && selectedClient?.email) {
@@ -86,10 +83,9 @@ export default function Communication() {
       body,
       recipient_email: selectedClient.email,
       recipient_phone: selectedClient.phone,
-      status: 'Enviado',
-      sent_date: new Date().toISOString(),
+      status: 'Rascunho',
     })
-    toast({ title: 'Ação registrada no histórico!' })
+    toast({ title: 'Mensagem aberta! Confirme o envio no aplicativo.' })
     loadData()
   }
 
@@ -112,19 +108,15 @@ export default function Communication() {
         <div>
           <h1 className="text-2xl font-bold text-slate-900">Central de Comunicação</h1>
           <p className="text-slate-500 text-sm">
-            Prepare mensagens para envio manual e exporte dados para ações de marketing.
+            Prepare mensagens para envio e exporte dados para ações de marketing.
           </p>
         </div>
-        <div className="flex gap-2">
-          <Button variant="outline" size="sm" onClick={exportClientsCSV}>
-            <FileSpreadsheet className="w-4 h-4 mr-2" />
-            Exportar Lista de Clientes (CSV)
-          </Button>
-        </div>
+        <Button variant="outline" size="sm" onClick={exportClientsCSV}>
+          <FileSpreadsheet className="w-4 h-4 mr-2" /> Exportar Lista de Clientes (CSV)
+        </Button>
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-        {/* Message Preparer Form */}
         <Card className="lg:col-span-2 shadow-sm">
           <CardHeader>
             <CardTitle className="text-base font-bold">Compor Mensagem</CardTitle>
@@ -146,7 +138,6 @@ export default function Communication() {
                 <Mail className="w-4 h-4 mr-2" /> E-mail
               </Button>
             </div>
-
             <div>
               <Label>Selecionar Segurado</Label>
               <Select value={selectedClientId} onValueChange={setSelectedClientId}>
@@ -162,7 +153,6 @@ export default function Communication() {
                 </SelectContent>
               </Select>
             </div>
-
             <div>
               <Label className="block mb-1">Modelos Prontos de Mensagem</Label>
               <div className="flex gap-2">
@@ -182,19 +172,16 @@ export default function Communication() {
                 </Button>
               </div>
             </div>
-
             {type === 'Email' && (
               <div>
                 <Label>Assunto do E-mail</Label>
                 <Input value={subject} onChange={(e) => setSubject(e.target.value)} />
               </div>
             )}
-
             <div>
               <Label>Corpo da Mensagem</Label>
               <Textarea rows={6} value={body} onChange={(e) => setBody(e.target.value)} />
             </div>
-
             <Button
               className="w-full bg-blue-600 hover:bg-blue-700 font-bold"
               onClick={handleOpenClientApp}
@@ -207,8 +194,6 @@ export default function Communication() {
             </Button>
           </CardContent>
         </Card>
-
-        {/* Info Box */}
         <Card className="shadow-sm bg-blue-50/50 border-blue-200">
           <CardHeader>
             <CardTitle className="text-sm font-bold text-blue-900">Aviso sobre Automação</CardTitle>
@@ -219,14 +204,13 @@ export default function Communication() {
               WhatsApp Web).
             </p>
             <p>
-              O disparo automático em massa pode ser configurado no futuro após a conexão de
-              provedores de mensageria (SMTP/Twilio).
+              A comunicação é registrada como "Rascunho" até que você confirme o envio no aplicativo
+              externo.
             </p>
           </CardContent>
         </Card>
       </div>
 
-      {/* History */}
       <Card className="shadow-sm overflow-hidden border">
         <CardHeader>
           <CardTitle className="text-base font-bold">Histórico de Comunicações</CardTitle>
@@ -243,17 +227,25 @@ export default function Communication() {
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-100">
-              {comms.map((cm) => (
-                <tr key={cm.id} className="hover:bg-slate-50">
-                  <td className="p-3.5 font-bold">{cm.type}</td>
-                  <td className="p-3.5">{cm.expand?.client?.name || '-'}</td>
-                  <td className="p-3.5 max-w-xs truncate">{cm.subject || cm.body}</td>
-                  <td className="p-3.5">{new Date(cm.created).toLocaleDateString('pt-BR')}</td>
-                  <td className="p-3.5">
-                    <Badge variant="outline">{cm.status}</Badge>
+              {comms.length === 0 ? (
+                <tr>
+                  <td colSpan={5} className="text-center p-6 text-slate-500">
+                    Nenhuma comunicação registrada.
                   </td>
                 </tr>
-              ))}
+              ) : (
+                comms.map((cm) => (
+                  <tr key={cm.id} className="hover:bg-slate-50">
+                    <td className="p-3.5 font-bold">{cm.type}</td>
+                    <td className="p-3.5">{cm.expand?.client?.name || '-'}</td>
+                    <td className="p-3.5 max-w-xs truncate">{cm.subject || cm.body}</td>
+                    <td className="p-3.5">{new Date(cm.created).toLocaleDateString('pt-BR')}</td>
+                    <td className="p-3.5">
+                      <Badge variant="outline">{cm.status}</Badge>
+                    </td>
+                  </tr>
+                ))
+              )}
             </tbody>
           </table>
         </div>

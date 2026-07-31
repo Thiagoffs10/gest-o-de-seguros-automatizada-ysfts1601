@@ -32,7 +32,10 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
     if (pb.authStore.isValid) {
       pb.collection('users')
         .authRefresh()
-        .catch(() => pb.authStore.clear())
+        .catch(() => {
+          // Don't clear store on refresh failure — token may still be valid
+          // (e.g. network error). Let subsequent API calls determine validity.
+        })
         .finally(() => setLoading(false))
     } else {
       if (pb.authStore.record) pb.authStore.clear()

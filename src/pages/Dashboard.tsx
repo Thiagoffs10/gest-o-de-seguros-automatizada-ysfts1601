@@ -33,6 +33,21 @@ import {
   Cell,
 } from 'recharts'
 
+const MONTH_NAMES = [
+  'janeiro',
+  'fevereiro',
+  'março',
+  'abril',
+  'maio',
+  'junho',
+  'julho',
+  'agosto',
+  'setembro',
+  'outubro',
+  'novembro',
+  'dezembro',
+]
+
 export default function Dashboard() {
   const navigate = useNavigate()
   const [clients, setClients] = useState<Client[]>([])
@@ -74,29 +89,45 @@ export default function Dashboard() {
 
   const pendingCommissions = useMemo(
     () =>
-      policies.filter((p) => !p.comissao_recebida).reduce((sum, p) => sum + (p.commission || 0), 0),
+      policies
+        .filter((p) => !p.comissao_recebida)
+        .reduce((sum, p) => sum + ((p.commission || 0) - (p.iss || 0)), 0),
     [policies],
   )
 
+  const isDateInMonth = (dateStr?: string): boolean => {
+    if (!dateStr) return false
+    const d = String(dateStr).split(' ')[0]
+    return d.startsWith(selectedMonth)
+  }
+
   const coverageTypes = ['Auto', 'Vida', 'Residencial', 'Empresarial', 'Saúde', 'Outros']
   const pieData = coverageTypes
-    .map((type) => ({ name: type, value: policies.filter((p) => p.coverage_type === type).length }))
+    .map((type) => ({
+      name: type,
+      value: policies.filter((p) => p.coverage_type === type || p.tipo_de_seguro === type).length,
+    }))
     .filter((d) => d.value > 0)
   const COLORS = ['#2563eb', '#10b981', '#f59e0b', '#8b5cf6', '#ec4899', '#64748b']
 
   const profitData = useMemo(() => {
-    const nonCanceled = policies.filter((p) => p.status !== 'Cancelada')
-    const grossCommission = nonCanceled.reduce((sum, p) => sum + (p.commission || 0), 0)
-    const paidRepasses = nonCanceled
-      .filter((p) => p.pago_parceiro)
+    const receivedCommissions = policies
+      .filter(
+        (p) =>
+          p.comissao_recebida &&
+          p.data_recebimento_comissao &&
+          isDateInMonth(p.data_recebimento_comissao),
+      )
+      .reduce((sum, p) => sum + ((p.commission || 0) - (p.iss || 0)), 0)
+    const paidRepasses = policies
+      .filter(
+        (p) =>
+          p.pago_parceiro && p.data_pagamento_parceiro && isDateInMonth(p.data_pagamento_parceiro),
+      )
       .reduce((sum, p) => sum + (p.valor_repasse || 0), 0)
-    const lucroBruto = grossCommission - paidRepasses
+    const lucroBruto = receivedCommissions - paidRepasses
 
-    const [year, month] = selectedMonth.split('-').map(Number)
-    const monthCustos = custosFixos.filter((c) => {
-      const d = new Date(c.data)
-      return d.getFullYear() === year && d.getMonth() + 1 === month
-    })
+    const monthCustos = custosFixos.filter((c) => isDateInMonth(c.data))
     const custosFixosMes = monthCustos.reduce((sum, c) => sum + (c.valor || 0), 0)
     const lucroLiquido = lucroBruto - custosFixosMes
 
@@ -132,10 +163,11 @@ export default function Dashboard() {
     return months.map((m, i) => ({ month: m, value: counts[i] }))
   }, [policies])
 
+  const [year, monthNum] = selectedMonth.split('-').map(Number)
+  const periodLabel = `${MONTH_NAMES[monthNum - 1]}/${year}`
+
   if (loading)
-    return (
-      <div className="text-slate-500 py-8 text-center">Carregando informações do dashboard...</div>
-    )
+    return <div className="text-slate-500 py-8 text-center">Carregando informações...</div>
 
   return (
     <div className="space-y-6">
@@ -224,6 +256,7 @@ export default function Dashboard() {
           <div className="flex items-center gap-2">
             <TrendingUp className="w-5 h-5 text-blue-600" />
             <h3 className="text-base font-bold text-slate-800">Resumo de Lucro</h3>
+            <span className="text-xs text-slate-500 ml-2">Período: {periodLabel}</span>
           </div>
           <div className="flex items-center gap-2">
             <Calendar className="w-4 h-4 text-slate-400" />

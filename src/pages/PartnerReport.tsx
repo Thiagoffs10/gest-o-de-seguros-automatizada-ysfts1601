@@ -19,6 +19,9 @@ import {
 import { generatePartnerReportPDF, PartnerReportEntry } from '@/lib/partner-report-pdf'
 import { useToast } from '@/hooks/use-toast'
 
+const fmt = (v: number) =>
+  v.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })
+
 export default function PartnerReport() {
   const navigate = useNavigate()
   const { toast } = useToast()
@@ -49,18 +52,14 @@ export default function PartnerReport() {
 
   const filteredParceiros = useMemo(() => {
     if (!partnerSearch) return parceiros
-    const q = partnerSearch.toLowerCase()
-    return parceiros.filter((p) => p.nome?.toLowerCase().includes(q))
+    return parceiros.filter((p) => p.nome?.toLowerCase().includes(partnerSearch.toLowerCase()))
   }, [parceiros, partnerSearch])
 
   const reportEntries: PartnerReportEntry[] = useMemo(() => {
     let result = policies
-    if (selectedPartner !== 'all') {
-      result = result.filter((p) => p.parceiro === selectedPartner)
-    }
+    if (selectedPartner !== 'all') result = result.filter((p) => p.parceiro === selectedPartner)
     if (status === 'paid') result = result.filter((p) => p.pago_parceiro)
     else if (status === 'pending') result = result.filter((p) => !p.pago_parceiro)
-
     if (dateFrom) {
       result = result.filter((p) => {
         const ref = p.pago_parceiro ? p.data_pagamento_parceiro : p.created?.split(' ')[0]
@@ -73,11 +72,10 @@ export default function PartnerReport() {
         return ref && ref <= dateTo
       })
     }
-
     return result.map((p) => {
       const valorLiquido = p.valor_liquido || p.premium_amount || 0
-      const repassePercent = p.valor_repasse || 0
-      const valorRepasse = (repassePercent / 100) * valorLiquido
+      const repassePercent = p.percentual_repasse || 0
+      const valorRepasse = p.valor_repasse || (repassePercent / 100) * valorLiquido
       return {
         clientName: p.expand?.client?.name || 'N/A',
         seguradoraName: p.expand?.seguradora?.nome || p.insurance_company || 'N/A',
@@ -198,7 +196,7 @@ export default function PartnerReport() {
                 <th className="p-3.5">Seguradora</th>
                 <th className="p-3.5">Tipo de Seguro</th>
                 <th className="p-3.5 text-right">Valor Líquido</th>
-                <th className="p-3.5 text-center">Percentual de Repasse</th>
+                <th className="p-3.5 text-center">% Repasse</th>
                 <th className="p-3.5 text-right">Valor do Repasse</th>
                 <th className="p-3.5 text-center">Status</th>
               </tr>
@@ -216,12 +214,10 @@ export default function PartnerReport() {
                     <td className="p-3.5 font-semibold">{e.clientName}</td>
                     <td className="p-3.5">{e.seguradoraName}</td>
                     <td className="p-3.5">{e.tipoSeguro}</td>
-                    <td className="p-3.5 text-right font-bold">
-                      R$ {e.valorLiquido.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
-                    </td>
+                    <td className="p-3.5 text-right font-bold">R$ {fmt(e.valorLiquido)}</td>
                     <td className="p-3.5 text-center">{e.repassePercent}%</td>
                     <td className="p-3.5 text-right font-bold text-blue-600">
-                      R$ {e.valorRepasse.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
+                      R$ {fmt(e.valorRepasse)}
                     </td>
                     <td className="p-3.5 text-center">
                       <Badge className={e.status === 'Pago' ? 'bg-emerald-500' : 'bg-amber-500'}>
@@ -239,15 +235,11 @@ export default function PartnerReport() {
       <div className="flex justify-end gap-4">
         <div className="bg-emerald-50 border border-emerald-200 rounded-lg px-4 py-2 text-sm">
           <span className="text-emerald-700 font-semibold">Total Pago: </span>
-          <span className="font-bold text-emerald-900">
-            R$ {totalPaid.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
-          </span>
+          <span className="font-bold text-emerald-900">R$ {fmt(totalPaid)}</span>
         </div>
         <div className="bg-amber-50 border border-amber-200 rounded-lg px-4 py-2 text-sm">
           <span className="text-amber-700 font-semibold">Total Em Aberto: </span>
-          <span className="font-bold text-amber-900">
-            R$ {totalPending.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
-          </span>
+          <span className="font-bold text-amber-900">R$ {fmt(totalPending)}</span>
         </div>
       </div>
     </div>

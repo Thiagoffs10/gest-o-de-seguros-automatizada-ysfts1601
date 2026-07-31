@@ -93,6 +93,15 @@ export default function Seguradoras() {
   const handleDelete = async () => {
     if (!deleteId) return
     try {
+      const linkedPolicies = await getPolicies(`seguradora = "${deleteId}"`)
+      if (linkedPolicies.length > 0) {
+        toast({
+          title: 'Não é possível excluir: existem apólices vinculadas a esta seguradora.',
+          variant: 'destructive',
+        })
+        setDeleteId(null)
+        return
+      }
       await deleteSeguradora(deleteId)
       toast({ title: 'Seguradora excluída!' })
       setDeleteId(null)

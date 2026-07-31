@@ -212,6 +212,7 @@ export function prepareRenewalData(policy: Policy): Partial<Policy> {
     data_recebimento_comissao: null,
     pago_parceiro: false,
     data_pagamento_parceiro: null,
+    previous_policy: policy.id,
   }
 }
 

@@ -34,7 +34,12 @@ export default function Pipeline() {
 
   const loadData = useCallback(async () => {
     try {
-      const data = await getPolicies('status = "Renovação Pendente"')
+      const now = new Date()
+      const future = new Date(now.getTime() + 30 * 86400000)
+      const nowStr = now.toISOString().split('T')[0]
+      const futureStr = future.toISOString().split('T')[0]
+      const filter = `status = "Renovação Pendente" || (status = "Ativa" && end_date >= "${nowStr}" && end_date <= "${futureStr}")`
+      const data = await getPolicies(filter)
       setPolicies(data)
     } catch {
       /* intentionally ignored */
@@ -57,12 +62,18 @@ export default function Pipeline() {
     saveStages(newStages)
   }
 
+  const now = new Date()
+  const future = new Date(now.getTime() + 30 * 86400000)
+  const periodLabel = `${now.toLocaleDateString('pt-BR')} a ${future.toLocaleDateString('pt-BR')}`
+
   return (
     <div className="space-y-6">
       <div className="flex justify-between items-center">
         <div>
           <h1 className="text-2xl font-bold text-slate-900">Pipeline de Renovações</h1>
-          <p className="text-slate-500 text-sm">Gerencie o fluxo de renovação de apólices.</p>
+          <p className="text-slate-500 text-sm">
+            Gerencie o fluxo de renovação de apólices. Período: {periodLabel}
+          </p>
         </div>
         <Button variant="outline" onClick={loadData}>
           <RefreshCw className="w-4 h-4 mr-2" /> Atualizar

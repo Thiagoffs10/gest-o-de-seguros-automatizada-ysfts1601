@@ -21,6 +21,7 @@ import {
 import { BRAZILIAN_STATES } from '@/lib/constants'
 import { lookupCep } from '@/lib/cep'
 import { isValidCpf, isValidCnpj, maskCpf, maskCnpj } from '@/lib/document-validators'
+import { maskPhone } from '@/lib/phone-utils'
 import { Client } from '@/types'
 import { getClients } from '@/services/clients'
 
@@ -245,7 +246,11 @@ export function ClientFormDialog({
             </div>
             <div>
               <Label className="text-xs font-semibold">Telefone / WhatsApp</Label>
-              <Input value={form.phone} onChange={(e) => set('phone', e.target.value)} />
+              <Input
+                value={form.phone}
+                onChange={(e) => set('phone', maskPhone(e.target.value))}
+                placeholder="(XX) XXXXX-XXXX"
+              />
             </div>
           </div>
 

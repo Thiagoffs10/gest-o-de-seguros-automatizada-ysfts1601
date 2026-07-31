@@ -1,4 +1,4 @@
-import { useEffect, useState, useCallback } from 'react'
+import { useEffect, useState, useCallback, useMemo } from 'react'
 import { Edit2 } from 'lucide-react'
 import { getPolicies, updatePolicyFinancial } from '@/services/policies'
 import { getParceiros } from '@/services/parceiros'
@@ -10,7 +10,6 @@ import { Badge } from '@/components/ui/badge'
 import { GlobalFilters } from '@/components/GlobalFilters'
 import { FinancialSummaryCards } from '@/components/FinancialSummaryCards'
 import { CommissionEditDialog, FinancialEditData } from '@/components/CommissionEditDialog'
-import { buildFilterString } from '@/lib/constants'
 import { useToast } from '@/hooks/use-toast'
 import { useRealtime } from '@/hooks/use-realtime'
 import { usePermissions } from '@/hooks/use-permissions'
@@ -23,66 +22,109 @@ import {
 } from '@/components/ui/select'
 
 const calcNetCommission = (p: Policy) => (p.commission || 0) - (p.iss || 0)
-const calcRepasse = (p: Policy) => p.valor_repasse || 0
 const fmtMoney = (v: number) =>
   v.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })
 
 export default function Financial() {
   const { toast } = useToast()
   const { can } = usePermissions()
-  const [policies, setPolicies] = useState<Policy[]>([])
+  const [allPolicies, setAllPolicies] = useState<Policy[]>([])
   const [parceiros, setParceiros] = useState<Parceiro[]>([])
   const [seguradoras, setSeguradoras] = useState<Seguradora[]>([])
-  const [filters, setFilters] = useState<FilterState>({})
+  const [filters, setFilters] = useState<FilterState>({
+    year: String(new Date().getFullYear()),
+    month: String(new Date().getMonth() + 1),
+  })
   const [statusFilter, setStatusFilter] = useState('ALL')
   const [commFilter, setCommFilter] = useState('ALL')
   const [editPolicy, setEditPolicy] = useState<Policy | null>(null)
   const [saving, setSaving] = useState(false)
+  const [loading, setLoading] = useState(true)
 
   const loadData = useCallback(async () => {
     try {
-      let filter = buildFilterString('', filters, 'start_date')
-      if (statusFilter !== 'ALL') {
-        filter = filter ? `${filter} && status = "${statusFilter}"` : `status = "${statusFilter}"`
-      }
-      if (commFilter === 'received') {
-        filter = filter ? `${filter} && comissao_recebida = true` : `comissao_recebida = true`
-      } else if (commFilter === 'pending') {
-        filter = filter ? `${filter} && comissao_recebida = false` : `comissao_recebida = false`
-      }
       const [pols, pars, segs] = await Promise.all([
-        getPolicies(filter),
+        getPolicies(),
         getParceiros(),
         getSeguradoras(),
       ])
-      setPolicies(pols)
+      setAllPolicies(pols)
       setParceiros(pars)
       setSeguradoras(segs)
     } catch {
       /* intentionally ignored */
     }
-  }, [filters, statusFilter, commFilter])
+    setLoading(false)
+  }, [])
 
   useEffect(() => {
     loadData()
   }, [loadData])
   useRealtime('policies', () => loadData())
 
+  const isDateInPeriod = (dateStr?: string): boolean => {
+    if (!dateStr) return false
+    const d = String(dateStr).split(' ')[0]
+    if (filters.dateFrom && d < filters.dateFrom) return false
+    if (filters.dateTo && d > filters.dateTo) return false
+    if (filters.year) {
+      if (!d.startsWith(filters.year)) return false
+      if (filters.month) {
+        const m = String(filters.month).padStart(2, '0')
+        if (!d.startsWith(`${filters.year}-${m}`)) return false
+      }
+    }
+    return true
+  }
+
+  const applyNonDateFilters = (p: Policy): boolean => {
+    if (statusFilter !== 'ALL' && p.status !== statusFilter) return false
+    if (commFilter === 'received' && !p.comissao_recebida) return false
+    if (commFilter === 'pending' && p.comissao_recebida) return false
+    if (filters.partnerId && p.parceiro !== filters.partnerId) return false
+    if (filters.seguradoraId && p.seguradora !== filters.seguradoraId) return false
+    if (
+      filters.tipoSeguro &&
+      p.tipo_de_seguro !== filters.tipoSeguro &&
+      p.coverage_type !== filters.tipoSeguro
+    )
+      return false
+    return true
+  }
+
+  const policies = useMemo(
+    () => allPolicies.filter((p) => applyNonDateFilters(p) && isDateInPeriod(p.start_date)),
+    [allPolicies, filters, statusFilter, commFilter],
+  )
+
   const totalGross = policies.reduce((s, p) => s + (p.valor_bruto || 0), 0)
   const totalNet = policies.reduce((s, p) => s + (p.valor_liquido || p.premium_amount || 0), 0)
-  const commReceived = policies
-    .filter((p) => p.comissao_recebida)
+  const commReceived = allPolicies
+    .filter(
+      (p) =>
+        applyNonDateFilters(p) &&
+        p.comissao_recebida &&
+        p.data_recebimento_comissao &&
+        isDateInPeriod(p.data_recebimento_comissao),
+    )
     .reduce((s, p) => s + calcNetCommission(p), 0)
-  const commPending = policies
-    .filter((p) => !p.comissao_recebida)
+  const commPending = allPolicies
+    .filter((p) => applyNonDateFilters(p) && !p.comissao_recebida)
     .reduce((s, p) => s + calcNetCommission(p), 0)
   const partnerPols = policies.filter((p) => p.tipo_de_venda === 'Parceiro')
-  const repassePaid = partnerPols
-    .filter((p) => p.pago_parceiro)
-    .reduce((s, p) => s + calcRepasse(p), 0)
+  const repassePaid = allPolicies
+    .filter(
+      (p) =>
+        applyNonDateFilters(p) &&
+        p.tipo_de_venda === 'Parceiro' &&
+        p.pago_parceiro &&
+        p.data_pagamento_parceiro &&
+        isDateInPeriod(p.data_pagamento_parceiro),
+    )
+    .reduce((s, p) => s + (p.valor_repasse || 0), 0)
   const repassePending = partnerPols
     .filter((p) => !p.pago_parceiro)
-    .reduce((s, p) => s + calcRepasse(p), 0)
+    .reduce((s, p) => s + (p.valor_repasse || 0), 0)
 
   const handleSave = async (data: FinancialEditData) => {
     if (!editPolicy) return
@@ -98,6 +140,9 @@ export default function Financial() {
       setSaving(false)
     }
   }
+
+  if (loading)
+    return <div className="text-slate-500 py-8 text-center">Carregando informações...</div>
 
   return (
     <div className="space-y-6">
@@ -154,7 +199,10 @@ export default function Financial() {
             variant="outline"
             size="sm"
             onClick={() => {
-              setFilters({})
+              setFilters({
+                year: String(new Date().getFullYear()),
+                month: String(new Date().getMonth() + 1),
+              })
               setStatusFilter('ALL')
               setCommFilter('ALL')
             }}
@@ -273,7 +321,7 @@ export default function Financial() {
                       R$ {fmtMoney(p.valor_liquido || p.premium_amount || 0)}
                     </td>
                     <td className="p-3 text-right font-bold text-blue-600">
-                      R$ {fmtMoney(calcRepasse(p))}
+                      R$ {fmtMoney(p.valor_repasse || 0)}
                     </td>
                     <td className="p-3 text-center">
                       <Badge className={p.pago_parceiro ? 'bg-emerald-500' : 'bg-amber-500'}>

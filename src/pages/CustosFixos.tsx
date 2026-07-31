@@ -41,36 +41,45 @@ const CATEGORIA_COLORS: Record<string, string> = {
 const fmt = (v: number) =>
   v.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })
 
+function getMonthStart(): string {
+  const now = new Date()
+  return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-01`
+}
+function getMonthEnd(): string {
+  const now = new Date()
+  const lastDay = new Date(now.getFullYear(), now.getMonth() + 1, 0).getDate()
+  return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(lastDay).padStart(2, '0')}`
+}
+
 export default function CustosFixos() {
   const { toast } = useToast()
   const { can } = usePermissions()
   const [costs, setCosts] = useState<CustoFixo[]>([])
   const [policies, setPolicies] = useState<Policy[]>([])
-  const [periodStart, setPeriodStart] = useState('')
-  const [periodEnd, setPeriodEnd] = useState('')
+  const [periodStart, setPeriodStart] = useState(getMonthStart)
+  const [periodEnd, setPeriodEnd] = useState(getMonthEnd)
   const [isModalOpen, setIsModalOpen] = useState(false)
   const [editingItem, setEditingItem] = useState<Partial<CustoFixo> | null>(null)
   const [isEditOpen, setIsEditOpen] = useState(false)
   const [deleteTarget, setDeleteTarget] = useState<CustoFixo | null>(null)
   const [sortField, setSortField] = useState<SortField>('data')
   const [sortDir, setSortDir] = useState<SortDir>('desc')
+  const [loading, setLoading] = useState(true)
 
   const loadData = useCallback(async () => {
     try {
       let costFilter = ''
-      if (periodStart && periodEnd) {
+      if (periodStart && periodEnd)
         costFilter = `data >= "${periodStart}" && data <= "${periodEnd}"`
-      } else if (periodStart) {
-        costFilter = `data >= "${periodStart}"`
-      } else if (periodEnd) {
-        costFilter = `data <= "${periodEnd}"`
-      }
+      else if (periodStart) costFilter = `data >= "${periodStart}"`
+      else if (periodEnd) costFilter = `data <= "${periodEnd}"`
       const [costsData, pols] = await Promise.all([getCustosFixos(costFilter), getPolicies('')])
       setCosts(costsData)
       setPolicies(pols)
     } catch {
       /* intentionally ignored */
     }
+    setLoading(false)
   }, [periodStart, periodEnd])
 
   useEffect(() => {
@@ -122,7 +131,6 @@ export default function CustosFixos() {
       toast({ title: 'Erro', description: getErrorMessage(err), variant: 'destructive' })
     }
   }
-
   const handleEditSubmit = async (formData: any) => {
     if (!editingItem?.id) return
     try {
@@ -135,7 +143,6 @@ export default function CustosFixos() {
       toast({ title: 'Erro', description: getErrorMessage(err), variant: 'destructive' })
     }
   }
-
   const handleDelete = async () => {
     if (!deleteTarget) return
     try {
@@ -147,6 +154,9 @@ export default function CustosFixos() {
       toast({ title: 'Erro', description: getErrorMessage(err), variant: 'destructive' })
     }
   }
+
+  if (loading)
+    return <div className="text-slate-500 py-8 text-center">Carregando informações...</div>
 
   return (
     <div className="space-y-6">
@@ -311,7 +321,6 @@ export default function CustosFixos() {
         onOpenChange={setIsModalOpen}
         onSubmit={handleCreate}
       />
-
       {editingItem && (
         <CustoFixoFormDialog
           open={isEditOpen}
@@ -324,7 +333,6 @@ export default function CustosFixos() {
           title="Editar Custo"
         />
       )}
-
       {deleteTarget && (
         <Dialog
           open={!!deleteTarget}

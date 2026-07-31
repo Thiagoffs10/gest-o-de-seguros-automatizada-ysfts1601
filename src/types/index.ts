@@ -89,6 +89,7 @@ export interface Policy {
   notes?: string
   created: string
   updated: string
+  previous_policy?: string
 }
 
 export interface Payment {

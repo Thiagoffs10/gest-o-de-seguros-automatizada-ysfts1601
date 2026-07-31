@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react'
-import { Bell, Plus, CheckCircle } from 'lucide-react'
-import { getReminders, createReminder, updateReminder } from '@/services/reminders'
+import { Bell, Plus, CheckCircle, Trash2 } from 'lucide-react'
+import { getReminders, createReminder, updateReminder, deleteReminder } from '@/services/reminders'
 import { getClients } from '@/services/clients'
 import { Reminder, Client } from '@/types'
 import { Card } from '@/components/ui/card'
@@ -25,6 +25,17 @@ import {
 } from '@/components/ui/select'
 import { useToast } from '@/hooks/use-toast'
 import { usePermissions } from '@/hooks/use-permissions'
+import { useRealtime } from '@/hooks/use-realtime'
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from '@/components/ui/alert-dialog'
 
 export default function RemindersPage() {
   const { toast } = useToast()
@@ -32,7 +43,8 @@ export default function RemindersPage() {
   const [reminders, setReminders] = useState<Reminder[]>([])
   const [clients, setClients] = useState<Client[]>([])
   const [isModalOpen, setIsModalOpen] = useState(false)
-
+  const [deleteTarget, setDeleteTarget] = useState<Reminder | null>(null)
+  const [loading, setLoading] = useState(true)
   const [formData, setFormData] = useState({
     type: 'Renovação' as const,
     client: '',
@@ -42,26 +54,24 @@ export default function RemindersPage() {
 
   const loadData = async () => {
     try {
-      const cls = await getClients()
+      const [cls, rems] = await Promise.all([getClients(), getReminders()])
       setClients(cls)
-      const rems = await getReminders()
       setReminders(rems)
     } catch {
       /* intentionally ignored */
     }
+    setLoading(false)
   }
 
   useEffect(() => {
     loadData()
   }, [])
+  useRealtime('reminders', () => loadData())
 
   const handleCreate = async (e: React.FormEvent) => {
     e.preventDefault()
     try {
-      await createReminder({
-        ...formData,
-        sent: false,
-      })
+      await createReminder({ ...formData, sent: false })
       toast({ title: 'Lembrete agendado com sucesso!' })
       setIsModalOpen(false)
       loadData()
@@ -79,19 +89,35 @@ export default function RemindersPage() {
     }
   }
 
+  const handleDelete = async () => {
+    if (!deleteTarget) return
+    try {
+      await deleteReminder(deleteTarget.id)
+      toast({ title: 'Lembrete excluído!' })
+      setDeleteTarget(null)
+      loadData()
+    } catch (err: any) {
+      toast({ title: 'Erro ao excluir', description: err.message, variant: 'destructive' })
+    }
+  }
+
+  const pendingCount = reminders.filter((r) => !r.sent).length
+
+  if (loading)
+    return <div className="text-slate-500 py-8 text-center">Carregando informações...</div>
+
   return (
     <div className="space-y-6">
       <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
         <div>
           <h1 className="text-2xl font-bold text-slate-900">Central de Lembretes</h1>
           <p className="text-slate-500 text-sm">
-            Alertas automáticos de renovações e datas importantes.
+            Alertas automáticos de renovações e datas importantes. {pendingCount} pendente(s).
           </p>
         </div>
         {can('reminders', 'create') && (
           <Button className="bg-blue-600 hover:bg-blue-700" onClick={() => setIsModalOpen(true)}>
-            <Plus className="w-4 h-4 mr-2" />
-            Criar Lembrete
+            <Plus className="w-4 h-4 mr-2" /> Criar Lembrete
           </Button>
         )}
       </div>
@@ -106,7 +132,7 @@ export default function RemindersPage() {
                 <th className="p-3.5">Data Programada</th>
                 <th className="p-3.5">Mensagem / Observação</th>
                 <th className="p-3.5">Status</th>
-                <th className="p-3.5 text-right">Ação</th>
+                <th className="p-3.5 text-right">Ações</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-100">
@@ -129,16 +155,26 @@ export default function RemindersPage() {
                       </Badge>
                     </td>
                     <td className="p-3.5 text-right">
-                      {can('reminders', 'update') ? (
-                        <Button variant="ghost" size="sm" onClick={() => handleToggleSent(r)}>
-                          <CheckCircle
-                            className={`w-4 h-4 mr-1 ${r.sent ? 'text-slate-400' : 'text-emerald-600'}`}
-                          />
-                          {r.sent ? 'Reabrir' : 'Concluir'}
-                        </Button>
-                      ) : (
-                        <span className="text-xs text-slate-400">Sem permissão</span>
-                      )}
+                      <div className="flex items-center justify-end gap-1">
+                        {can('reminders', 'update') && (
+                          <Button variant="ghost" size="sm" onClick={() => handleToggleSent(r)}>
+                            <CheckCircle
+                              className={`w-4 h-4 mr-1 ${r.sent ? 'text-slate-400' : 'text-emerald-600'}`}
+                            />
+                            {r.sent ? 'Reabrir' : 'Concluir'}
+                          </Button>
+                        )}
+                        {can('reminders', 'delete') && (
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            className="text-red-600"
+                            onClick={() => setDeleteTarget(r)}
+                          >
+                            <Trash2 className="w-4 h-4" />
+                          </Button>
+                        )}
+                      </div>
                     </td>
                   </tr>
                 ))
@@ -148,7 +184,6 @@ export default function RemindersPage() {
         </div>
       </Card>
 
-      {/* Modal Novo Lembrete */}
       <Dialog open={isModalOpen} onOpenChange={setIsModalOpen}>
         <DialogContent>
           <DialogHeader>
@@ -215,6 +250,23 @@ export default function RemindersPage() {
           </form>
         </DialogContent>
       </Dialog>
+
+      <AlertDialog open={!!deleteTarget} onOpenChange={(open) => !open && setDeleteTarget(null)}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Confirmar exclusão</AlertDialogTitle>
+            <AlertDialogDescription>
+              Deseja excluir este lembrete? Esta ação não pode ser desfeita.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancelar</AlertDialogCancel>
+            <AlertDialogAction className="bg-red-600 hover:bg-red-700" onClick={handleDelete}>
+              Excluir
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   )
 }
