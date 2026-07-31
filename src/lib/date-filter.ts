@@ -99,7 +99,7 @@ export function computePeriodFromFilters(filters: FilterState): DatePeriod {
   return computePeriod(filters.month, filters.year, filters.dateFrom, filters.dateTo)
 }
 
-export function isDateInPeriod(dateStr?: string, period: DatePeriod): boolean {
+export function isDateInPeriod(period: DatePeriod, dateStr?: string): boolean {
   if (!dateStr) return false
   const d = extractDatePart(dateStr)
   if (!d) return false

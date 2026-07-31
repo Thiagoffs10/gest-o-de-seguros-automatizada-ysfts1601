@@ -100,7 +100,7 @@ export default function CustosFixos() {
 
   const totalReceitas = policies
     .filter(
-      (p) => p.comissao_recebida && isDateInPeriod(p.data_recebimento_comissao, effectivePeriod),
+      (p) => p.comissao_recebida && isDateInPeriod(effectivePeriod, p.data_recebimento_comissao),
     )
     .reduce((s, p) => s + (p.commission || 0) - (p.iss || 0), 0)
   const totalRepasses = policies
@@ -110,7 +110,7 @@ export default function CustosFixos() {
         (p.parceiro || p.expand?.parceiro) &&
         (p.valor_repasse || 0) > 0 &&
         p.pago_parceiro &&
-        isDateInPeriod(p.data_pagamento_parceiro, effectivePeriod),
+        isDateInPeriod(effectivePeriod, p.data_pagamento_parceiro),
     )
     .reduce((s, p) => s + (p.valor_repasse || 0), 0)
   const totalCustos = costs.reduce((s, c) => s + (c.valor || 0), 0)

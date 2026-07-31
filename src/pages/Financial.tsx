@@ -87,7 +87,7 @@ export default function Financial() {
   }
 
   const policies = useMemo(
-    () => allPolicies.filter((p) => applyNonDateFilters(p) && isDateInPeriod(p.start_date, period)),
+    () => allPolicies.filter((p) => applyNonDateFilters(p) && isDateInPeriod(period, p.start_date)),
     [allPolicies, filters, period, statusFilter, commFilter],
   )
 
@@ -105,7 +105,7 @@ export default function Financial() {
       (p) =>
         p.comissao_recebida &&
         p.data_recebimento_comissao &&
-        isDateInPeriod(p.data_recebimento_comissao, period),
+        isDateInPeriod(period, p.data_recebimento_comissao),
     )
     .reduce((s, p) => s + calcNetCommission(p), 0)
   const commPending = tablePolicies
@@ -125,7 +125,7 @@ export default function Financial() {
         (p.valor_repasse || 0) > 0 &&
         p.pago_parceiro &&
         p.data_pagamento_parceiro &&
-        isDateInPeriod(p.data_pagamento_parceiro, period),
+        isDateInPeriod(period, p.data_pagamento_parceiro),
     )
     .reduce((s, p) => s + (p.valor_repasse || 0), 0)
   const repassePending = tablePolicies
@@ -138,7 +138,7 @@ export default function Financial() {
     )
     .reduce((s, p) => s + (p.valor_repasse || 0), 0)
   const totalCustos = custosFixos
-    .filter((c) => isDateInPeriod(c.data, period))
+    .filter((c) => isDateInPeriod(period, c.data))
     .reduce((s, c) => s + (c.valor || 0), 0)
   const lucroLiquido = commReceived - repassePaid - totalCustos
 

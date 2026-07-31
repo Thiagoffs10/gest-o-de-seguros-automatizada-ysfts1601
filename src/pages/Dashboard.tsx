@@ -101,7 +101,7 @@ export default function Dashboard() {
         (p) =>
           p.comissao_recebida &&
           p.data_recebimento_comissao &&
-          isDateInPeriod(p.data_recebimento_comissao, period),
+          isDateInPeriod(period, p.data_recebimento_comissao),
       )
       .reduce((sum, p) => sum + ((p.commission || 0) - (p.iss || 0)), 0)
     const paidRepasses = policies
@@ -112,12 +112,12 @@ export default function Dashboard() {
           (p.valor_repasse || 0) > 0 &&
           p.pago_parceiro &&
           p.data_pagamento_parceiro &&
-          isDateInPeriod(p.data_pagamento_parceiro, period),
+          isDateInPeriod(period, p.data_pagamento_parceiro),
       )
       .reduce((sum, p) => sum + (p.valor_repasse || 0), 0)
     const lucroBruto = receivedCommissions - paidRepasses
 
-    const monthCustos = custosFixos.filter((c) => isDateInPeriod(c.data, period))
+    const monthCustos = custosFixos.filter((c) => isDateInPeriod(period, c.data))
     const custosFixosMes = monthCustos.reduce((sum, c) => sum + (c.valor || 0), 0)
     const lucroLiquido = lucroBruto - custosFixosMes
 
