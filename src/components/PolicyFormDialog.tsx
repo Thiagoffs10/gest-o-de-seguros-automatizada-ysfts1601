@@ -22,6 +22,7 @@ import { TIPOS_DE_SEGURO, TIPOS_DE_VENDA } from '@/lib/constants'
 import { Client, Seguradora, Parceiro, Policy } from '@/types'
 import { ClientAutocomplete } from '@/components/ClientAutocomplete'
 import type { FieldErrors } from '@/lib/pocketbase/errors'
+import { formatCurrency, formatDateForInput } from '@/lib/utils'
 
 const DEFAULT_FORM = {
   client: '',
@@ -86,6 +87,21 @@ export function PolicyFormDialog({
     skipAuto.current = true
     if (initialData) {
       const exp = initialData.expand as any
+      const vBruto = initialData.valor_bruto != null ? Number(initialData.valor_bruto) : 0
+      const vLiquido =
+        initialData.valor_liquido != null
+          ? Number(initialData.valor_liquido)
+          : initialData.premium_amount != null
+            ? Number(initialData.premium_amount)
+            : 0
+      const commPercent =
+        initialData.commission_percent != null ? Number(initialData.commission_percent) : 0
+      const commVal =
+        initialData.commission != null
+          ? Number(initialData.commission)
+          : Math.round(((vLiquido * commPercent) / 100) * 100) / 100
+      const issVal = initialData.iss != null ? Number(initialData.iss) : 0
+
       setForm({
         ...DEFAULT_FORM,
         client: initialData.client || (exp?.client?.id ?? ''),
@@ -95,22 +111,18 @@ export function PolicyFormDialog({
         placa: initialData.placa || '',
         chassi: initialData.chassi || '',
         modelo_veiculo: initialData.modelo_veiculo || '',
-        valor_bruto: initialData.valor_bruto || 0,
-        valor_liquido: initialData.valor_liquido || initialData.premium_amount || 0,
-        commission_percent: initialData.commission_percent || 0,
-        commission: initialData.commission || 0,
-        iss: initialData.iss || 0,
+        valor_bruto: vBruto,
+        valor_liquido: vLiquido,
+        commission_percent: commPercent,
+        commission: commVal,
+        iss: issVal,
         tipo_de_venda: initialData.tipo_de_venda || 'Produção Própria',
         observacao_indicacao: initialData.observacao_indicacao || '',
         parceiro: initialData.parceiro || (exp?.parceiro?.id ?? ''),
-        valor_repasse: initialData.valor_repasse || 0,
+        valor_repasse: initialData.valor_repasse != null ? Number(initialData.valor_repasse) : 0,
         notes: initialData.notes || '',
-        start_date: initialData.start_date
-          ? String(initialData.start_date).split('T')[0]
-          : DEFAULT_FORM.start_date,
-        end_date: initialData.end_date
-          ? String(initialData.end_date).split('T')[0]
-          : DEFAULT_FORM.end_date,
+        start_date: formatDateForInput(initialData.start_date) || DEFAULT_FORM.start_date,
+        end_date: formatDateForInput(initialData.end_date) || DEFAULT_FORM.end_date,
         status: initialData.status || 'Ativa',
       })
     } else {
@@ -119,7 +131,7 @@ export function PolicyFormDialog({
     setValidationErrors({})
     setTimeout(() => {
       skipAuto.current = false
-    }, 0)
+    }, 100)
   }, [open, initialData])
 
   const set = (key: string, val: any) => {
@@ -135,26 +147,28 @@ export function PolicyFormDialog({
 
   const selectedSeguradora = seguradoras.find((s) => s.id === form.seguradora)
   const impostoPercentual = selectedSeguradora?.imposto_percentual ?? 0
-  const comissaoLiquida = (form.commission || 0) - (form.iss || 0)
+  const comissaoLiquida = Math.round(((form.commission || 0) - (form.iss || 0)) * 100) / 100
 
   useEffect(() => {
     if (skipAuto.current) return
     const v = form.valor_liquido != null ? Number(form.valor_liquido) : 0
     const p = form.commission_percent != null ? Number(form.commission_percent) : 0
-    set('commission', Math.max(0, (v * p) / 100))
+    const comm = Math.round(((v * p) / 100) * 100) / 100
+    setForm((prev: any) => ({ ...prev, commission: comm }))
   }, [form.valor_liquido, form.commission_percent])
 
   useEffect(() => {
     if (skipAuto.current) return
-    const iss =
-      form.commission != null ? Math.max(0, (form.commission * (impostoPercentual || 0)) / 100) : 0
-    set('iss', iss)
+    const comm = form.commission != null ? Number(form.commission) : 0
+    const issVal = Math.round(((comm * (impostoPercentual || 0)) / 100) * 100) / 100
+    setForm((prev: any) => ({ ...prev, iss: issVal }))
   }, [form.commission, form.seguradora, impostoPercentual])
 
   useEffect(() => {
     if (skipAuto.current) return
     if (form.tipo_de_venda === 'Parceiro' && form.parceiro && form.valor_liquido) {
-      set('valor_repasse', Math.max(0, form.valor_liquido * 0.5))
+      const repasse = Math.round(Number(form.valor_liquido) * 0.5 * 100) / 100
+      setForm((prev: any) => ({ ...prev, valor_repasse: repasse }))
     }
   }, [form.tipo_de_venda, form.parceiro, form.valor_liquido])
 
@@ -335,7 +349,7 @@ export function PolicyFormDialog({
               <Label className="text-xs font-semibold">Com. Líquida</Label>
               <Input
                 disabled
-                value={`R$ ${comissaoLiquida.toFixed(2)}`}
+                value={`R$ ${formatCurrency(comissaoLiquida)}`}
                 className="bg-slate-100 font-bold"
               />
             </div>

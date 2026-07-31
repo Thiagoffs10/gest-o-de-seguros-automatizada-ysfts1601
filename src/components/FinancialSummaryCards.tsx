@@ -1,5 +1,6 @@
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { DollarSign, Wallet, CheckCircle2, Clock, TrendingDown, TrendingUp } from 'lucide-react'
+import { formatCurrency } from '@/lib/utils'
 
 interface Props {
   totalGross: number
@@ -9,9 +10,6 @@ interface Props {
   repassePaid: number
   repassePending: number
 }
-
-const fmt = (v: number) =>
-  v.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })
 
 export function FinancialSummaryCards({
   totalGross,
@@ -24,27 +22,37 @@ export function FinancialSummaryCards({
   const cards = [
     {
       label: 'Valor Bruto Total',
-      value: fmt(totalGross),
+      value: formatCurrency(totalGross),
       icon: DollarSign,
       color: 'text-slate-700',
     },
-    { label: 'Valor Líquido Total', value: fmt(totalNet), icon: Wallet, color: 'text-blue-700' },
+    {
+      label: 'Valor Líquido Total',
+      value: formatCurrency(totalNet),
+      icon: Wallet,
+      color: 'text-blue-700',
+    },
     {
       label: 'Comissões Recebidas',
-      value: fmt(commReceived),
+      value: formatCurrency(commReceived),
       icon: CheckCircle2,
       color: 'text-emerald-700',
     },
-    { label: 'Comissões a Receber', value: fmt(commPending), icon: Clock, color: 'text-amber-700' },
+    {
+      label: 'Comissões a Receber',
+      value: formatCurrency(commPending),
+      icon: Clock,
+      color: 'text-amber-700',
+    },
     {
       label: 'Repasses Pagos',
-      value: fmt(repassePaid),
+      value: formatCurrency(repassePaid),
       icon: TrendingDown,
       color: 'text-emerald-700',
     },
     {
       label: 'Repasses Pendentes',
-      value: fmt(repassePending),
+      value: formatCurrency(repassePending),
       icon: TrendingUp,
       color: 'text-red-700',
     },

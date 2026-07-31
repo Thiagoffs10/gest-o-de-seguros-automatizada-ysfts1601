@@ -1,27 +1,48 @@
 import pb from '@/lib/pocketbase/client'
 import { Policy } from '@/types'
 
+import { formatDateForInput } from '@/lib/utils'
+
 export function preparePolicyPayload(data: Partial<Policy> & Record<string, any>) {
   const tipoSeguro = data.tipo_de_seguro || data.coverage_type || 'Auto'
   const validCoverageTypes = ['Auto', 'Vida', 'Residencial', 'Empresarial', 'Saúde', 'Outros']
   const coverageType = validCoverageTypes.includes(tipoSeguro) ? tipoSeguro : 'Outros'
 
-  const valorBruto = Number(data.valor_bruto) || 0
-  const valorLiquido = Number(data.valor_liquido) || Number(data.premium_amount) || 0
-  const premiumAmount = Number(data.premium_amount) || valorBruto || valorLiquido || 0
+  const valorBruto = data.valor_bruto != null ? Number(data.valor_bruto) : 0
+  const valorLiquido =
+    data.valor_liquido != null
+      ? Number(data.valor_liquido)
+      : data.premium_amount != null
+        ? Number(data.premium_amount)
+        : 0
+  const premiumAmount =
+    data.premium_amount != null ? Number(data.premium_amount) : valorLiquido || valorBruto || 0
+
+  const rawCommPercent = data.commission_percent != null ? Number(data.commission_percent) : 0
+  const rawCommission =
+    data.commission != null
+      ? Number(data.commission)
+      : Math.round(((valorLiquido * rawCommPercent) / 100) * 100) / 100
+  const rawIss = data.iss != null ? Number(data.iss) : 0
+  const rawRepasse = data.valor_repasse != null ? Number(data.valor_repasse) : 0
 
   const payload: Record<string, any> = {
     ...data,
     tipo_de_seguro: tipoSeguro,
     coverage_type: coverageType,
-    premium_amount: premiumAmount,
-    valor_bruto: valorBruto,
-    valor_liquido: valorLiquido,
-    commission_percent: Number(data.commission_percent) || 0,
-    commission: Number(data.commission) || 0,
-    iss: Number(data.iss) || 0,
-    valor_repasse: Number(data.valor_repasse) || 0,
+    premium_amount: Math.round(premiumAmount * 100) / 100,
+    valor_bruto: Math.round(valorBruto * 100) / 100,
+    valor_liquido: Math.round(valorLiquido * 100) / 100,
+    commission_percent: rawCommPercent,
+    commission: Math.round(rawCommission * 100) / 100,
+    iss: Math.round(rawIss * 100) / 100,
+    valor_repasse: Math.round(rawRepasse * 100) / 100,
   }
+
+  if ('placa' in data) payload.placa = data.placa ? String(data.placa).trim() : ''
+  if ('chassi' in data) payload.chassi = data.chassi ? String(data.chassi).trim() : ''
+  if ('modelo_veiculo' in data)
+    payload.modelo_veiculo = data.modelo_veiculo ? String(data.modelo_veiculo).trim() : ''
 
   // Relations: PocketBase rejects empty string "" for relation fields
   if (!payload.client || (typeof payload.client === 'string' && payload.client.trim() === '')) {
@@ -41,10 +62,7 @@ export function preparePolicyPayload(data: Partial<Policy> & Record<string, any>
     payload.parceiro = null
   }
 
-  // Dates: PocketBase rejects empty string "" for date fields
-  // Only process financial tracking fields if they were explicitly provided
-  // (e.g. from Finance tab or renewal). When absent (policy form), preserve
-  // existing DB values by removing them from the payload entirely.
+  // Dates & financial tracking
   if ('data_pagamento_parceiro' in data) {
     if (
       !payload.data_pagamento_parceiro ||
@@ -52,10 +70,13 @@ export function preparePolicyPayload(data: Partial<Policy> & Record<string, any>
         payload.data_pagamento_parceiro.trim() === '')
     ) {
       payload.data_pagamento_parceiro = null
+    } else {
+      payload.data_pagamento_parceiro = formatDateForInput(payload.data_pagamento_parceiro)
     }
   } else {
     delete payload.data_pagamento_parceiro
   }
+
   if ('data_recebimento_comissao' in data) {
     if (
       !payload.data_recebimento_comissao ||
@@ -63,35 +84,41 @@ export function preparePolicyPayload(data: Partial<Policy> & Record<string, any>
         payload.data_recebimento_comissao.trim() === '')
     ) {
       payload.data_recebimento_comissao = null
+    } else {
+      payload.data_recebimento_comissao = formatDateForInput(payload.data_recebimento_comissao)
     }
   } else {
     delete payload.data_recebimento_comissao
   }
+
   if (!('pago_parceiro' in data)) {
     delete payload.pago_parceiro
   }
   if (!('comissao_recebida' in data)) {
     delete payload.comissao_recebida
   }
-  if (!('commission_percent' in data)) {
-    delete payload.commission_percent
-  }
+
   if (
     !payload.renewal_date ||
     (typeof payload.renewal_date === 'string' && payload.renewal_date.trim() === '')
   ) {
     payload.renewal_date = null
+  } else {
+    payload.renewal_date = formatDateForInput(payload.renewal_date)
   }
-  if (
-    !payload.start_date ||
-    (typeof payload.start_date === 'string' && payload.start_date.trim() === '')
-  ) {
+
+  if (payload.start_date) {
+    payload.start_date =
+      formatDateForInput(payload.start_date) || new Date().toISOString().split('T')[0]
+  } else {
     payload.start_date = new Date().toISOString().split('T')[0]
   }
-  if (
-    !payload.end_date ||
-    (typeof payload.end_date === 'string' && payload.end_date.trim() === '')
-  ) {
+
+  if (payload.end_date) {
+    payload.end_date =
+      formatDateForInput(payload.end_date) ||
+      new Date(Date.now() + 365 * 86400000).toISOString().split('T')[0]
+  } else {
     payload.end_date = new Date(Date.now() + 365 * 86400000).toISOString().split('T')[0]
   }
 

@@ -35,6 +35,7 @@ import { useToast } from '@/hooks/use-toast'
 import { useRealtime } from '@/hooks/use-realtime'
 import { usePermissions } from '@/hooks/use-permissions'
 import { extractFieldErrors, getErrorMessage, type FieldErrors } from '@/lib/pocketbase/errors'
+import { formatCurrency } from '@/lib/utils'
 
 type DialogMode = 'create' | 'edit' | 'renew' | null
 
@@ -127,6 +128,7 @@ export default function Policies() {
     } catch (err) {
       setFieldErrors(extractFieldErrors(err))
       toast({ title: 'Erro ao salvar', description: getErrorMessage(err), variant: 'destructive' })
+      throw err
     }
   }
 
@@ -361,11 +363,9 @@ export default function Policies() {
                     <td className="p-3.5">{p.tipo_de_seguro || p.coverage_type}</td>
                     <td className="p-3.5">{p.placa || '-'}</td>
                     <td className="p-3.5 font-bold">
-                      R$ {(p.valor_liquido || p.premium_amount)?.toLocaleString('pt-BR')}
+                      R$ {formatCurrency(p.valor_liquido || p.premium_amount)}
                     </td>
-                    <td className="p-3.5">
-                      R$ {(p.commission || 0).toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
-                    </td>
+                    <td className="p-3.5">R$ {formatCurrency(p.commission)}</td>
                     <td className="p-3.5">
                       <Badge
                         className={

@@ -20,6 +20,7 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { SecretsGuideDialog } from '@/components/SecretsGuideDialog'
 import { useRealtime } from '@/hooks/use-realtime'
+import { formatCurrency } from '@/lib/utils'
 import {
   BarChart,
   Bar,
@@ -211,7 +212,7 @@ export default function Dashboard() {
           </CardHeader>
           <CardContent>
             <div className="text-2xl font-bold text-blue-700">
-              R$ {pendingCommissions.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
+              R$ {formatCurrency(pendingCommissions)}
             </div>
             <p className="text-xs text-blue-600 mt-1">Comissões pendentes</p>
           </CardContent>
@@ -238,19 +239,19 @@ export default function Dashboard() {
           <div className="bg-slate-50 rounded-lg p-3 border">
             <p className="text-xs text-slate-500 font-medium">Lucro Bruto</p>
             <p className="text-xl font-bold text-slate-900">
-              R$ {profitData.lucroBruto.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
+              R$ {formatCurrency(profitData.lucroBruto)}
             </p>
           </div>
           <div className="bg-amber-50 rounded-lg p-3 border border-amber-100">
             <p className="text-xs text-amber-600 font-medium">Custos Fixos do Mês</p>
             <p className="text-xl font-bold text-amber-700">
-              R$ {profitData.custosFixosMes.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
+              R$ {formatCurrency(profitData.custosFixosMes)}
             </p>
           </div>
           <div className="bg-blue-50 rounded-lg p-3 border border-blue-100">
             <p className="text-xs text-blue-600 font-medium">Lucro Líquido</p>
             <p className="text-xl font-bold text-blue-700">
-              R$ {profitData.lucroLiquido.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
+              R$ {formatCurrency(profitData.lucroLiquido)}
             </p>
           </div>
         </div>
@@ -264,9 +265,7 @@ export default function Dashboard() {
                   className="flex justify-between items-center text-sm bg-slate-50 rounded px-3 py-1.5 border"
                 >
                   <span className="font-medium text-slate-700">{c.descricao}</span>
-                  <span className="font-bold text-slate-900">
-                    R$ {(c.valor || 0).toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
-                  </span>
+                  <span className="font-bold text-slate-900">R$ {formatCurrency(c.valor)}</span>
                 </div>
               ))}
             </div>
@@ -350,7 +349,7 @@ export default function Dashboard() {
                 </div>
                 <div className="text-right">
                   <p className="font-bold text-slate-900">
-                    R$ {(pol.valor_liquido || pol.premium_amount)?.toLocaleString('pt-BR')}
+                    R$ {formatCurrency(pol.valor_liquido || pol.premium_amount)}
                   </p>
                   <span
                     className={`text-[10px] px-2 py-0.5 rounded-full font-bold ${pol.status === 'Ativa' ? 'bg-emerald-100 text-emerald-800' : 'bg-amber-100 text-amber-800'}`}
