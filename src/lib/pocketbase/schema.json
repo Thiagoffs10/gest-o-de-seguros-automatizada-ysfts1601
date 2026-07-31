@@ -1,5 +1,5 @@
 {
-  "generatedAt": "2026-07-30T22:58:37.287Z",
+  "generatedAt": "2026-07-31T00:29:18.186Z",
   "collections": [
     {
       "name": "users",
@@ -380,6 +380,12 @@
         {
           "name": "comissao_recebida",
           "type": "bool",
+          "required": false,
+          "system": false
+        },
+        {
+          "name": "chassi",
+          "type": "text",
           "required": false,
           "system": false
         }

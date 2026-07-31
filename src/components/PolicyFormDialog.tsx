@@ -28,6 +28,7 @@ const DEFAULT_FORM = {
   policy_number: '',
   tipo_de_seguro: 'Auto',
   placa: '',
+  chassi: '',
   modelo_veiculo: '',
   valor_bruto: 0,
   valor_liquido: 0,
@@ -86,6 +87,7 @@ export function PolicyFormDialog({
         policy_number: initialData.policy_number || '',
         tipo_de_seguro: initialData.tipo_de_seguro || initialData.coverage_type || 'Auto',
         placa: initialData.placa || '',
+        chassi: initialData.chassi || '',
         modelo_veiculo: initialData.modelo_veiculo || '',
         valor_bruto: initialData.valor_bruto || 0,
         valor_liquido: initialData.valor_liquido || initialData.premium_amount || 0,
@@ -217,6 +219,14 @@ export function PolicyFormDialog({
                   value={form.placa}
                   onChange={(e) => set('placa', e.target.value.toUpperCase())}
                   placeholder="ABC-1234"
+                />
+              </div>
+              <div>
+                <Label className="text-xs font-semibold">Chassi</Label>
+                <Input
+                  value={form.chassi}
+                  onChange={(e) => set('chassi', e.target.value.toUpperCase())}
+                  placeholder="9BWZZZ377VT004253"
                 />
               </div>
               <div>

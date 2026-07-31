@@ -67,6 +67,7 @@ export interface Policy {
   valor_bruto?: number
   valor_liquido?: number
   placa?: string
+  chassi?: string
   modelo_veiculo?: string
   start_date: string
   end_date: string

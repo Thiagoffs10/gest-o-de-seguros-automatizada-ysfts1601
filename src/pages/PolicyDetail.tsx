@@ -235,6 +235,10 @@ export default function PolicyDetail() {
                 <p className="font-semibold">{policy.placa || '-'}</p>
               </div>
               <div>
+                <p className="text-xs text-slate-500">Chassi</p>
+                <p className="font-semibold">{policy.chassi || '-'}</p>
+              </div>
+              <div>
                 <p className="text-xs text-slate-500">Modelo do Veículo</p>
                 <p className="font-semibold">{policy.modelo_veiculo || '-'}</p>
               </div>
