@@ -14,6 +14,7 @@ import { CommissionEditDialog, FinancialEditData } from '@/components/Commission
 import { useToast } from '@/hooks/use-toast'
 import { useRealtime } from '@/hooks/use-realtime'
 import { usePermissions } from '@/hooks/use-permissions'
+import { computePeriodFromFilters, isDateInPeriod } from '@/lib/date-filter'
 import {
   Select,
   SelectContent,
@@ -25,23 +26,6 @@ import {
 const calcNetCommission = (p: Policy) => (p.commission || 0) - (p.iss || 0)
 const fmtMoney = (v: number) =>
   v.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })
-
-const MONTH_NAMES = [
-  'Janeiro',
-  'Fevereiro',
-  'Março',
-  'Abril',
-  'Maio',
-  'Junho',
-  'Julho',
-  'Agosto',
-  'Setembro',
-  'Outubro',
-  'Novembro',
-  'Dezembro',
-]
-
-const formatBRDate = (d: string) => d.split('-').reverse().join('/')
 
 export default function Financial() {
   const { toast } = useToast()
@@ -85,23 +69,7 @@ export default function Financial() {
   useRealtime('policies', () => loadData())
   useRealtime('custos_fixos', () => loadData())
 
-  const isDateInPeriod = (dateStr?: string): boolean => {
-    if (!dateStr) return false
-    const d = String(dateStr).split(' ')[0]
-    if (filters.dateFrom && filters.dateTo) {
-      return d >= filters.dateFrom && d <= filters.dateTo
-    }
-    if (filters.dateFrom && d < filters.dateFrom) return false
-    if (filters.dateTo && d > filters.dateTo) return false
-    if (filters.year) {
-      if (!d.startsWith(filters.year)) return false
-      if (filters.month) {
-        const m = String(filters.month).padStart(2, '0')
-        if (!d.startsWith(`${filters.year}-${m}`)) return false
-      }
-    }
-    return true
-  }
+  const period = useMemo(() => computePeriodFromFilters(filters), [filters])
 
   const applyNonDateFilters = (p: Policy): boolean => {
     if (statusFilter !== 'ALL' && p.status !== statusFilter) return false
@@ -119,8 +87,8 @@ export default function Financial() {
   }
 
   const policies = useMemo(
-    () => allPolicies.filter((p) => applyNonDateFilters(p) && isDateInPeriod(p.start_date)),
-    [allPolicies, filters, statusFilter, commFilter],
+    () => allPolicies.filter((p) => applyNonDateFilters(p) && isDateInPeriod(p.start_date, period)),
+    [allPolicies, filters, period, statusFilter, commFilter],
   )
 
   const tablePolicies = useMemo(
@@ -128,19 +96,7 @@ export default function Financial() {
     [allPolicies, statusFilter, commFilter, filters],
   )
 
-  const periodLabel = useMemo(() => {
-    if (filters.dateFrom && filters.dateTo) {
-      return `${formatBRDate(filters.dateFrom)} a ${formatBRDate(filters.dateTo)}`
-    }
-    if (filters.month && filters.year) {
-      return `${MONTH_NAMES[parseInt(filters.month) - 1]} ${filters.year}`
-    }
-    if (filters.year) {
-      return `Ano de ${filters.year}`
-    }
-    const now = new Date()
-    return `${MONTH_NAMES[now.getMonth()]} ${now.getFullYear()}`
-  }, [filters])
+  const periodLabel = period.label
 
   const totalGross = policies.reduce((s, p) => s + (p.valor_bruto || 0), 0)
   const totalNet = policies.reduce((s, p) => s + (p.valor_liquido || p.premium_amount || 0), 0)
@@ -149,7 +105,7 @@ export default function Financial() {
       (p) =>
         p.comissao_recebida &&
         p.data_recebimento_comissao &&
-        isDateInPeriod(p.data_recebimento_comissao),
+        isDateInPeriod(p.data_recebimento_comissao, period),
     )
     .reduce((s, p) => s + calcNetCommission(p), 0)
   const commPending = tablePolicies
@@ -169,7 +125,7 @@ export default function Financial() {
         (p.valor_repasse || 0) > 0 &&
         p.pago_parceiro &&
         p.data_pagamento_parceiro &&
-        isDateInPeriod(p.data_pagamento_parceiro),
+        isDateInPeriod(p.data_pagamento_parceiro, period),
     )
     .reduce((s, p) => s + (p.valor_repasse || 0), 0)
   const repassePending = tablePolicies
@@ -182,7 +138,7 @@ export default function Financial() {
     )
     .reduce((s, p) => s + (p.valor_repasse || 0), 0)
   const totalCustos = custosFixos
-    .filter((c) => isDateInPeriod(c.data))
+    .filter((c) => isDateInPeriod(c.data, period))
     .reduce((s, c) => s + (c.valor || 0), 0)
   const lucroLiquido = commReceived - repassePaid - totalCustos
 

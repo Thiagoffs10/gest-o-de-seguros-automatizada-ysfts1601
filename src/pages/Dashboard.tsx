@@ -21,6 +21,7 @@ import { Button } from '@/components/ui/button'
 import { SecretsGuideDialog } from '@/components/SecretsGuideDialog'
 import { useRealtime } from '@/hooks/use-realtime'
 import { formatCurrency } from '@/lib/utils'
+import { computePeriod, isDateInPeriod } from '@/lib/date-filter'
 import {
   BarChart,
   Bar,
@@ -32,21 +33,6 @@ import {
   Pie,
   Cell,
 } from 'recharts'
-
-const MONTH_NAMES = [
-  'Janeiro',
-  'Fevereiro',
-  'Março',
-  'Abril',
-  'Maio',
-  'Junho',
-  'Julho',
-  'Agosto',
-  'Setembro',
-  'Outubro',
-  'Novembro',
-  'Dezembro',
-]
 
 export default function Dashboard() {
   const navigate = useNavigate()
@@ -95,11 +81,10 @@ export default function Dashboard() {
     [policies],
   )
 
-  const isDateInMonth = (dateStr?: string): boolean => {
-    if (!dateStr) return false
-    const d = String(dateStr).split(' ')[0]
-    return d.startsWith(selectedMonth)
-  }
+  const period = useMemo(() => {
+    const [y, m] = selectedMonth.split('-')
+    return computePeriod(m, y)
+  }, [selectedMonth])
 
   const coverageTypes = ['Auto', 'Vida', 'Residencial', 'Empresarial', 'Saúde', 'Outros']
   const pieData = coverageTypes
@@ -116,7 +101,7 @@ export default function Dashboard() {
         (p) =>
           p.comissao_recebida &&
           p.data_recebimento_comissao &&
-          isDateInMonth(p.data_recebimento_comissao),
+          isDateInPeriod(p.data_recebimento_comissao, period),
       )
       .reduce((sum, p) => sum + ((p.commission || 0) - (p.iss || 0)), 0)
     const paidRepasses = policies
@@ -127,12 +112,12 @@ export default function Dashboard() {
           (p.valor_repasse || 0) > 0 &&
           p.pago_parceiro &&
           p.data_pagamento_parceiro &&
-          isDateInMonth(p.data_pagamento_parceiro),
+          isDateInPeriod(p.data_pagamento_parceiro, period),
       )
       .reduce((sum, p) => sum + (p.valor_repasse || 0), 0)
     const lucroBruto = receivedCommissions - paidRepasses
 
-    const monthCustos = custosFixos.filter((c) => isDateInMonth(c.data))
+    const monthCustos = custosFixos.filter((c) => isDateInPeriod(c.data, period))
     const custosFixosMes = monthCustos.reduce((sum, c) => sum + (c.valor || 0), 0)
     const lucroLiquido = lucroBruto - custosFixosMes
 
@@ -142,7 +127,7 @@ export default function Dashboard() {
       lucroLiquido,
       topCustos: [...monthCustos].sort((a, b) => (b.valor || 0) - (a.valor || 0)).slice(0, 5),
     }
-  }, [policies, custosFixos, selectedMonth])
+  }, [policies, custosFixos, period])
 
   const monthlyData = useMemo(() => {
     const months = [
@@ -168,8 +153,7 @@ export default function Dashboard() {
     return months.map((m, i) => ({ month: m, value: counts[i] }))
   }, [policies])
 
-  const [year, monthNum] = selectedMonth.split('-').map(Number)
-  const periodLabel = `${MONTH_NAMES[monthNum - 1]} ${year}`
+  const periodLabel = period.label
 
   if (loading)
     return <div className="text-slate-500 py-8 text-center">Carregando informações...</div>

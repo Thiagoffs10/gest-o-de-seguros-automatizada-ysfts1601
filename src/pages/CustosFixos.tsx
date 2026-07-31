@@ -33,6 +33,7 @@ import { useRealtime } from '@/hooks/use-realtime'
 import { usePermissions } from '@/hooks/use-permissions'
 import { getErrorMessage } from '@/lib/pocketbase/errors'
 import { YEARS, MONTHS } from '@/lib/constants'
+import { computePeriod, isDateInPeriod, buildPocketBaseDateFilter } from '@/lib/date-filter'
 
 type SortField = 'data' | 'valor'
 type SortDir = 'asc' | 'desc'
@@ -47,27 +48,8 @@ const CATEGORIA_COLORS: Record<string, string> = {
   Outros: 'bg-slate-100 text-slate-800',
 }
 
-const MONTH_NAMES = [
-  'Janeiro',
-  'Fevereiro',
-  'Março',
-  'Abril',
-  'Maio',
-  'Junho',
-  'Julho',
-  'Agosto',
-  'Setembro',
-  'Outubro',
-  'Novembro',
-  'Dezembro',
-]
-
 const fmt = (v: number) =>
   v.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })
-
-const formatBRDate = (d: string) => d.split('-').reverse().join('/')
-
-const getLastDay = (year: number, month: number) => new Date(year, month, 0).getDate()
 
 export default function CustosFixos() {
   const { toast } = useToast()
@@ -86,40 +68,21 @@ export default function CustosFixos() {
   const [sortDir, setSortDir] = useState<SortDir>('desc')
   const [loading, setLoading] = useState(true)
 
-  const effectivePeriod = useMemo(() => {
-    if (dateFrom && dateTo) {
-      return {
-        start: dateFrom,
-        end: dateTo,
-        label: `${formatBRDate(dateFrom)} a ${formatBRDate(dateTo)}`,
-      }
-    }
-    if (month && year) {
-      const m = String(month).padStart(2, '0')
-      const lastDay = getLastDay(parseInt(year), parseInt(month))
-      return {
-        start: `${year}-${m}-01`,
-        end: `${year}-${m}-${String(lastDay).padStart(2, '0')}`,
-        label: `${MONTH_NAMES[parseInt(month) - 1]} ${year}`,
-      }
-    }
-    if (year) {
-      return { start: `${year}-01-01`, end: `${year}-12-31`, label: `Ano de ${year}` }
-    }
-    const now = new Date()
-    const m = String(now.getMonth() + 1).padStart(2, '0')
-    const lastDay = getLastDay(now.getFullYear(), now.getMonth() + 1)
-    return {
-      start: `${now.getFullYear()}-${m}-01`,
-      end: `${now.getFullYear()}-${m}-${String(lastDay).padStart(2, '0')}`,
-      label: `${MONTH_NAMES[now.getMonth()]} ${now.getFullYear()}`,
-    }
-  }, [month, year, dateFrom, dateTo])
+  const effectivePeriod = useMemo(
+    () =>
+      computePeriod(
+        month || undefined,
+        year || undefined,
+        dateFrom || undefined,
+        dateTo || undefined,
+      ),
+    [month, year, dateFrom, dateTo],
+  )
 
   const loadData = useCallback(async () => {
     setLoading(true)
     try {
-      const costFilter = `data >= "${effectivePeriod.start}" && data <= "${effectivePeriod.end}"`
+      const costFilter = buildPocketBaseDateFilter('data', effectivePeriod)
       const [costsData, pols] = await Promise.all([getCustosFixos(costFilter), getPolicies('')])
       setCosts(costsData)
       setPolicies(pols)
@@ -127,7 +90,7 @@ export default function CustosFixos() {
       /* intentionally ignored */
     }
     setLoading(false)
-  }, [effectivePeriod.start, effectivePeriod.end])
+  }, [effectivePeriod])
 
   useEffect(() => {
     loadData()
@@ -135,14 +98,10 @@ export default function CustosFixos() {
   useRealtime('custos_fixos', () => loadData())
   useRealtime('policies', () => loadData())
 
-  const isInPeriod = (dateStr?: string) => {
-    if (!dateStr) return false
-    const d = String(dateStr).split(' ')[0]
-    return d >= effectivePeriod.start && d <= effectivePeriod.end
-  }
-
   const totalReceitas = policies
-    .filter((p) => p.comissao_recebida && isInPeriod(p.data_recebimento_comissao))
+    .filter(
+      (p) => p.comissao_recebida && isDateInPeriod(p.data_recebimento_comissao, effectivePeriod),
+    )
     .reduce((s, p) => s + (p.commission || 0) - (p.iss || 0), 0)
   const totalRepasses = policies
     .filter(
@@ -151,7 +110,7 @@ export default function CustosFixos() {
         (p.parceiro || p.expand?.parceiro) &&
         (p.valor_repasse || 0) > 0 &&
         p.pago_parceiro &&
-        isInPeriod(p.data_pagamento_parceiro),
+        isDateInPeriod(p.data_pagamento_parceiro, effectivePeriod),
     )
     .reduce((s, p) => s + (p.valor_repasse || 0), 0)
   const totalCustos = costs.reduce((s, c) => s + (c.valor || 0), 0)
