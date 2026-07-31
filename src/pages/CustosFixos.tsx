@@ -1,5 +1,5 @@
 import { useEffect, useState, useCallback, useMemo } from 'react'
-import { Plus, Pencil, Trash2, ArrowUpDown, Filter } from 'lucide-react'
+import { Plus, Pencil, Trash2, ArrowUpDown } from 'lucide-react'
 import {
   getCustosFixos,
   createCustoFixo,
@@ -7,19 +7,10 @@ import {
   deleteCustoFixo,
 } from '@/services/custos-fixos'
 import { getPolicies } from '@/services/policies'
-import { CustoFixo, Policy } from '@/types'
+import { CustoFixo, Policy, FilterState } from '@/types'
 import { Button } from '@/components/ui/button'
 import { Card } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
-import { Input } from '@/components/ui/input'
-import { Label } from '@/components/ui/label'
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from '@/components/ui/select'
 import {
   Dialog,
   DialogContent,
@@ -28,12 +19,16 @@ import {
   DialogFooter,
 } from '@/components/ui/dialog'
 import { CustoFixoFormDialog } from '@/components/CustoFixoFormDialog'
+import { GlobalFilters } from '@/components/GlobalFilters'
 import { useToast } from '@/hooks/use-toast'
 import { useRealtime } from '@/hooks/use-realtime'
 import { usePermissions } from '@/hooks/use-permissions'
 import { getErrorMessage } from '@/lib/pocketbase/errors'
-import { YEARS, MONTHS } from '@/lib/constants'
-import { computePeriod, isDateInPeriod, buildPocketBaseDateFilter } from '@/lib/date-filter'
+import {
+  computePeriodFromFilters,
+  isDateInPeriod,
+  buildPocketBaseDateFilter,
+} from '@/lib/date-filter'
 
 type SortField = 'data' | 'valor'
 type SortDir = 'asc' | 'desc'
@@ -56,10 +51,10 @@ export default function CustosFixos() {
   const { can } = usePermissions()
   const [costs, setCosts] = useState<CustoFixo[]>([])
   const [policies, setPolicies] = useState<Policy[]>([])
-  const [month, setMonth] = useState(String(new Date().getMonth() + 1))
-  const [year, setYear] = useState(String(new Date().getFullYear()))
-  const [dateFrom, setDateFrom] = useState('')
-  const [dateTo, setDateTo] = useState('')
+  const [filters, setFilters] = useState<FilterState>({
+    year: String(new Date().getFullYear()),
+    month: String(new Date().getMonth() + 1),
+  })
   const [isModalOpen, setIsModalOpen] = useState(false)
   const [editingItem, setEditingItem] = useState<Partial<CustoFixo> | null>(null)
   const [isEditOpen, setIsEditOpen] = useState(false)
@@ -68,16 +63,7 @@ export default function CustosFixos() {
   const [sortDir, setSortDir] = useState<SortDir>('desc')
   const [loading, setLoading] = useState(true)
 
-  const effectivePeriod = useMemo(
-    () =>
-      computePeriod(
-        month || undefined,
-        year || undefined,
-        dateFrom || undefined,
-        dateTo || undefined,
-      ),
-    [month, year, dateFrom, dateTo],
-  )
+  const effectivePeriod = useMemo(() => computePeriodFromFilters(filters), [filters])
 
   const loadData = useCallback(async () => {
     setLoading(true)
@@ -137,38 +123,6 @@ export default function CustosFixos() {
       setSortField(field)
       setSortDir('desc')
     }
-  }
-
-  const handleMonthChange = (v: string) => {
-    setMonth(v)
-    setDateFrom('')
-    setDateTo('')
-  }
-  const handleYearChange = (v: string) => {
-    setYear(v)
-    setDateFrom('')
-    setDateTo('')
-  }
-  const handleDateFromChange = (v: string) => {
-    setDateFrom(v)
-    if (v && dateTo) {
-      setMonth('')
-      setYear('')
-    }
-  }
-  const handleDateToChange = (v: string) => {
-    setDateTo(v)
-    if (v && dateFrom) {
-      setMonth('')
-      setYear('')
-    }
-  }
-  const handleClearFilters = () => {
-    const now = new Date()
-    setMonth(String(now.getMonth() + 1))
-    setYear(String(now.getFullYear()))
-    setDateFrom('')
-    setDateTo('')
   }
 
   const handleCreate = async (formData: any) => {
@@ -247,59 +201,18 @@ export default function CustosFixos() {
         </Card>
       </div>
 
-      <div className="flex flex-wrap items-end gap-3 p-4 bg-slate-50 rounded-lg border">
-        <div className="flex items-center gap-2 text-sm font-semibold text-slate-600 mr-2">
-          <Filter className="w-4 h-4" /> Filtros:
-        </div>
-        <div>
-          <Label className="text-xs">Mês</Label>
-          <Select value={month} onValueChange={handleMonthChange}>
-            <SelectTrigger className="w-[130px]">
-              <SelectValue placeholder="Mês" />
-            </SelectTrigger>
-            <SelectContent>
-              {MONTHS.map((m) => (
-                <SelectItem key={m.value} value={m.value}>
-                  {m.label}
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
-        </div>
-        <div>
-          <Label className="text-xs">Ano</Label>
-          <Select value={year} onValueChange={handleYearChange}>
-            <SelectTrigger className="w-[100px]">
-              <SelectValue placeholder="Ano" />
-            </SelectTrigger>
-            <SelectContent>
-              {YEARS.map((y) => (
-                <SelectItem key={y} value={y}>
-                  {y}
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
-        </div>
-        <div>
-          <Label className="text-xs">De</Label>
-          <Input
-            type="date"
-            value={dateFrom}
-            onChange={(e) => handleDateFromChange(e.target.value)}
-            className="w-[150px]"
-          />
-        </div>
-        <div>
-          <Label className="text-xs">Até</Label>
-          <Input
-            type="date"
-            value={dateTo}
-            onChange={(e) => handleDateToChange(e.target.value)}
-            className="w-[150px]"
-          />
-        </div>
-        <Button variant="outline" size="sm" onClick={handleClearFilters}>
+      <div className="flex flex-wrap items-center justify-between gap-2">
+        <GlobalFilters filters={filters} onFilterChange={setFilters} />
+        <Button
+          variant="outline"
+          size="sm"
+          onClick={() => {
+            setFilters({
+              year: String(new Date().getFullYear()),
+              month: String(new Date().getMonth() + 1),
+            })
+          }}
+        >
           Limpar filtros
         </Button>
       </div>
