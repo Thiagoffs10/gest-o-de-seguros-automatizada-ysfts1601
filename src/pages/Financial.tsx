@@ -124,11 +124,11 @@ export default function Financial() {
   } = useMemo(() => {
     const totalGross = computeTotalGross(policies)
     const totalNet = computeTotalNet(policies)
-    const commReceived = computeReceivedCommissions(tablePolicies, period)
-    const commPending = computePendingCommissions(tablePolicies)
+    const commReceived = computeReceivedCommissions(allPolicies, period)
+    const commPending = computePendingCommissions(allPolicies)
     const partnerPols = getPartnerPolicies(tablePolicies)
-    const repassePaid = computePaidRepasses(tablePolicies, period)
-    const repassePending = computePendingRepasses(tablePolicies)
+    const repassePaid = computePaidRepasses(allPolicies, period)
+    const repassePending = computePendingRepasses(allPolicies)
     const totalCustos = computeCosts(custosFixos, period)
     const lucroLiquido = computeNetProfit(commReceived, repassePaid, totalCustos)
     return {
@@ -142,7 +142,7 @@ export default function Financial() {
       totalCustos,
       lucroLiquido,
     }
-  }, [policies, tablePolicies, custosFixos, period])
+  }, [policies, allPolicies, tablePolicies, custosFixos, period])
 
   const handleSave = async (data: FinancialEditData) => {
     if (!editPolicy) return
@@ -186,7 +186,7 @@ export default function Financial() {
         periodLabel={periodLabel}
       />
 
-      <DevTrackingPanel policies={tablePolicies} period={period} totalReceitas={commReceived} />
+      <DevTrackingPanel policies={allPolicies} period={period} totalReceitas={commReceived} />
 
       <div className="flex flex-wrap items-center justify-between gap-2">
         <GlobalFilters

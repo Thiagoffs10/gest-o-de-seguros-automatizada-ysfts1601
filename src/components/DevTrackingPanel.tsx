@@ -8,19 +8,22 @@ interface Props {
   totalReceitas: number
 }
 
-const TRACKING_NUMBERS = ['2310312747550', '5413279539']
+const TRACKING_CLIENT_NAMES = ['THIAGO FELIPE', 'JOSE EUSTAQUIO']
 
 export function DevTrackingPanel({ policies, period, totalReceitas }: Props) {
   if (!import.meta.env.DEV) return null
 
-  const tracked = policies.filter((p) => TRACKING_NUMBERS.includes(p.policy_number))
+  const tracked = policies.filter((p) => {
+    const name = (p.expand?.client?.name || '').toUpperCase()
+    return TRACKING_CLIENT_NAMES.some((n) => name.includes(n))
+  })
   if (tracked.length === 0) return null
 
   return (
     <Card className="border-amber-300 bg-amber-50/50">
       <CardHeader>
         <CardTitle className="text-sm text-amber-800">
-          🔍 Painel de Rastreamento (DEV) — Apólices: {TRACKING_NUMBERS.join(', ')}
+          🔍 Painel de Rastreamento (DEV) — Clientes: {TRACKING_CLIENT_NAMES.join(', ')}
         </CardTitle>
       </CardHeader>
       <CardContent className="space-y-3 text-xs font-mono">
@@ -44,6 +47,7 @@ export function DevTrackingPanel({ policies, period, totalReceitas }: Props) {
           return (
             <div key={p.id} className="border-t border-amber-200 pt-2 space-y-1">
               <div>
+                <strong>Cliente:</strong> {p.expand?.client?.name || '-'} |{' '}
                 <strong>Apólice:</strong> {p.policy_number} (id: {p.id})
               </div>
               <div>
