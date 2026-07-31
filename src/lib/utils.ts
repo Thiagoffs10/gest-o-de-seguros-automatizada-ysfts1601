@@ -19,7 +19,8 @@ export function formatCurrency(value: number | string | undefined | null): strin
   if (value === undefined || value === null || value === '') return '0,00'
   const num = typeof value === 'number' ? value : Number(value)
   if (isNaN(num)) return '0,00'
-  return num.toLocaleString('pt-BR', {
+  const rounded = Math.round(num * 100) / 100
+  return rounded.toLocaleString('pt-BR', {
     minimumFractionDigits: 2,
     maximumFractionDigits: 2,
   })

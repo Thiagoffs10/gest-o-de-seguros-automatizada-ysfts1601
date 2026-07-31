@@ -80,6 +80,7 @@ export interface Policy {
   tipo_de_venda?: 'Produção Própria' | 'Parceiro' | 'Indicação'
   observacao_indicacao?: string
   parceiro?: string
+  percentual_repasse?: number
   valor_repasse?: number
   data_pagamento_parceiro?: string
   pago_parceiro?: boolean

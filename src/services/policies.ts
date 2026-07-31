@@ -24,7 +24,12 @@ export function preparePolicyPayload(data: Partial<Policy> & Record<string, any>
       ? Number(data.commission)
       : Math.round(((valorLiquido * rawCommPercent) / 100) * 100) / 100
   const rawIss = data.iss != null ? Number(data.iss) : 0
-  const rawRepasse = data.valor_repasse != null ? Number(data.valor_repasse) : 0
+  const rawPercentualRepasse =
+    data.percentual_repasse != null ? Number(data.percentual_repasse) : 50
+  const rawRepasse =
+    data.valor_repasse != null
+      ? Number(data.valor_repasse)
+      : Math.round(((valorLiquido * rawPercentualRepasse) / 100) * 100) / 100
 
   const payload: Record<string, any> = {
     ...data,
@@ -33,9 +38,10 @@ export function preparePolicyPayload(data: Partial<Policy> & Record<string, any>
     premium_amount: Math.round(premiumAmount * 100) / 100,
     valor_bruto: Math.round(valorBruto * 100) / 100,
     valor_liquido: Math.round(valorLiquido * 100) / 100,
-    commission_percent: rawCommPercent,
+    commission_percent: Math.round(rawCommPercent * 100) / 100,
     commission: Math.round(rawCommission * 100) / 100,
     iss: Math.round(rawIss * 100) / 100,
+    percentual_repasse: Math.round(rawPercentualRepasse * 100) / 100,
     valor_repasse: Math.round(rawRepasse * 100) / 100,
   }
 
@@ -60,6 +66,8 @@ export function preparePolicyPayload(data: Partial<Policy> & Record<string, any>
     (typeof payload.parceiro === 'string' && payload.parceiro.trim() === '')
   ) {
     payload.parceiro = null
+    payload.percentual_repasse = 0
+    payload.valor_repasse = 0
   }
 
   // Dates & financial tracking

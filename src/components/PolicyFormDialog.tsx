@@ -40,6 +40,7 @@ const DEFAULT_FORM = {
   tipo_de_venda: 'Produção Própria',
   observacao_indicacao: '',
   parceiro: '',
+  percentual_repasse: 50,
   valor_repasse: 0,
   notes: '',
   start_date: new Date().toISOString().split('T')[0],
@@ -102,6 +103,18 @@ export function PolicyFormDialog({
           : Math.round(((vLiquido * commPercent) / 100) * 100) / 100
       const issVal = initialData.iss != null ? Number(initialData.iss) : 0
 
+      const pRepasse =
+        initialData.percentual_repasse != null
+          ? Number(initialData.percentual_repasse)
+          : initialData.valor_repasse != null && vLiquido > 0
+            ? Math.round((Number(initialData.valor_repasse) / vLiquido) * 100 * 100) / 100
+            : 50
+
+      const vRepasse =
+        initialData.valor_repasse != null
+          ? Number(initialData.valor_repasse)
+          : Math.round(((vLiquido * pRepasse) / 100) * 100) / 100
+
       setForm({
         ...DEFAULT_FORM,
         client: initialData.client || (exp?.client?.id ?? ''),
@@ -119,7 +132,8 @@ export function PolicyFormDialog({
         tipo_de_venda: initialData.tipo_de_venda || 'Produção Própria',
         observacao_indicacao: initialData.observacao_indicacao || '',
         parceiro: initialData.parceiro || (exp?.parceiro?.id ?? ''),
-        valor_repasse: initialData.valor_repasse != null ? Number(initialData.valor_repasse) : 0,
+        percentual_repasse: pRepasse,
+        valor_repasse: vRepasse,
         notes: initialData.notes || '',
         start_date: formatDateForInput(initialData.start_date) || DEFAULT_FORM.start_date,
         end_date: formatDateForInput(initialData.end_date) || DEFAULT_FORM.end_date,
@@ -149,6 +163,7 @@ export function PolicyFormDialog({
   const impostoPercentual = selectedSeguradora?.imposto_percentual ?? 0
   const comissaoLiquida = Math.round(((form.commission || 0) - (form.iss || 0)) * 100) / 100
 
+  // 1. Calculate Gross Commission based on Valor Líquido and Commission %
   useEffect(() => {
     if (skipAuto.current) return
     const v = form.valor_liquido != null ? Number(form.valor_liquido) : 0
@@ -157,6 +172,7 @@ export function PolicyFormDialog({
     setForm((prev: any) => ({ ...prev, commission: comm }))
   }, [form.valor_liquido, form.commission_percent])
 
+  // 2. Calculate ISS based on Gross Commission and Seguradora Imposto %
   useEffect(() => {
     if (skipAuto.current) return
     const comm = form.commission != null ? Number(form.commission) : 0
@@ -164,20 +180,24 @@ export function PolicyFormDialog({
     setForm((prev: any) => ({ ...prev, iss: issVal }))
   }, [form.commission, form.seguradora, impostoPercentual])
 
+  // 3. Calculate Repasse to Partner based on Valor Líquido and % Repasse
   useEffect(() => {
     if (skipAuto.current) return
-    if (form.tipo_de_venda === 'Parceiro' && form.parceiro && form.valor_liquido) {
-      const repasse = Math.round(Number(form.valor_liquido) * 0.5 * 100) / 100
+    if (form.tipo_de_venda === 'Parceiro') {
+      const vLiquido = form.valor_liquido != null ? Number(form.valor_liquido) : 0
+      const pRepasse = form.percentual_repasse != null ? Number(form.percentual_repasse) : 0
+      const repasse = Math.round(((vLiquido * pRepasse) / 100) * 100) / 100
       setForm((prev: any) => ({ ...prev, valor_repasse: repasse }))
     }
-  }, [form.tipo_de_venda, form.parceiro, form.valor_liquido])
+  }, [form.tipo_de_venda, form.valor_liquido, form.percentual_repasse])
 
   const handleStartDateChange = (value: string) => {
     set('start_date', value)
-    if (value) {
-      const d = new Date(value + 'T00:00:00')
-      d.setFullYear(d.getFullYear() + 1)
-      set('end_date', d.toISOString().split('T')[0])
+    if (value && /^\d{4}-\d{2}-\d{2}$/.test(value)) {
+      const parts = value.split('-')
+      const nextYear = parseInt(parts[0], 10) + 1
+      const nextYearStr = `${nextYear}-${parts[1]}-${parts[2]}`
+      set('end_date', nextYearStr)
     }
   }
 
@@ -188,6 +208,10 @@ export function PolicyFormDialog({
     if (!form.policy_number?.trim()) errs.policy_number = 'Número da apólice é obrigatório'
     if (!form.start_date) errs.start_date = 'Data de início é obrigatória'
     if (!form.end_date) errs.end_date = 'Data de fim é obrigatória'
+    if (form.tipo_de_venda === 'Parceiro' && !form.parceiro) {
+      errs.parceiro = 'Selecione um parceiro'
+    }
+
     if (Object.keys(errs).length > 0) {
       setValidationErrors(errs)
       return
@@ -224,6 +248,7 @@ export function PolicyFormDialog({
             />
             <FieldErr message={err('client') || validationErrors.client} />
           </div>
+
           <div className="grid grid-cols-2 gap-2">
             <div>
               <Label className="text-xs font-semibold">Nº Apólice Seguradora *</Label>
@@ -250,6 +275,7 @@ export function PolicyFormDialog({
               </Select>
             </div>
           </div>
+
           <div>
             <Label className="text-xs font-semibold">Tipo de Seguro</Label>
             <Select value={form.tipo_de_seguro} onValueChange={(v) => set('tipo_de_seguro', v)}>
@@ -265,6 +291,7 @@ export function PolicyFormDialog({
               </SelectContent>
             </Select>
           </div>
+
           {form.tipo_de_seguro === 'Auto' && (
             <div className="grid grid-cols-2 gap-2">
               <div>
@@ -292,6 +319,7 @@ export function PolicyFormDialog({
               </div>
             </div>
           )}
+
           <div className="grid grid-cols-2 gap-2">
             <div>
               <Label className="text-xs font-semibold">Valor Bruto (R$)</Label>
@@ -312,6 +340,7 @@ export function PolicyFormDialog({
               />
             </div>
           </div>
+
           <div className="grid grid-cols-2 gap-2">
             <div>
               <Label className="text-xs font-semibold">% Comissão</Label>
@@ -332,6 +361,7 @@ export function PolicyFormDialog({
               />
             </div>
           </div>
+
           <div className="grid grid-cols-2 gap-2">
             <div>
               <Label className="text-xs font-semibold">ISS (R$)</Label>
@@ -354,6 +384,7 @@ export function PolicyFormDialog({
               />
             </div>
           </div>
+
           <div>
             <Label className="text-xs font-semibold">Tipo de Venda</Label>
             <Select value={form.tipo_de_venda} onValueChange={(v) => set('tipo_de_venda', v)}>
@@ -369,6 +400,7 @@ export function PolicyFormDialog({
               </SelectContent>
             </Select>
           </div>
+
           {form.tipo_de_venda === 'Indicação' && (
             <div>
               <Label className="text-xs font-semibold">Observação (Quem indicou)</Label>
@@ -378,10 +410,11 @@ export function PolicyFormDialog({
               />
             </div>
           )}
+
           {form.tipo_de_venda === 'Parceiro' && (
-            <>
+            <div className="space-y-3 p-3 bg-slate-50 border rounded-md">
               <div>
-                <Label className="text-xs font-semibold">Parceiro</Label>
+                <Label className="text-xs font-semibold">Parceiro *</Label>
                 <Select value={form.parceiro} onValueChange={(v) => set('parceiro', v)}>
                   <SelectTrigger>
                     <SelectValue placeholder="Selecione o parceiro" />
@@ -394,37 +427,74 @@ export function PolicyFormDialog({
                     ))}
                   </SelectContent>
                 </Select>
+                <FieldErr message={err('parceiro') || validationErrors.parceiro} />
               </div>
-              <div>
-                <Label className="text-xs font-semibold">Valor Repasse (R$)</Label>
-                <Input
-                  type="number"
-                  step="0.01"
-                  value={form.valor_repasse}
-                  onChange={(e) => set('valor_repasse', Number(e.target.value))}
-                />
-                <p className="text-xs text-slate-500 mt-0.5">50% do valor líquido (editável)</p>
+              <div className="grid grid-cols-2 gap-2">
+                <div>
+                  <Label className="text-xs font-semibold">Percentual de Repasse (%)</Label>
+                  <Input
+                    type="number"
+                    step="0.01"
+                    min="0"
+                    max="100"
+                    value={form.percentual_repasse}
+                    onChange={(e) => set('percentual_repasse', Number(e.target.value))}
+                    placeholder="50"
+                  />
+                </div>
+                <div>
+                  <Label className="text-xs font-semibold">Valor Repasse (R$)</Label>
+                  <Input
+                    type="number"
+                    step="0.01"
+                    value={form.valor_repasse}
+                    onChange={(e) => {
+                      const val = Number(e.target.value)
+                      set('valor_repasse', val)
+                      if (form.valor_liquido > 0) {
+                        const calculatedP =
+                          Math.round((val / Number(form.valor_liquido)) * 100 * 100) / 100
+                        setForm((prev: any) => ({
+                          ...prev,
+                          percentual_repasse: calculatedP,
+                          valor_repasse: val,
+                        }))
+                      }
+                    }}
+                  />
+                </div>
               </div>
-            </>
+              <p className="text-xs text-slate-500">
+                Calculado automaticamente: {form.percentual_repasse || 0}% de R${' '}
+                {formatCurrency(form.valor_liquido || 0)} = R${' '}
+                {formatCurrency(form.valor_repasse || 0)}
+              </p>
+            </div>
           )}
+
           <div className="grid grid-cols-2 gap-2">
             <div>
-              <Label className="text-xs font-semibold">Data Início</Label>
+              <Label className="text-xs font-semibold">Data Início *</Label>
               <Input
                 type="date"
+                required
                 value={form.start_date}
                 onChange={(e) => handleStartDateChange(e.target.value)}
               />
+              <FieldErr message={err('start_date') || validationErrors.start_date} />
             </div>
             <div>
-              <Label className="text-xs font-semibold">Data Fim</Label>
+              <Label className="text-xs font-semibold">Data Fim *</Label>
               <Input
                 type="date"
+                required
                 value={form.end_date}
                 onChange={(e) => set('end_date', e.target.value)}
               />
+              <FieldErr message={err('end_date') || validationErrors.end_date} />
             </div>
           </div>
+
           <div>
             <Label className="text-xs font-semibold">Status</Label>
             <Select value={form.status} onValueChange={(v) => set('status', v)}>
@@ -439,6 +509,7 @@ export function PolicyFormDialog({
               </SelectContent>
             </Select>
           </div>
+
           <div>
             <Label className="text-xs font-semibold">Observações</Label>
             <Textarea
@@ -449,7 +520,8 @@ export function PolicyFormDialog({
               rows={2}
             />
           </div>
-          <DialogFooter>
+
+          <DialogFooter className="pt-2">
             <Button type="button" variant="outline" onClick={() => onOpenChange(false)}>
               Cancelar
             </Button>

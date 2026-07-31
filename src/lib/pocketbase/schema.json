@@ -1,5 +1,5 @@
 {
-  "generatedAt": "2026-07-31T01:54:14.201Z",
+  "generatedAt": "2026-07-31T02:27:13.191Z",
   "collections": [
     {
       "name": "users",
@@ -391,6 +391,12 @@
         },
         {
           "name": "iss",
+          "type": "number",
+          "required": false,
+          "system": false
+        },
+        {
+          "name": "percentual_repasse",
           "type": "number",
           "required": false,
           "system": false
