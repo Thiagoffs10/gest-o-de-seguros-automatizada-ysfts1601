@@ -98,23 +98,30 @@ export default function CustosFixos() {
   useRealtime('custos_fixos', () => loadData())
   useRealtime('policies', () => loadData())
 
-  const totalReceitas = policies
-    .filter(
-      (p) => p.comissao_recebida && isDateInPeriod(effectivePeriod, p.data_recebimento_comissao),
-    )
-    .reduce((s, p) => s + (p.commission || 0) - (p.iss || 0), 0)
-  const totalRepasses = policies
-    .filter(
-      (p) =>
-        p.tipo_de_venda === 'Parceiro' &&
-        (p.parceiro || p.expand?.parceiro) &&
-        (p.valor_repasse || 0) > 0 &&
-        p.pago_parceiro &&
-        isDateInPeriod(effectivePeriod, p.data_pagamento_parceiro),
-    )
-    .reduce((s, p) => s + (p.valor_repasse || 0), 0)
-  const totalCustos = costs.reduce((s, c) => s + (c.valor || 0), 0)
-  const lucroLiquido = totalReceitas - totalRepasses - totalCustos
+  const { totalReceitas, totalRepasses, totalCustos, lucroLiquido } = useMemo(() => {
+    const totalReceitas = policies
+      .filter(
+        (p) =>
+          p.comissao_recebida &&
+          p.data_recebimento_comissao &&
+          isDateInPeriod(effectivePeriod, p.data_recebimento_comissao),
+      )
+      .reduce((s, p) => s + (p.commission || 0) - (p.iss || 0), 0)
+    const totalRepasses = policies
+      .filter(
+        (p) =>
+          p.tipo_de_venda === 'Parceiro' &&
+          (p.parceiro || p.expand?.parceiro) &&
+          (p.valor_repasse || 0) > 0 &&
+          p.pago_parceiro &&
+          p.data_pagamento_parceiro &&
+          isDateInPeriod(effectivePeriod, p.data_pagamento_parceiro),
+      )
+      .reduce((s, p) => s + (p.valor_repasse || 0), 0)
+    const totalCustos = costs.reduce((s, c) => s + (c.valor || 0), 0)
+    const lucroLiquido = totalReceitas - totalRepasses - totalCustos
+    return { totalReceitas, totalRepasses, totalCustos, lucroLiquido }
+  }, [policies, costs, effectivePeriod])
 
   const sortedCosts = [...costs].sort((a, b) => {
     const cmp =

@@ -31,7 +31,20 @@ export function GlobalFilters({
   seguradoras,
 }: GlobalFiltersProps) {
   const update = (key: keyof FilterState, value: string) => {
-    onFilterChange({ ...filters, [key]: value || undefined })
+    const newFilters = { ...filters, [key]: value || undefined }
+    if ((key === 'dateFrom' || key === 'dateTo') && value) {
+      const df = key === 'dateFrom' ? value : filters.dateFrom
+      const dt = key === 'dateTo' ? value : filters.dateTo
+      if (df && dt) {
+        newFilters.month = undefined
+        newFilters.year = undefined
+      }
+    }
+    if ((key === 'month' || key === 'year') && value) {
+      newFilters.dateFrom = undefined
+      newFilters.dateTo = undefined
+    }
+    onFilterChange(newFilters)
   }
 
   return (

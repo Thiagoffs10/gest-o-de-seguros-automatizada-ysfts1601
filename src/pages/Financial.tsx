@@ -98,49 +98,72 @@ export default function Financial() {
 
   const periodLabel = period.label
 
-  const totalGross = policies.reduce((s, p) => s + (p.valor_bruto || 0), 0)
-  const totalNet = policies.reduce((s, p) => s + (p.valor_liquido || p.premium_amount || 0), 0)
-  const commReceived = tablePolicies
-    .filter(
-      (p) =>
-        p.comissao_recebida &&
-        p.data_recebimento_comissao &&
-        isDateInPeriod(period, p.data_recebimento_comissao),
-    )
-    .reduce((s, p) => s + calcNetCommission(p), 0)
-  const commPending = tablePolicies
-    .filter((p) => !p.comissao_recebida)
-    .reduce((s, p) => s + calcNetCommission(p), 0)
-  const partnerPols = tablePolicies.filter(
-    (p) =>
-      p.tipo_de_venda === 'Parceiro' &&
-      (p.parceiro || p.expand?.parceiro) &&
-      (p.valor_repasse || 0) > 0,
-  )
-  const repassePaid = tablePolicies
-    .filter(
-      (p) =>
-        p.tipo_de_venda === 'Parceiro' &&
-        (p.parceiro || p.expand?.parceiro) &&
-        (p.valor_repasse || 0) > 0 &&
-        p.pago_parceiro &&
-        p.data_pagamento_parceiro &&
-        isDateInPeriod(period, p.data_pagamento_parceiro),
-    )
-    .reduce((s, p) => s + (p.valor_repasse || 0), 0)
-  const repassePending = tablePolicies
-    .filter(
+  const {
+    totalGross,
+    totalNet,
+    commReceived,
+    commPending,
+    partnerPols,
+    repassePaid,
+    repassePending,
+    totalCustos,
+    lucroLiquido,
+  } = useMemo(() => {
+    const totalGross = policies.reduce((s, p) => s + (p.valor_bruto || 0), 0)
+    const totalNet = policies.reduce((s, p) => s + (p.valor_liquido || p.premium_amount || 0), 0)
+    const commReceived = tablePolicies
+      .filter(
+        (p) =>
+          p.comissao_recebida &&
+          p.data_recebimento_comissao &&
+          isDateInPeriod(period, p.data_recebimento_comissao),
+      )
+      .reduce((s, p) => s + calcNetCommission(p), 0)
+    const commPending = tablePolicies
+      .filter((p) => !p.comissao_recebida)
+      .reduce((s, p) => s + calcNetCommission(p), 0)
+    const partnerPols = tablePolicies.filter(
       (p) =>
         p.tipo_de_venda === 'Parceiro' &&
         (p.parceiro || p.expand?.parceiro) &&
-        (p.valor_repasse || 0) > 0 &&
-        !p.pago_parceiro,
+        (p.valor_repasse || 0) > 0,
     )
-    .reduce((s, p) => s + (p.valor_repasse || 0), 0)
-  const totalCustos = custosFixos
-    .filter((c) => isDateInPeriod(period, c.data))
-    .reduce((s, c) => s + (c.valor || 0), 0)
-  const lucroLiquido = commReceived - repassePaid - totalCustos
+    const repassePaid = tablePolicies
+      .filter(
+        (p) =>
+          p.tipo_de_venda === 'Parceiro' &&
+          (p.parceiro || p.expand?.parceiro) &&
+          (p.valor_repasse || 0) > 0 &&
+          p.pago_parceiro &&
+          p.data_pagamento_parceiro &&
+          isDateInPeriod(period, p.data_pagamento_parceiro),
+      )
+      .reduce((s, p) => s + (p.valor_repasse || 0), 0)
+    const repassePending = tablePolicies
+      .filter(
+        (p) =>
+          p.tipo_de_venda === 'Parceiro' &&
+          (p.parceiro || p.expand?.parceiro) &&
+          (p.valor_repasse || 0) > 0 &&
+          !p.pago_parceiro,
+      )
+      .reduce((s, p) => s + (p.valor_repasse || 0), 0)
+    const totalCustos = custosFixos
+      .filter((c) => isDateInPeriod(period, c.data))
+      .reduce((s, c) => s + (c.valor || 0), 0)
+    const lucroLiquido = commReceived - repassePaid - totalCustos
+    return {
+      totalGross,
+      totalNet,
+      commReceived,
+      commPending,
+      partnerPols,
+      repassePaid,
+      repassePending,
+      totalCustos,
+      lucroLiquido,
+    }
+  }, [policies, tablePolicies, custosFixos, period])
 
   const handleSave = async (data: FinancialEditData) => {
     if (!editPolicy) return

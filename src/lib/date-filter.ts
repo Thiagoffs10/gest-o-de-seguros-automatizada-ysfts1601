@@ -52,22 +52,6 @@ export function computePeriod(
       label: `${formatBRDate(dateFrom)} a ${formatBRDate(dateTo)}`,
     }
   }
-  if (dateFrom) {
-    return {
-      start: dateFrom,
-      end: dateFrom,
-      endInclusive: true,
-      label: formatBRDate(dateFrom),
-    }
-  }
-  if (dateTo) {
-    return {
-      start: dateTo,
-      end: dateTo,
-      endInclusive: true,
-      label: formatBRDate(dateTo),
-    }
-  }
   if (month && year) {
     const m = String(month).padStart(2, '0')
     return {
