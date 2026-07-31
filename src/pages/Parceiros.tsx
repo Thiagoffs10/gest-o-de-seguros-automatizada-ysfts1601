@@ -137,7 +137,7 @@ export default function Parceiros() {
       <div className="relative max-w-md">
         <Search className="w-4 h-4 absolute left-3 top-3 text-slate-400" />
         <Input
-          placeholder="Buscar por nome ou CPF..."
+          placeholder="Buscar por nome ou documento..."
           className="pl-9"
           value={search}
           onChange={(e) => {
@@ -154,7 +154,8 @@ export default function Parceiros() {
               <tr>
                 <th className="p-3.5">Cód.</th>
                 <th className="p-3.5">Nome</th>
-                <th className="p-3.5">CPF</th>
+                <th className="p-3.5">Tipo</th>
+                <th className="p-3.5">Documento</th>
                 <th className="p-3.5">Telefone</th>
                 <th className="p-3.5">E-mail</th>
                 <th className="p-3.5">Dados Bancários / PIX</th>
@@ -164,7 +165,7 @@ export default function Parceiros() {
             <tbody className="divide-y divide-slate-100">
               {paginated.length === 0 ? (
                 <tr>
-                  <td colSpan={7} className="text-center p-6 text-slate-500">
+                  <td colSpan={8} className="text-center p-6 text-slate-500">
                     Nenhum parceiro encontrado.
                   </td>
                 </tr>
@@ -175,6 +176,7 @@ export default function Parceiros() {
                       {p.partner_code ? `#${p.partner_code}` : '-'}
                     </td>
                     <td className="p-3.5 font-semibold text-slate-900">{p.nome}</td>
+                    <td className="p-3.5 text-slate-600">{p.tipo_documento || 'CPF'}</td>
                     <td className="p-3.5 text-slate-600">{p.cpf || '-'}</td>
                     <td className="p-3.5 text-slate-600">{p.telefone || '-'}</td>
                     <td className="p-3.5 text-slate-600">{p.email || '-'}</td>

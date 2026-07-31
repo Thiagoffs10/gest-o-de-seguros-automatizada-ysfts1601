@@ -19,6 +19,7 @@ export function preparePolicyPayload(data: Partial<Policy> & Record<string, any>
     valor_liquido: valorLiquido,
     commission_percent: Number(data.commission_percent) || 0,
     commission: Number(data.commission) || 0,
+    iss: Number(data.iss) || 0,
     valor_repasse: Number(data.valor_repasse) || 0,
   }
 
@@ -71,6 +72,9 @@ export function preparePolicyPayload(data: Partial<Policy> & Record<string, any>
   }
   if (!('comissao_recebida' in data)) {
     delete payload.comissao_recebida
+  }
+  if (!('commission_percent' in data)) {
+    delete payload.commission_percent
   }
   if (
     !payload.renewal_date ||

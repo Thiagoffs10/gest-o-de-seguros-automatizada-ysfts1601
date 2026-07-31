@@ -42,6 +42,7 @@ export interface Parceiro {
   partner_code?: number
   nome: string
   cpf?: string
+  tipo_documento?: 'CPF' | 'CNPJ'
   telefone?: string
   email?: string
   dados_bancarios_ou_pix?: string
@@ -75,6 +76,7 @@ export interface Policy {
   status: 'Ativa' | 'Expirada' | 'Cancelada' | 'Renovação Pendente'
   commission?: number
   commission_percent?: number
+  iss?: number
   tipo_de_venda?: 'Produção Própria' | 'Parceiro' | 'Indicação'
   observacao_indicacao?: string
   parceiro?: string
@@ -144,6 +146,7 @@ export interface CustoFixo {
     | 'Marketing'
     | 'Outros'
   observacoes?: string
+  tipo?: 'Fixo' | 'Variável'
   created: string
   updated: string
 }

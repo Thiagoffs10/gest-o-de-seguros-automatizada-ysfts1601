@@ -34,6 +34,7 @@ const EMPTY = {
   valor: '',
   data: '',
   categoria: 'Outros',
+  tipo: 'Fixo',
   observacoes: '',
 }
 
@@ -50,18 +51,20 @@ export function CustoFixoFormDialog({
   onOpenChange,
   onSubmit,
   initialData,
-  title = 'Adicionar Custo Fixo',
+  title = 'Adicionar Custo',
 }: Props) {
   const [form, setForm] = useState(EMPTY)
   const [loading, setLoading] = useState(false)
 
   useEffect(() => {
+    if (!open) return
     if (initialData) {
       setForm({
         descricao: initialData.descricao || '',
         valor: initialData.valor?.toString() || '',
         data: initialData.data?.split(' ')[0] || '',
         categoria: initialData.categoria || 'Outros',
+        tipo: initialData.tipo || 'Fixo',
         observacoes: initialData.observacoes || '',
       })
     } else {
@@ -79,6 +82,7 @@ export function CustoFixoFormDialog({
         valor: Number(form.valor),
         data: form.data,
         categoria: form.categoria,
+        tipo: form.tipo,
         observacoes: form.observacoes,
       })
     } finally {
@@ -124,20 +128,34 @@ export function CustoFixoFormDialog({
               />
             </div>
           </div>
-          <div>
-            <Label className="text-xs font-semibold">Categoria</Label>
-            <Select value={form.categoria} onValueChange={(v) => set('categoria', v)}>
-              <SelectTrigger>
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                {CATEGORIAS.map((c) => (
-                  <SelectItem key={c} value={c}>
-                    {c}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
+          <div className="grid grid-cols-2 gap-2">
+            <div>
+              <Label className="text-xs font-semibold">Tipo</Label>
+              <Select value={form.tipo} onValueChange={(v) => set('tipo', v)}>
+                <SelectTrigger>
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="Fixo">Fixo</SelectItem>
+                  <SelectItem value="Variável">Variável</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+            <div>
+              <Label className="text-xs font-semibold">Categoria</Label>
+              <Select value={form.categoria} onValueChange={(v) => set('categoria', v)}>
+                <SelectTrigger>
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  {CATEGORIAS.map((c) => (
+                    <SelectItem key={c} value={c}>
+                      {c}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
           </div>
           <div>
             <Label className="text-xs font-semibold">Observações</Label>

@@ -1,5 +1,5 @@
 {
-  "generatedAt": "2026-07-31T00:29:18.186Z",
+  "generatedAt": "2026-07-31T01:07:44.452Z",
   "collections": [
     {
       "name": "users",
@@ -388,6 +388,12 @@
           "type": "text",
           "required": false,
           "system": false
+        },
+        {
+          "name": "iss",
+          "type": "number",
+          "required": false,
+          "system": false
         }
       ],
       "indexes": [
@@ -722,6 +728,13 @@
           "required": false,
           "system": false,
           "autodateTriggers": ["onCreate", "onUpdate"]
+        },
+        {
+          "name": "tipo_documento",
+          "type": "select",
+          "required": false,
+          "system": false,
+          "selectValues": ["CPF", "CNPJ"]
         }
       ],
       "indexes": ["CREATE INDEX idx_parceiros_nome ON parceiros (nome)"]
@@ -789,6 +802,13 @@
           "required": false,
           "system": false,
           "autodateTriggers": ["onCreate", "onUpdate"]
+        },
+        {
+          "name": "tipo",
+          "type": "select",
+          "required": false,
+          "system": false,
+          "selectValues": ["Fixo", "Variável"]
         }
       ],
       "indexes": [

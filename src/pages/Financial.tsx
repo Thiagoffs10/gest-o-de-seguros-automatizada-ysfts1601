@@ -2,7 +2,8 @@ import { useEffect, useState, useCallback } from 'react'
 import { Edit2 } from 'lucide-react'
 import { getPolicies, updatePolicyFinancial } from '@/services/policies'
 import { getParceiros } from '@/services/parceiros'
-import { Policy, Parceiro, FilterState } from '@/types'
+import { getSeguradoras } from '@/services/seguradoras'
+import { Policy, Parceiro, Seguradora, FilterState } from '@/types'
 import { Card, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
@@ -13,11 +14,16 @@ import { buildFilterString } from '@/lib/constants'
 import { useToast } from '@/hooks/use-toast'
 import { useRealtime } from '@/hooks/use-realtime'
 import { usePermissions } from '@/hooks/use-permissions'
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select'
 
-const calcCommission = (p: Policy) =>
-  ((p.commission_percent || 0) / 100) * (p.valor_liquido || p.premium_amount || 0)
-const calcRepasse = (p: Policy) =>
-  ((p.valor_repasse || 0) / 100) * (p.valor_liquido || p.premium_amount || 0)
+const calcNetCommission = (p: Policy) => (p.commission || 0) - (p.iss || 0)
+const calcRepasse = (p: Policy) => p.valor_repasse || 0
 const fmtMoney = (v: number) =>
   v.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })
 
@@ -26,20 +32,30 @@ export default function Financial() {
   const { can } = usePermissions()
   const [policies, setPolicies] = useState<Policy[]>([])
   const [parceiros, setParceiros] = useState<Parceiro[]>([])
+  const [seguradoras, setSeguradoras] = useState<Seguradora[]>([])
   const [filters, setFilters] = useState<FilterState>({})
+  const [statusFilter, setStatusFilter] = useState('ALL')
   const [editPolicy, setEditPolicy] = useState<Policy | null>(null)
   const [saving, setSaving] = useState(false)
 
   const loadData = useCallback(async () => {
     try {
-      const filter = buildFilterString('', filters, 'start_date')
-      const [pols, pars] = await Promise.all([getPolicies(filter), getParceiros()])
+      let filter = buildFilterString('', filters, 'start_date')
+      if (statusFilter !== 'ALL') {
+        filter = filter ? `${filter} && status = "${statusFilter}"` : `status = "${statusFilter}"`
+      }
+      const [pols, pars, segs] = await Promise.all([
+        getPolicies(filter),
+        getParceiros(),
+        getSeguradoras(),
+      ])
       setPolicies(pols)
       setParceiros(pars)
+      setSeguradoras(segs)
     } catch {
       /* intentionally ignored */
     }
-  }, [filters])
+  }, [filters, statusFilter])
 
   useEffect(() => {
     loadData()
@@ -50,10 +66,10 @@ export default function Financial() {
   const totalNet = policies.reduce((s, p) => s + (p.valor_liquido || p.premium_amount || 0), 0)
   const commReceived = policies
     .filter((p) => p.comissao_recebida)
-    .reduce((s, p) => s + calcCommission(p), 0)
+    .reduce((s, p) => s + calcNetCommission(p), 0)
   const commPending = policies
     .filter((p) => !p.comissao_recebida)
-    .reduce((s, p) => s + calcCommission(p), 0)
+    .reduce((s, p) => s + calcNetCommission(p), 0)
   const partnerPols = policies.filter((p) => p.tipo_de_venda === 'Parceiro')
   const repassePaid = partnerPols
     .filter((p) => p.pago_parceiro)
@@ -101,10 +117,34 @@ export default function Financial() {
           onFilterChange={setFilters}
           showPartnerFilter
           parceiros={parceiros}
+          showSeguradoraFilter
+          seguradoras={seguradoras}
+          showTipoSeguroFilter
         />
-        <Button variant="outline" size="sm" onClick={() => setFilters({})}>
-          Limpar Filtros
-        </Button>
+        <div className="flex items-center gap-2">
+          <Select value={statusFilter} onValueChange={setStatusFilter}>
+            <SelectTrigger className="w-[180px]">
+              <SelectValue placeholder="Status" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="ALL">Todos os Status</SelectItem>
+              <SelectItem value="Ativa">Ativa</SelectItem>
+              <SelectItem value="Renovação Pendente">Renovação Pendente</SelectItem>
+              <SelectItem value="Expirada">Expirada</SelectItem>
+              <SelectItem value="Cancelada">Cancelada</SelectItem>
+            </SelectContent>
+          </Select>
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={() => {
+              setFilters({})
+              setStatusFilter('ALL')
+            }}
+          >
+            Limpar Filtros
+          </Button>
+        </div>
       </div>
 
       <Card className="shadow-sm overflow-hidden border">
@@ -121,8 +161,9 @@ export default function Financial() {
                 <th className="p-3">Tipo</th>
                 <th className="p-3 text-right">Bruto</th>
                 <th className="p-3 text-right">Líquido</th>
-                <th className="p-3 text-center">Com. %</th>
-                <th className="p-3 text-right">Valor Comissão</th>
+                <th className="p-3 text-right">Comissão</th>
+                <th className="p-3 text-right">ISS</th>
+                <th className="p-3 text-right">Com. Líquida</th>
                 <th className="p-3 text-center">Recebida</th>
                 <th className="p-3">Data Receb.</th>
                 <th className="p-3 text-right">Ação</th>
@@ -131,7 +172,7 @@ export default function Financial() {
             <tbody className="divide-y divide-slate-100">
               {policies.length === 0 ? (
                 <tr>
-                  <td colSpan={11} className="text-center p-6 text-slate-500">
+                  <td colSpan={12} className="text-center p-6 text-slate-500">
                     Nenhuma apólice encontrada.
                   </td>
                 </tr>
@@ -148,9 +189,10 @@ export default function Financial() {
                     <td className="p-3 text-right font-bold">
                       R$ {fmtMoney(p.valor_liquido || p.premium_amount || 0)}
                     </td>
-                    <td className="p-3 text-center">{p.commission_percent || 0}%</td>
+                    <td className="p-3 text-right">R$ {fmtMoney(p.commission || 0)}</td>
+                    <td className="p-3 text-right text-red-600">R$ {fmtMoney(p.iss || 0)}</td>
                     <td className="p-3 text-right font-bold text-blue-600">
-                      R$ {fmtMoney(calcCommission(p))}
+                      R$ {fmtMoney(calcNetCommission(p))}
                     </td>
                     <td className="p-3 text-center">
                       <Badge className={p.comissao_recebida ? 'bg-emerald-500' : 'bg-amber-500'}>
@@ -191,8 +233,7 @@ export default function Financial() {
                 <th className="p-3">Cliente</th>
                 <th className="p-3">Parceiro</th>
                 <th className="p-3 text-right">Líquido</th>
-                <th className="p-3 text-center">Repasse %</th>
-                <th className="p-3 text-right">Valor Repasse</th>
+                <th className="p-3 text-right">Repasse (R$)</th>
                 <th className="p-3 text-center">Pago</th>
                 <th className="p-3">Data Pagto</th>
                 <th className="p-3 text-right">Ação</th>
@@ -201,7 +242,7 @@ export default function Financial() {
             <tbody className="divide-y divide-slate-100">
               {partnerPols.length === 0 ? (
                 <tr>
-                  <td colSpan={9} className="text-center p-6 text-slate-500">
+                  <td colSpan={8} className="text-center p-6 text-slate-500">
                     Nenhuma apólice de parceiro encontrada.
                   </td>
                 </tr>
@@ -214,7 +255,6 @@ export default function Financial() {
                     <td className="p-3 text-right font-bold">
                       R$ {fmtMoney(p.valor_liquido || p.premium_amount || 0)}
                     </td>
-                    <td className="p-3 text-center">{p.valor_repasse || 0}%</td>
                     <td className="p-3 text-right font-bold text-blue-600">
                       R$ {fmtMoney(calcRepasse(p))}
                     </td>

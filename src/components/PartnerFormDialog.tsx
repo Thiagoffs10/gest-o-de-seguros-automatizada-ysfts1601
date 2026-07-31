@@ -9,7 +9,15 @@ import {
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Button } from '@/components/ui/button'
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select'
 import { Parceiro } from '@/types'
+import { maskCpf, maskCnpj } from '@/lib/document-validators'
 
 interface Props {
   open: boolean
@@ -28,6 +36,7 @@ export function PartnerFormDialog({
 }: Props) {
   const [form, setForm] = useState({
     nome: '',
+    tipo_documento: 'CPF' as 'CPF' | 'CNPJ',
     cpf: '',
     telefone: '',
     email: '',
@@ -36,20 +45,34 @@ export function PartnerFormDialog({
   const [loading, setLoading] = useState(false)
 
   useEffect(() => {
+    if (!open) return
     if (initialData) {
       setForm({
         nome: initialData.nome || '',
+        tipo_documento: initialData.tipo_documento || 'CPF',
         cpf: initialData.cpf || '',
         telefone: initialData.telefone || '',
         email: initialData.email || '',
         dados_bancarios_ou_pix: initialData.dados_bancarios_ou_pix || '',
       })
     } else {
-      setForm({ nome: '', cpf: '', telefone: '', email: '', dados_bancarios_ou_pix: '' })
+      setForm({
+        nome: '',
+        tipo_documento: 'CPF',
+        cpf: '',
+        telefone: '',
+        email: '',
+        dados_bancarios_ou_pix: '',
+      })
     }
   }, [initialData, open])
 
   const set = (key: string, val: string) => setForm((prev) => ({ ...prev, [key]: val }))
+
+  const handleDocumentChange = (val: string) => {
+    const masked = form.tipo_documento === 'CNPJ' ? maskCnpj(val) : maskCpf(val)
+    set('cpf', masked)
+  }
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
@@ -69,14 +92,36 @@ export function PartnerFormDialog({
             <Label className="text-xs font-semibold">Nome *</Label>
             <Input required value={form.nome} onChange={(e) => set('nome', e.target.value)} />
           </div>
-          <div>
-            <Label className="text-xs font-semibold">CPF *</Label>
-            <Input
-              required
-              value={form.cpf}
-              onChange={(e) => set('cpf', e.target.value)}
-              placeholder="000.000.000-00"
-            />
+          <div className="grid grid-cols-2 gap-2">
+            <div>
+              <Label className="text-xs font-semibold">Tipo Documento</Label>
+              <Select
+                value={form.tipo_documento}
+                onValueChange={(v) => {
+                  set('tipo_documento', v)
+                  set('cpf', '')
+                }}
+              >
+                <SelectTrigger>
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="CPF">CPF</SelectItem>
+                  <SelectItem value="CNPJ">CNPJ</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+            <div>
+              <Label className="text-xs font-semibold">Documento *</Label>
+              <Input
+                required
+                value={form.cpf}
+                onChange={(e) => handleDocumentChange(e.target.value)}
+                placeholder={
+                  form.tipo_documento === 'CNPJ' ? '00.000.000/0000-00' : '000.000.000-00'
+                }
+              />
+            </div>
           </div>
           <div className="grid grid-cols-2 gap-2">
             <div>

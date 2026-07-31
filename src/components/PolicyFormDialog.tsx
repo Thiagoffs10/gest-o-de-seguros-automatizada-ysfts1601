@@ -32,7 +32,8 @@ const DEFAULT_FORM = {
   modelo_veiculo: '',
   valor_bruto: 0,
   valor_liquido: 0,
-  commission_percent: 10,
+  commission: 0,
+  iss: 0,
   tipo_de_venda: 'Produção Própria',
   observacao_indicacao: '',
   parceiro: '',
@@ -75,9 +76,11 @@ export function PolicyFormDialog({
 }: Props) {
   const [form, setForm] = useState<any>({ ...DEFAULT_FORM })
   const [loading, setLoading] = useState(false)
+  const skipAuto = useRef(true)
 
   useEffect(() => {
     if (!open) return
+    skipAuto.current = true
     if (initialData) {
       const exp = initialData.expand as any
       setForm({
@@ -91,7 +94,8 @@ export function PolicyFormDialog({
         modelo_veiculo: initialData.modelo_veiculo || '',
         valor_bruto: initialData.valor_bruto || 0,
         valor_liquido: initialData.valor_liquido || initialData.premium_amount || 0,
-        commission_percent: initialData.commission_percent || 10,
+        commission: initialData.commission || 0,
+        iss: initialData.iss || 0,
         tipo_de_venda: initialData.tipo_de_venda || 'Produção Própria',
         observacao_indicacao: initialData.observacao_indicacao || '',
         parceiro: initialData.parceiro || (exp?.parceiro?.id ?? ''),
@@ -108,44 +112,57 @@ export function PolicyFormDialog({
     } else {
       setForm({ ...DEFAULT_FORM })
     }
-    skipCalc.current = true
+    setTimeout(() => {
+      skipAuto.current = false
+    }, 0)
   }, [open, initialData])
 
   const set = (key: string, val: any) => setForm((prev: any) => ({ ...prev, [key]: val }))
 
   const selectedSeguradora = seguradoras.find((s) => s.id === form.seguradora)
   const impostoPercentual = selectedSeguradora?.imposto_percentual ?? 0
-
-  const skipCalc = useRef(true)
+  const comissaoLiquida = (form.commission || 0) - (form.iss || 0)
 
   useEffect(() => {
-    if (skipCalc.current) {
-      skipCalc.current = false
-      return
-    }
-    const calculated =
+    if (skipAuto.current) return
+    const calc =
       form.valor_bruto != null
         ? Math.max(0, form.valor_bruto - (form.valor_bruto * (impostoPercentual || 0)) / 100)
         : 0
-    set('valor_liquido', calculated)
+    set('valor_liquido', calc)
   }, [form.valor_bruto, form.seguradora, impostoPercentual])
 
-  const calculatedCommission =
-    form.valor_liquido && form.commission_percent
-      ? (form.commission_percent / 100) * form.valor_liquido
-      : 0
+  useEffect(() => {
+    if (skipAuto.current) return
+    const iss =
+      form.commission != null ? Math.max(0, (form.commission * (impostoPercentual || 0)) / 100) : 0
+    set('iss', iss)
+  }, [form.commission, form.seguradora, impostoPercentual])
 
-  const calculatedRepasse =
-    form.valor_liquido && form.valor_repasse ? (form.valor_repasse / 100) * form.valor_liquido : 0
+  useEffect(() => {
+    if (skipAuto.current) return
+    if (form.tipo_de_venda === 'Parceiro' && form.parceiro && form.valor_liquido) {
+      set('valor_repasse', Math.max(0, form.valor_liquido * 0.5))
+    }
+  }, [form.tipo_de_venda, form.parceiro, form.valor_liquido])
+
+  const handleStartDateChange = (value: string) => {
+    set('start_date', value)
+    if (value) {
+      const d = new Date(value + 'T00:00:00')
+      d.setFullYear(d.getFullYear() + 1)
+      set('end_date', d.toISOString().split('T')[0])
+    }
+  }
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
     if (!form.client) return
     setLoading(true)
     try {
-      const endDate = new Date(form.end_date)
+      const endDate = new Date(form.end_date + 'T00:00:00')
       const renewalDate = new Date(endDate.getTime() - 30 * 86400000).toISOString().split('T')[0]
-      await onSubmit({ ...form, commission: calculatedCommission, renewal_date: renewalDate })
+      await onSubmit({ ...form, renewal_date: renewalDate })
     } finally {
       setLoading(false)
     }
@@ -229,7 +246,7 @@ export function PolicyFormDialog({
                   placeholder="9BWZZZ377VT004253"
                 />
               </div>
-              <div>
+              <div className="col-span-2">
                 <Label className="text-xs font-semibold">Modelo do Veículo</Label>
                 <Input
                   value={form.modelo_veiculo}
@@ -257,25 +274,34 @@ export function PolicyFormDialog({
                 onChange={(e) => set('valor_liquido', Number(e.target.value))}
               />
               {form.seguradora && (
-                <p className="text-xs text-slate-500 mt-0.5">Imposto: {impostoPercentual}%</p>
+                <p className="text-xs text-slate-500 mt-0.5">ISS: {impostoPercentual}%</p>
               )}
             </div>
           </div>
-          <div className="grid grid-cols-2 gap-2">
+          <div className="grid grid-cols-3 gap-2">
             <div>
-              <Label className="text-xs font-semibold">Comissão (%)</Label>
+              <Label className="text-xs font-semibold">Comissão Bruta (R$)</Label>
               <Input
                 type="number"
-                step="0.1"
-                value={form.commission_percent}
-                onChange={(e) => set('commission_percent', Number(e.target.value))}
+                step="0.01"
+                value={form.commission}
+                onChange={(e) => set('commission', Number(e.target.value))}
               />
             </div>
             <div>
-              <Label className="text-xs font-semibold">Valor da Comissão</Label>
+              <Label className="text-xs font-semibold">ISS (R$)</Label>
+              <Input
+                type="number"
+                step="0.01"
+                value={form.iss}
+                onChange={(e) => set('iss', Number(e.target.value))}
+              />
+            </div>
+            <div>
+              <Label className="text-xs font-semibold">Com. Líquida</Label>
               <Input
                 disabled
-                value={`R$ ${calculatedCommission.toFixed(2)}`}
+                value={`R$ ${comissaoLiquida.toFixed(2)}`}
                 className="bg-slate-100 font-bold"
               />
             </div>
@@ -321,24 +347,15 @@ export function PolicyFormDialog({
                   </SelectContent>
                 </Select>
               </div>
-              <div className="grid grid-cols-2 gap-2">
-                <div>
-                  <Label className="text-xs font-semibold">Repasse (%)</Label>
-                  <Input
-                    type="number"
-                    step="0.1"
-                    value={form.valor_repasse}
-                    onChange={(e) => set('valor_repasse', Number(e.target.value))}
-                  />
-                </div>
-                <div>
-                  <Label className="text-xs font-semibold">Valor Repasse</Label>
-                  <Input
-                    disabled
-                    value={`R$ ${calculatedRepasse.toFixed(2)}`}
-                    className="bg-slate-100"
-                  />
-                </div>
+              <div>
+                <Label className="text-xs font-semibold">Valor Repasse (R$)</Label>
+                <Input
+                  type="number"
+                  step="0.01"
+                  value={form.valor_repasse}
+                  onChange={(e) => set('valor_repasse', Number(e.target.value))}
+                />
+                <p className="text-xs text-slate-500 mt-0.5">50% do valor líquido (editável)</p>
               </div>
             </>
           )}
@@ -348,7 +365,7 @@ export function PolicyFormDialog({
               <Input
                 type="date"
                 value={form.start_date}
-                onChange={(e) => set('start_date', e.target.value)}
+                onChange={(e) => handleStartDateChange(e.target.value)}
               />
             </div>
             <div>

@@ -1,10 +1,11 @@
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { Mail, Lock } from 'lucide-react'
 import logoImg from '@/assets/cred10mixlogooficialfundobranco4k-12574.jpg'
 import { useAuth } from '@/hooks/use-auth'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
+import { Checkbox } from '@/components/ui/checkbox'
 import {
   Card,
   CardHeader,
@@ -18,15 +19,36 @@ import { useToast } from '@/hooks/use-toast'
 export default function Login() {
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
+  const [rememberMe, setRememberMe] = useState(false)
   const [loading, setLoading] = useState(false)
 
   const { signIn } = useAuth()
   const navigate = useNavigate()
   const { toast } = useToast()
 
+  useEffect(() => {
+    const savedEmail = localStorage.getItem('rememberedEmail')
+    const savedPassword = localStorage.getItem('rememberedPassword')
+    if (savedEmail) {
+      setEmail(savedEmail)
+      setRememberMe(true)
+    }
+    if (savedPassword) {
+      setPassword(savedPassword)
+    }
+  }, [])
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
     setLoading(true)
+
+    if (rememberMe) {
+      localStorage.setItem('rememberedEmail', email)
+      localStorage.setItem('rememberedPassword', password)
+    } else {
+      localStorage.removeItem('rememberedEmail')
+      localStorage.removeItem('rememberedPassword')
+    }
 
     const { error } = await signIn(email, password)
     setLoading(false)
@@ -93,6 +115,20 @@ export default function Login() {
                   minLength={8}
                 />
               </div>
+            </div>
+
+            <div className="flex items-center gap-2">
+              <Checkbox
+                id="remember-me"
+                checked={rememberMe}
+                onCheckedChange={(checked) => setRememberMe(checked === true)}
+              />
+              <label
+                htmlFor="remember-me"
+                className="text-xs font-medium text-slate-700 cursor-pointer select-none"
+              >
+                Lembrar-me
+              </label>
             </div>
           </CardContent>
 

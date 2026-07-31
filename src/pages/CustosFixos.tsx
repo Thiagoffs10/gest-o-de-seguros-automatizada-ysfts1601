@@ -6,10 +6,12 @@ import {
   updateCustoFixo,
   deleteCustoFixo,
 } from '@/services/custos-fixos'
-import { CustoFixo } from '@/types'
+import { getPolicies } from '@/services/policies'
+import { CustoFixo, Policy } from '@/types'
 import { Button } from '@/components/ui/button'
 import { Card } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
+import { Input } from '@/components/ui/input'
 import {
   Dialog,
   DialogContent,
@@ -36,10 +38,16 @@ const CATEGORIA_COLORS: Record<string, string> = {
   Outros: 'bg-slate-100 text-slate-800',
 }
 
+const fmt = (v: number) =>
+  v.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })
+
 export default function CustosFixos() {
   const { toast } = useToast()
   const { can } = usePermissions()
   const [costs, setCosts] = useState<CustoFixo[]>([])
+  const [policies, setPolicies] = useState<Policy[]>([])
+  const [periodStart, setPeriodStart] = useState('')
+  const [periodEnd, setPeriodEnd] = useState('')
   const [isModalOpen, setIsModalOpen] = useState(false)
   const [editingItem, setEditingItem] = useState<Partial<CustoFixo> | null>(null)
   const [isEditOpen, setIsEditOpen] = useState(false)
@@ -47,19 +55,46 @@ export default function CustosFixos() {
   const [sortField, setSortField] = useState<SortField>('data')
   const [sortDir, setSortDir] = useState<SortDir>('desc')
 
-  const loadCosts = useCallback(async () => {
+  const loadData = useCallback(async () => {
     try {
-      const data = await getCustosFixos()
-      setCosts(data)
+      let costFilter = ''
+      if (periodStart && periodEnd) {
+        costFilter = `data >= "${periodStart}" && data <= "${periodEnd}"`
+      } else if (periodStart) {
+        costFilter = `data >= "${periodStart}"`
+      } else if (periodEnd) {
+        costFilter = `data <= "${periodEnd}"`
+      }
+      const [costsData, pols] = await Promise.all([getCustosFixos(costFilter), getPolicies('')])
+      setCosts(costsData)
+      setPolicies(pols)
     } catch {
       /* intentionally ignored */
     }
-  }, [])
+  }, [periodStart, periodEnd])
 
   useEffect(() => {
-    loadCosts()
-  }, [loadCosts])
-  useRealtime('custos_fixos', () => loadCosts())
+    loadData()
+  }, [loadData])
+  useRealtime('custos_fixos', () => loadData())
+  useRealtime('policies', () => loadData())
+
+  const isInPeriod = (dateStr?: string) => {
+    if (!dateStr) return false
+    const d = String(dateStr).split(' ')[0]
+    if (periodStart && d < periodStart) return false
+    if (periodEnd && d > periodEnd) return false
+    return true
+  }
+
+  const totalReceitas = policies
+    .filter((p) => p.comissao_recebida && isInPeriod(p.data_recebimento_comissao))
+    .reduce((s, p) => s + (p.commission || 0) - (p.iss || 0), 0)
+  const totalRepasses = policies
+    .filter((p) => p.pago_parceiro && isInPeriod(p.data_pagamento_parceiro))
+    .reduce((s, p) => s + (p.valor_repasse || 0), 0)
+  const totalCustos = costs.reduce((s, c) => s + (c.valor || 0), 0)
+  const lucroLiquido = totalReceitas - totalRepasses - totalCustos
 
   const sortedCosts = [...costs].sort((a, b) => {
     const cmp =
@@ -80,9 +115,9 @@ export default function CustosFixos() {
   const handleCreate = async (formData: any) => {
     try {
       await createCustoFixo(formData)
-      toast({ title: 'Custo fixo adicionado!' })
+      toast({ title: 'Custo adicionado!' })
       setIsModalOpen(false)
-      loadCosts()
+      loadData()
     } catch (err) {
       toast({ title: 'Erro', description: getErrorMessage(err), variant: 'destructive' })
     }
@@ -92,10 +127,10 @@ export default function CustosFixos() {
     if (!editingItem?.id) return
     try {
       await updateCustoFixo(editingItem.id, formData)
-      toast({ title: 'Custo fixo atualizado!' })
+      toast({ title: 'Custo atualizado!' })
       setIsEditOpen(false)
       setEditingItem(null)
-      loadCosts()
+      loadData()
     } catch (err) {
       toast({ title: 'Erro', description: getErrorMessage(err), variant: 'destructive' })
     }
@@ -105,22 +140,22 @@ export default function CustosFixos() {
     if (!deleteTarget) return
     try {
       await deleteCustoFixo(deleteTarget.id)
-      toast({ title: 'Custo fixo excluído!' })
+      toast({ title: 'Custo excluído!' })
       setDeleteTarget(null)
-      loadCosts()
+      loadData()
     } catch (err) {
       toast({ title: 'Erro', description: getErrorMessage(err), variant: 'destructive' })
     }
   }
 
-  const total = costs.reduce((sum, c) => sum + (c.valor || 0), 0)
-
   return (
     <div className="space-y-6">
       <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
         <div>
-          <h1 className="text-2xl font-bold text-slate-900">Custos Fixos</h1>
-          <p className="text-slate-500 text-sm">Gerencie despesas mensais da corretora.</p>
+          <h1 className="text-2xl font-bold text-slate-900">Custo</h1>
+          <p className="text-slate-500 text-sm">
+            Gerencie despesas fixas e variáveis da corretora.
+          </p>
         </div>
         {can('custos_fixos', 'create') && (
           <Button className="bg-blue-600 hover:bg-blue-700" onClick={() => setIsModalOpen(true)}>
@@ -129,14 +164,52 @@ export default function CustosFixos() {
         )}
       </div>
 
-      <div className="flex items-center gap-4">
-        <Card className="px-4 py-3 shadow-sm">
-          <p className="text-xs text-slate-500">Total de Custos</p>
-          <p className="text-lg font-bold text-slate-900">
-            R$ {total.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
-          </p>
+      <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+        <Card className="shadow-sm p-4">
+          <p className="text-xs text-slate-500">Total de Receitas</p>
+          <p className="text-lg font-bold text-emerald-700">R$ {fmt(totalReceitas)}</p>
         </Card>
-        <p className="text-sm text-slate-500">{costs.length} registros</p>
+        <Card className="shadow-sm p-4">
+          <p className="text-xs text-slate-500">Total de Repasses</p>
+          <p className="text-lg font-bold text-amber-700">R$ {fmt(totalRepasses)}</p>
+        </Card>
+        <Card className="shadow-sm p-4">
+          <p className="text-xs text-slate-500">Total de Custos</p>
+          <p className="text-lg font-bold text-red-700">R$ {fmt(totalCustos)}</p>
+        </Card>
+        <Card className="shadow-sm p-4">
+          <p className="text-xs text-slate-500">Lucro Líquido Real</p>
+          <p className="text-lg font-bold text-blue-700">R$ {fmt(lucroLiquido)}</p>
+        </Card>
+      </div>
+
+      <div className="flex flex-wrap items-center gap-3 p-3 bg-slate-50 rounded-lg border">
+        <span className="text-sm font-medium text-slate-600">Período:</span>
+        <Input
+          type="date"
+          value={periodStart}
+          onChange={(e) => setPeriodStart(e.target.value)}
+          className="w-auto"
+        />
+        <span className="text-slate-400 text-sm">até</span>
+        <Input
+          type="date"
+          value={periodEnd}
+          onChange={(e) => setPeriodEnd(e.target.value)}
+          className="w-auto"
+        />
+        {(periodStart || periodEnd) && (
+          <Button
+            variant="ghost"
+            size="sm"
+            onClick={() => {
+              setPeriodStart('')
+              setPeriodEnd('')
+            }}
+          >
+            Limpar
+          </Button>
+        )}
       </div>
 
       <Card className="shadow-sm overflow-hidden border">
@@ -145,6 +218,7 @@ export default function CustosFixos() {
             <thead className="bg-slate-100 text-slate-600 font-semibold border-b">
               <tr>
                 <th className="p-3.5">Descrição</th>
+                <th className="p-3.5">Tipo</th>
                 <th
                   className="p-3.5 cursor-pointer select-none"
                   onClick={() => toggleSort('valor')}
@@ -166,14 +240,25 @@ export default function CustosFixos() {
             <tbody className="divide-y divide-slate-100">
               {sortedCosts.length === 0 ? (
                 <tr>
-                  <td colSpan={6} className="text-center p-6 text-slate-500">
-                    Nenhum custo fixo cadastrado.
+                  <td colSpan={7} className="text-center p-6 text-slate-500">
+                    Nenhum custo cadastrado.
                   </td>
                 </tr>
               ) : (
                 sortedCosts.map((c) => (
                   <tr key={c.id} className="hover:bg-slate-50/80">
                     <td className="p-3.5 font-medium">{c.descricao}</td>
+                    <td className="p-3.5">
+                      <Badge
+                        className={
+                          c.tipo === 'Fixo'
+                            ? 'bg-blue-100 text-blue-800'
+                            : 'bg-orange-100 text-orange-800'
+                        }
+                      >
+                        {c.tipo || 'Fixo'}
+                      </Badge>
+                    </td>
                     <td className="p-3.5 font-bold">
                       R$ {(c.valor || 0).toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
                     </td>
@@ -236,7 +321,7 @@ export default function CustosFixos() {
           }}
           onSubmit={handleEditSubmit}
           initialData={editingItem}
-          title="Editar Custo Fixo"
+          title="Editar Custo"
         />
       )}
 
