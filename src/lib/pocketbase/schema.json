@@ -1,5 +1,5 @@
 {
-  "generatedAt": "2026-07-31T17:50:22.329Z",
+  "generatedAt": "2026-08-01T01:56:52.243Z",
   "collections": [
     {
       "name": "users",
@@ -828,6 +828,46 @@
         "CREATE INDEX idx_custos_fixos_data ON custos_fixos (data)",
         "CREATE INDEX idx_custos_fixos_categoria ON custos_fixos (categoria)"
       ]
+    },
+    {
+      "name": "tipos_seguro",
+      "type": "base",
+      "apiRules": {
+        "list": "@request.auth.id != ''",
+        "view": "@request.auth.id != ''",
+        "create": "@request.auth.role = 'Admin' || @request.auth.role = 'Administrador'",
+        "update": "@request.auth.role = 'Admin' || @request.auth.role = 'Administrador'",
+        "delete": "@request.auth.role = 'Admin' || @request.auth.role = 'Administrador'"
+      },
+      "fields": [
+        {
+          "name": "nome",
+          "type": "text",
+          "required": true,
+          "system": false
+        },
+        {
+          "name": "ativo",
+          "type": "bool",
+          "required": false,
+          "system": false
+        },
+        {
+          "name": "created",
+          "type": "autodate",
+          "required": false,
+          "system": false,
+          "autodateTriggers": ["onCreate"]
+        },
+        {
+          "name": "updated",
+          "type": "autodate",
+          "required": false,
+          "system": false,
+          "autodateTriggers": ["onCreate", "onUpdate"]
+        }
+      ],
+      "indexes": ["CREATE UNIQUE INDEX idx_tipos_seguro_nome ON tipos_seguro (nome)"]
     }
   ]
 }

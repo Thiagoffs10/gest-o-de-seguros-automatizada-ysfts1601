@@ -37,6 +37,14 @@ export interface Seguradora {
   updated: string
 }
 
+export interface TipoSeguro {
+  id: string
+  nome: string
+  ativo: boolean
+  created: string
+  updated: string
+}
+
 export interface Parceiro {
   id: string
   partner_code?: number

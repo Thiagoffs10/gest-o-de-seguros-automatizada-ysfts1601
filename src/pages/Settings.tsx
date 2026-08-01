@@ -8,6 +8,7 @@ import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Checkbox } from '@/components/ui/checkbox'
 import { SecretsGuideDialog } from '@/components/SecretsGuideDialog'
+import { TiposSeguroManager } from '@/components/TiposSeguroManager'
 import { useToast } from '@/hooks/use-toast'
 import pb from '@/lib/pocketbase/client'
 
@@ -101,6 +102,8 @@ export default function Settings() {
           </div>
         </CardContent>
       </Card>
+
+      <TiposSeguroManager />
 
       <Card className="shadow-sm bg-slate-100 border-slate-200">
         <CardHeader>

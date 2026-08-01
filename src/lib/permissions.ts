@@ -9,6 +9,7 @@ export type CollectionName =
   | 'communications'
   | 'reminders'
   | 'custos_fixos'
+  | 'tipos_seguro'
 
 export type ActionType = 'create' | 'read' | 'update' | 'delete'
 
@@ -27,6 +28,7 @@ const PERMISSIONS: Record<UserRole, Record<CollectionName, ActionType[]>> = {
     communications: ALL,
     reminders: ALL,
     custos_fixos: ALL,
+    tipos_seguro: ALL,
   },
   Administrador: {
     clients: ALL,
@@ -37,6 +39,7 @@ const PERMISSIONS: Record<UserRole, Record<CollectionName, ActionType[]>> = {
     communications: ALL,
     reminders: ALL,
     custos_fixos: ALL,
+    tipos_seguro: ALL,
   },
   Gerente: {
     clients: CRU,
@@ -47,6 +50,7 @@ const PERMISSIONS: Record<UserRole, Record<CollectionName, ActionType[]>> = {
     communications: ['create', 'read'] as ActionType[],
     reminders: READ,
     custos_fixos: ALL,
+    tipos_seguro: READ,
   },
   Operador: {
     clients: RU,
@@ -57,6 +61,7 @@ const PERMISSIONS: Record<UserRole, Record<CollectionName, ActionType[]>> = {
     communications: READ,
     reminders: READ,
     custos_fixos: [] as ActionType[],
+    tipos_seguro: READ,
   },
   Visualizador: {
     clients: READ,
@@ -67,6 +72,7 @@ const PERMISSIONS: Record<UserRole, Record<CollectionName, ActionType[]>> = {
     communications: READ,
     reminders: READ,
     custos_fixos: [] as ActionType[],
+    tipos_seguro: READ,
   },
 }
 

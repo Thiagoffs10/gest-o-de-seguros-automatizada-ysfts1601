@@ -16,3 +16,18 @@ export const createCommunication = async (data: Partial<Communication>) => {
 export const updateCommunication = async (id: string, data: Partial<Communication>) => {
   return pb.collection('communications').update<Communication>(id, data)
 }
+
+export interface MassEmailRecipient {
+  to: string
+  client_id: string
+  subject: string
+  body: string
+}
+
+export const sendMassEmail = async (recipients: MassEmailRecipient[], from?: string) => {
+  return pb.send('/backend/v1/send-mass-email', {
+    method: 'POST',
+    body: JSON.stringify({ recipients, from }),
+    headers: { 'Content-Type': 'application/json' },
+  })
+}

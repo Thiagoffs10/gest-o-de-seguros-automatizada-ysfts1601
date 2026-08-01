@@ -1,9 +1,19 @@
 import { useEffect, useState, useMemo } from 'react'
 import { Navigate } from 'react-router-dom'
-import { Mail, Cake, RefreshCw, Users, Send, ChevronRight, FileText } from 'lucide-react'
+import {
+  Mail,
+  Cake,
+  RefreshCw,
+  Users,
+  Send,
+  FileText,
+  Loader2,
+  CheckCircle2,
+  XCircle,
+} from 'lucide-react'
 import { getClients } from '@/services/clients'
 import { getPolicies } from '@/services/policies'
-import { createCommunication } from '@/services/communications'
+import { sendMassEmail } from '@/services/communications'
 import { Client, Policy } from '@/types'
 import { EMAIL_TEMPLATES, personalizeTemplate } from '@/lib/constants'
 import { canAccessMassSend } from '@/lib/permissions'
@@ -27,6 +37,12 @@ import { usePermissions } from '@/hooks/use-permissions'
 type TemplateId = 'aniversario' | 'renovacao' | 'personalizado'
 type FilterId = 'aniversariantes' | 'renovacao' | 'todos'
 
+interface SendResults {
+  sent: number
+  failed: number
+  total: number
+}
+
 export default function EnvioEmMassa() {
   const { user } = useAuth()
   const { toast } = useToast()
@@ -37,9 +53,10 @@ export default function EnvioEmMassa() {
   const [customSubject, setCustomSubject] = useState('')
   const [customBody, setCustomBody] = useState('')
   const [filter, setFilter] = useState<FilterId | null>('todos')
+  const [fromEmail, setFromEmail] = useState('onboarding@resend.dev')
   const [showConfirm, setShowConfirm] = useState(false)
-  const [sendStep, setSendStep] = useState(-1)
-  const [sentCount, setSentCount] = useState(0)
+  const [sending, setSending] = useState(false)
+  const [results, setResults] = useState<SendResults | null>(null)
 
   useEffect(() => {
     Promise.all([getClients(), getPolicies()])
@@ -75,12 +92,12 @@ export default function EnvioEmMassa() {
   }, [clients, policies, filter])
 
   const getPersonalizedData = (client: Client) => {
+    const clientPolicy = policies.find((p) => p.client === client.id)
+    const vars: Record<string, string> = {
+      nome_cliente: client.name || '',
+      numero_apolice: clientPolicy?.policy_number || '',
+    }
     if (template === 'personalizado') {
-      const clientPolicy = policies.find((p) => p.client === client.id)
-      const vars: Record<string, string> = {
-        nome_cliente: client.name || '',
-        numero_apolice: clientPolicy?.policy_number || '',
-      }
       return {
         subject: personalizeTemplate(customSubject, vars),
         body: personalizeTemplate(customBody, vars),
@@ -88,11 +105,6 @@ export default function EnvioEmMassa() {
     }
     const tpl = template ? EMAIL_TEMPLATES[template] : null
     if (!tpl) return { subject: '', body: '' }
-    const clientPolicy = policies.find((p) => p.client === client.id)
-    const vars: Record<string, string> = {
-      nome_cliente: client.name || '',
-      numero_apolice: clientPolicy?.policy_number || '',
-    }
     return {
       subject: personalizeTemplate(tpl.subject, vars),
       body: personalizeTemplate(tpl.body, vars),
@@ -109,45 +121,36 @@ export default function EnvioEmMassa() {
 
   const handleSend = () => {
     if (!isFormValid) return
+    setResults(null)
     setShowConfirm(true)
   }
 
-  const handleConfirmSend = () => {
+  const handleConfirmSend = async () => {
     setShowConfirm(false)
-    setSendStep(0)
-    setSentCount(0)
-  }
+    setSending(true)
+    setResults(null)
 
-  const handleOpenEmail = (client: Client) => {
-    const { subject, body } = getPersonalizedData(client)
-    const mailto = `mailto:${client.email}?subject=${encodeURIComponent(subject)}&body=${encodeURIComponent(body)}`
-    window.location.href = mailto
-  }
+    const recipients = filteredClients.map((c) => {
+      const { subject, body } = getPersonalizedData(c)
+      return { to: c.email!, client_id: c.id, subject, body }
+    })
 
-  const handleNext = async () => {
-    const currentClient = filteredClients[sendStep]
-    if (currentClient) {
-      const { subject, body } = getPersonalizedData(currentClient)
-      try {
-        await createCommunication({
-          type: 'Email',
-          client: currentClient.id,
-          subject,
-          body,
-          recipient_email: currentClient.email,
-          status: 'Enviado',
-          sent_date: new Date().toISOString(),
+    try {
+      const result = await sendMassEmail(recipients, fromEmail)
+      setResults(result)
+      if (result.failed > 0) {
+        toast({
+          title: `${result.sent} enviados, ${result.failed} falharam`,
+          variant: 'destructive',
         })
-        setSentCount((s) => s + 1)
-      } catch {
-        /* intentionally ignored */
+      } else {
+        toast({ title: `${result.sent} e-mails enviados com sucesso!` })
       }
-    }
-    if (sendStep + 1 >= filteredClients.length) {
-      toast({ title: `${sentCount + 1} emails processados!` })
-      setSendStep(-1)
-    } else {
-      setSendStep((s) => s + 1)
+    } catch (err: any) {
+      const msg = err?.message || 'Erro ao enviar e-mails'
+      toast({ title: 'Erro ao enviar e-mails', description: msg, variant: 'destructive' })
+    } finally {
+      setSending(false)
     }
   }
 
@@ -155,7 +158,6 @@ export default function EnvioEmMassa() {
     return <Navigate to="/dashboard" replace />
   }
 
-  const currentClient = sendStep >= 0 ? filteredClients[sendStep] : null
   const tpl = template ? EMAIL_TEMPLATES[template] : null
   const displaySubject = template === 'personalizado' ? customSubject : tpl?.subject || ''
 
@@ -164,7 +166,7 @@ export default function EnvioEmMassa() {
       <div>
         <h1 className="text-2xl font-bold text-slate-900">Envio em Massa</h1>
         <p className="text-slate-500 text-sm">
-          Selecione um modelo e filtro para enviar comunicações semi-automatizadas.
+          Envie comunicações automaticamente via Resend para seus clientes.
         </p>
       </div>
 
@@ -288,33 +290,76 @@ export default function EnvioEmMassa() {
       </div>
 
       {filter && filteredClients.length > 0 && (
-        <Card className="shadow-sm">
-          <CardHeader className="flex flex-row items-center justify-between">
-            <CardTitle className="text-base">
-              Clientes Selecionados ({filteredClients.length})
-            </CardTitle>
-            <Button
-              className="bg-blue-600 hover:bg-blue-700"
-              disabled={!isFormValid || !can('communications', 'create')}
-              onClick={handleSend}
-            >
-              <Send className="w-4 h-4 mr-2" /> Enviar
-            </Button>
-          </CardHeader>
-          <CardContent>
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-2 max-h-64 overflow-y-auto">
-              {filteredClients.map((c) => (
-                <div key={c.id} className="flex items-center gap-2 p-2 bg-slate-50 rounded text-sm">
-                  <Mail className="w-3.5 h-3.5 text-slate-400 shrink-0" />
-                  <div className="min-w-0">
-                    <p className="font-medium truncate">{c.name}</p>
-                    <p className="text-xs text-slate-500 truncate">{c.email}</p>
+        <>
+          <Card className="shadow-sm">
+            <CardContent className="pt-4">
+              <Label className="text-xs font-semibold text-slate-700">E-mail do Remetente</Label>
+              <Input
+                value={fromEmail}
+                onChange={(e) => setFromEmail(e.target.value)}
+                placeholder="onboarding@resend.dev"
+                className="mt-1 bg-white text-sm max-w-md"
+              />
+              <p className="text-[11px] text-slate-500 mt-1">
+                Use um domínio verificado no Resend. O padrão <code>onboarding@resend.dev</code> é
+                apenas para teste.
+              </p>
+            </CardContent>
+          </Card>
+
+          <Card className="shadow-sm">
+            <CardHeader className="flex flex-row items-center justify-between">
+              <CardTitle className="text-base">
+                Clientes Selecionados ({filteredClients.length})
+              </CardTitle>
+              <Button
+                className="bg-blue-600 hover:bg-blue-700"
+                disabled={!isFormValid || !can('communications', 'create') || sending}
+                onClick={handleSend}
+              >
+                {sending ? (
+                  <>
+                    <Loader2 className="w-4 h-4 mr-2 animate-spin" /> Enviando...
+                  </>
+                ) : (
+                  <>
+                    <Send className="w-4 h-4 mr-2" /> Enviar
+                  </>
+                )}
+              </Button>
+            </CardHeader>
+            <CardContent>
+              {results && (
+                <div className="mb-4 p-4 bg-slate-50 rounded-lg flex items-center gap-6">
+                  <div className="flex items-center gap-2 text-green-600">
+                    <CheckCircle2 className="w-5 h-5" />
+                    <span className="font-semibold text-sm">{results.sent} enviados</span>
                   </div>
+                  {results.failed > 0 && (
+                    <div className="flex items-center gap-2 text-red-600">
+                      <XCircle className="w-5 h-5" />
+                      <span className="font-semibold text-sm">{results.failed} falharam</span>
+                    </div>
+                  )}
                 </div>
-              ))}
-            </div>
-          </CardContent>
-        </Card>
+              )}
+              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-2 max-h-64 overflow-y-auto">
+                {filteredClients.map((c) => (
+                  <div
+                    key={c.id}
+                    className="flex items-center gap-2 p-2 bg-slate-50 rounded text-sm"
+                  >
+                    <Mail className="w-3.5 h-3.5 text-slate-400 shrink-0" />
+                    <div className="min-w-0">
+                      <p className="font-medium truncate">{c.name}</p>
+                      <p className="text-xs text-slate-500 truncate">{c.email}</p>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </CardContent>
+          </Card>
+        </>
       )}
 
       <Dialog open={showConfirm} onOpenChange={setShowConfirm}>
@@ -331,68 +376,21 @@ export default function EnvioEmMassa() {
             <p className="text-sm text-slate-500">
               Assunto: <em>{displaySubject}</em>
             </p>
+            <p className="text-sm text-slate-500">
+              Remetente: <em>{fromEmail}</em>
+            </p>
             <p className="text-xs text-slate-400">
-              O sistema abrirá seu cliente de e-mail para cada cliente e registrará as comunicações.
+              Os e-mails serão enviados automaticamente via Resend e registrados no sistema.
             </p>
           </div>
           <DialogFooter>
             <Button variant="outline" onClick={() => setShowConfirm(false)}>
               Cancelar
             </Button>
-            <Button className="bg-blue-600" onClick={handleConfirmSend}>
-              Confirmar e Iniciar
+            <Button className="bg-blue-600" onClick={handleConfirmSend} disabled={sending}>
+              Confirmar e Enviar
             </Button>
           </DialogFooter>
-        </DialogContent>
-      </Dialog>
-
-      <Dialog
-        open={sendStep >= 0}
-        onOpenChange={(open) => {
-          if (!open) setSendStep(-1)
-        }}
-      >
-        <DialogContent>
-          <DialogHeader>
-            <DialogTitle>
-              Envio Sequencial ({sendStep + 1} de {filteredClients.length})
-            </DialogTitle>
-          </DialogHeader>
-          {currentClient && (
-            <div className="space-y-3 py-2">
-              <div className="p-3 bg-slate-50 rounded-lg">
-                <p className="font-semibold text-sm">{currentClient.name}</p>
-                <p className="text-xs text-slate-500">{currentClient.email}</p>
-              </div>
-              <div className="p-3 border rounded-lg max-h-48 overflow-y-auto">
-                <p className="text-xs font-semibold text-slate-600 mb-1">Assunto:</p>
-                <p className="text-sm font-medium mb-2">
-                  {getPersonalizedData(currentClient).subject}
-                </p>
-                <p className="text-xs font-semibold text-slate-600 mb-1">Corpo:</p>
-                <p className="text-xs text-slate-600 whitespace-pre-wrap">
-                  {getPersonalizedData(currentClient).body}
-                </p>
-              </div>
-              <div className="flex items-center justify-between pt-2">
-                <span className="text-xs text-slate-400">Enviados: {sentCount}</span>
-                <div className="flex gap-2">
-                  <Button variant="outline" onClick={() => setSendStep(-1)}>
-                    Cancelar
-                  </Button>
-                  <Button variant="secondary" onClick={() => handleOpenEmail(currentClient)}>
-                    <Mail className="w-4 h-4 mr-1" /> Abrir Email
-                  </Button>
-                  <Button className="bg-blue-600" onClick={handleNext}>
-                    {sendStep + 1 >= filteredClients.length ? 'Concluir' : 'Próximo'}
-                    {sendStep + 1 < filteredClients.length && (
-                      <ChevronRight className="w-4 h-4 ml-1" />
-                    )}
-                  </Button>
-                </div>
-              </div>
-            </div>
-          )}
         </DialogContent>
       </Dialog>
     </div>
