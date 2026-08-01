@@ -304,16 +304,18 @@ export default function Dashboard() {
             </span>
           </div>
         </div>
-        <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 mb-4">
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 mb-4">
           <div className="bg-slate-50 rounded-lg p-3 border">
             <p className="text-xs text-slate-500 font-medium">Receitas (Comissões Recebidas)</p>
             <p className="text-xl font-bold text-slate-900">{maskValue(metrics.totalReceitas)}</p>
           </div>
           <div className="bg-amber-50 rounded-lg p-3 border border-amber-100">
-            <p className="text-xs text-amber-600 font-medium">Repasses Pagos + Custos</p>
-            <p className="text-xl font-bold text-amber-700">
-              {maskValue(metrics.totalRepasses + metrics.totalCustos)}
-            </p>
+            <p className="text-xs text-amber-600 font-medium">Repasses Pagos</p>
+            <p className="text-xl font-bold text-amber-700">{maskValue(metrics.totalRepasses)}</p>
+          </div>
+          <div className="bg-rose-50 rounded-lg p-3 border border-rose-100">
+            <p className="text-xs text-rose-600 font-medium">Custos</p>
+            <p className="text-xl font-bold text-rose-700">{maskValue(metrics.totalCustos)}</p>
           </div>
           <div className="bg-blue-50 rounded-lg p-3 border border-blue-100">
             <p className="text-xs text-blue-600 font-medium">Lucro Líquido</p>
