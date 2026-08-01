@@ -8,6 +8,8 @@ import {
   Plus,
   HelpCircle,
   TrendingUp,
+  Eye,
+  EyeOff,
 } from 'lucide-react'
 import { useNavigate } from 'react-router-dom'
 import { getClients } from '@/services/clients'
@@ -21,6 +23,7 @@ import { SecretsGuideDialog } from '@/components/SecretsGuideDialog'
 import { GlobalFilters } from '@/components/GlobalFilters'
 import { DevTrackingPanel } from '@/components/DevTrackingPanel'
 import { useRealtime } from '@/hooks/use-realtime'
+import { usePermissions } from '@/hooks/use-permissions'
 import { formatCurrency } from '@/lib/utils'
 import { computePeriodFromFilters, isDateInPeriod } from '@/lib/date-filter'
 import { calculateFinancialMetrics, computePendingCommissions } from '@/lib/financial-calcs'
@@ -79,6 +82,11 @@ export default function Dashboard() {
     month: String(new Date().getMonth() + 1),
   })
   const [loading, setLoading] = useState(true)
+  const { isAdmin } = usePermissions()
+  const [showFinancials, setShowFinancials] = useState(false)
+
+  const maskValue = (value: number) =>
+    showFinancials && isAdmin ? `R$ ${formatCurrency(value)}` : 'R$ ••••••'
 
   const loadData = async () => {
     try {
@@ -261,9 +269,7 @@ export default function Dashboard() {
             <DollarSign className="w-5 h-5 text-blue-600" />
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold text-blue-700">
-              R$ {formatCurrency(pendingCommissions)}
-            </div>
+            <div className="text-2xl font-bold text-blue-700">{maskValue(pendingCommissions)}</div>
             <p className="text-xs text-blue-600 mt-1">Comissões pendentes</p>
           </CardContent>
         </Card>
@@ -277,28 +283,41 @@ export default function Dashboard() {
             <TrendingUp className="w-5 h-5 text-blue-600" />
             <h3 className="text-base font-bold text-slate-800">Resumo de Lucro</h3>
           </div>
-          <span className="text-xs font-medium text-slate-500 bg-slate-100 px-2.5 py-1 rounded">
-            {period.label}
-          </span>
+          <div className="flex items-center gap-2">
+            {isAdmin && (
+              <Button
+                variant="ghost"
+                size="icon"
+                className="h-8 w-8"
+                onClick={() => setShowFinancials((v) => !v)}
+                title={showFinancials ? 'Ocultar valores' : 'Mostrar valores'}
+              >
+                {showFinancials ? (
+                  <EyeOff className="w-4 h-4 text-slate-600" />
+                ) : (
+                  <Eye className="w-4 h-4 text-slate-600" />
+                )}
+              </Button>
+            )}
+            <span className="text-xs font-medium text-slate-500 bg-slate-100 px-2.5 py-1 rounded">
+              {period.label}
+            </span>
+          </div>
         </div>
         <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 mb-4">
           <div className="bg-slate-50 rounded-lg p-3 border">
             <p className="text-xs text-slate-500 font-medium">Receitas (Comissões Recebidas)</p>
-            <p className="text-xl font-bold text-slate-900">
-              R$ {formatCurrency(metrics.totalReceitas)}
-            </p>
+            <p className="text-xl font-bold text-slate-900">{maskValue(metrics.totalReceitas)}</p>
           </div>
           <div className="bg-amber-50 rounded-lg p-3 border border-amber-100">
             <p className="text-xs text-amber-600 font-medium">Repasses Pagos + Custos</p>
             <p className="text-xl font-bold text-amber-700">
-              R$ {formatCurrency(metrics.totalRepasses + metrics.totalCustos)}
+              {maskValue(metrics.totalRepasses + metrics.totalCustos)}
             </p>
           </div>
           <div className="bg-blue-50 rounded-lg p-3 border border-blue-100">
             <p className="text-xs text-blue-600 font-medium">Lucro Líquido</p>
-            <p className="text-xl font-bold text-blue-700">
-              R$ {formatCurrency(metrics.lucroLiquido)}
-            </p>
+            <p className="text-xl font-bold text-blue-700">{maskValue(metrics.lucroLiquido)}</p>
           </div>
         </div>
         {topCustos.length > 0 && (
@@ -311,7 +330,7 @@ export default function Dashboard() {
                   className="flex justify-between items-center text-sm bg-slate-50 rounded px-3 py-1.5 border"
                 >
                   <span className="font-medium text-slate-700">{c.descricao}</span>
-                  <span className="font-bold text-slate-900">R$ {formatCurrency(c.valor)}</span>
+                  <span className="font-bold text-slate-900">{maskValue(c.valor)}</span>
                 </div>
               ))}
             </div>
