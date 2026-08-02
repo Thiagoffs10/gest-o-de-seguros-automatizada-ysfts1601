@@ -17,6 +17,7 @@ import {
   LayoutGrid,
   Mail,
   Receipt,
+  Database,
 } from 'lucide-react'
 import logoImg from '@/assets/cred10mixlogooficialfundobranco4k-12574.jpg'
 import { useAuth } from '@/hooks/use-auth'
@@ -80,6 +81,7 @@ export default function Layout() {
     { title: 'Comunicação', path: '/comunicacao', icon: Send },
     ...(canMassSend ? [{ title: 'Envio em Massa', path: '/envio-em-massa', icon: Mail }] : []),
     ...(isAdmin ? [{ title: 'Usuários', path: '/usuarios', icon: UserCog }] : []),
+    ...(isAdmin ? [{ title: 'Backup', path: '/backup', icon: Database }] : []),
     { title: 'Configurações', path: '/configuracoes', icon: Settings },
   ]
 
