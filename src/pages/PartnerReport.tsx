@@ -30,6 +30,7 @@ export default function PartnerReport() {
   const [partnerSearch, setPartnerSearch] = useState('')
   const [selectedPartner, setSelectedPartner] = useState('all')
   const [status, setStatus] = useState('all')
+  const [cpfCnpjSearch, setCpfCnpjSearch] = useState('')
   const [dateFrom, setDateFrom] = useState('')
   const [dateTo, setDateTo] = useState('')
 
@@ -70,6 +71,25 @@ export default function PartnerReport() {
       result = result.filter((p) => {
         const ref = p.pago_parceiro ? p.data_pagamento_parceiro : p.created?.split(' ')[0]
         return ref && ref <= dateTo
+      })
+    }
+    if (cpfCnpjSearch.trim()) {
+      const rawSearch = cpfCnpjSearch.trim().toLowerCase()
+      const cleanSearch = rawSearch.replace(/\D/g, '')
+      result = result.filter((p) => {
+        const client = p.expand?.client
+        if (!client) return false
+        const cpf = client.cpf || ''
+        const cnpj = client.cnpj || ''
+        if (cpf.toLowerCase().includes(rawSearch) || cnpj.toLowerCase().includes(rawSearch))
+          return true
+        if (
+          cleanSearch &&
+          (cpf.replace(/\D/g, '').includes(cleanSearch) ||
+            cnpj.replace(/\D/g, '').includes(cleanSearch))
+        )
+          return true
+        return false
       })
     }
     return result.map((p) => {
@@ -135,7 +155,7 @@ export default function PartnerReport() {
       </div>
 
       <Card className="p-4 shadow-sm space-y-4">
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-3">
           <div>
             <Label className="text-xs font-semibold">Parceiro</Label>
             <Select value={selectedPartner} onValueChange={setSelectedPartner}>
@@ -156,6 +176,15 @@ export default function PartnerReport() {
               placeholder="Filtrar parceiro por nome..."
               value={partnerSearch}
               onChange={(e) => setPartnerSearch(e.target.value)}
+            />
+          </div>
+          <div>
+            <Label className="text-xs font-semibold">Filtrar por CPF/CNPJ</Label>
+            <Input
+              className="text-xs"
+              placeholder="CPF ou CNPJ do cliente..."
+              value={cpfCnpjSearch}
+              onChange={(e) => setCpfCnpjSearch(e.target.value)}
             />
           </div>
           <div>

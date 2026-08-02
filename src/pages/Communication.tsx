@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useState, useMemo } from 'react'
 import { Send, Mail, MessageSquare, FileSpreadsheet } from 'lucide-react'
 import { getClients } from '@/services/clients'
 import { getPolicies } from '@/services/policies'
@@ -30,6 +30,48 @@ export default function Communication() {
   const [selectedClientId, setSelectedClientId] = useState('')
   const [subject, setSubject] = useState('')
   const [body, setBody] = useState('')
+  const [clientCpfCnpjSearch, setClientCpfCnpjSearch] = useState('')
+  const [historyCpfCnpjSearch, setHistoryCpfCnpjSearch] = useState('')
+
+  const clientsMatchingCpfCnpj = useMemo(() => {
+    if (!clientCpfCnpjSearch.trim()) return clients
+    const rawSearch = clientCpfCnpjSearch.trim().toLowerCase()
+    const cleanSearch = rawSearch.replace(/\D/g, '')
+    return clients.filter((c) => {
+      const cpf = c.cpf || ''
+      const cnpj = c.cnpj || ''
+      if (cpf.toLowerCase().includes(rawSearch) || cnpj.toLowerCase().includes(rawSearch))
+        return true
+      if (
+        cleanSearch &&
+        (cpf.replace(/\D/g, '').includes(cleanSearch) ||
+          cnpj.replace(/\D/g, '').includes(cleanSearch))
+      )
+        return true
+      return false
+    })
+  }, [clients, clientCpfCnpjSearch])
+
+  const filteredComms = useMemo(() => {
+    if (!historyCpfCnpjSearch.trim()) return comms
+    const rawSearch = historyCpfCnpjSearch.trim().toLowerCase()
+    const cleanSearch = rawSearch.replace(/\D/g, '')
+    return comms.filter((cm) => {
+      const client = cm.expand?.client
+      if (!client) return false
+      const cpf = client.cpf || ''
+      const cnpj = client.cnpj || ''
+      if (cpf.toLowerCase().includes(rawSearch) || cnpj.toLowerCase().includes(rawSearch))
+        return true
+      if (
+        cleanSearch &&
+        (cpf.replace(/\D/g, '').includes(cleanSearch) ||
+          cnpj.replace(/\D/g, '').includes(cleanSearch))
+      )
+        return true
+      return false
+    })
+  }, [comms, historyCpfCnpjSearch])
 
   const loadData = async () => {
     try {
@@ -140,18 +182,27 @@ export default function Communication() {
             </div>
             <div>
               <Label>Selecionar Segurado</Label>
-              <Select value={selectedClientId} onValueChange={setSelectedClientId}>
-                <SelectTrigger>
-                  <SelectValue placeholder="Escolha um cliente..." />
-                </SelectTrigger>
-                <SelectContent>
-                  {clients.map((c) => (
-                    <SelectItem key={c.id} value={c.id}>
-                      {c.name} ({c.phone || c.email || 'Sem contato'})
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
+              <div className="space-y-2 mt-1">
+                <Input
+                  placeholder="Filtrar segurado por CPF/CNPJ..."
+                  value={clientCpfCnpjSearch}
+                  onChange={(e) => setClientCpfCnpjSearch(e.target.value)}
+                  className="text-xs bg-white"
+                />
+                <Select value={selectedClientId} onValueChange={setSelectedClientId}>
+                  <SelectTrigger>
+                    <SelectValue placeholder="Escolha um cliente..." />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {clientsMatchingCpfCnpj.map((c) => (
+                      <SelectItem key={c.id} value={c.id}>
+                        {c.name} {c.cpf ? `(CPF: ${c.cpf})` : c.cnpj ? `(CNPJ: ${c.cnpj})` : ''} (
+                        {c.phone || c.email || 'Sem contato'})
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
             </div>
             <div>
               <Label className="block mb-1">Modelos Prontos de Mensagem</Label>
@@ -212,8 +263,14 @@ export default function Communication() {
       </div>
 
       <Card className="shadow-sm overflow-hidden border">
-        <CardHeader>
+        <CardHeader className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2">
           <CardTitle className="text-base font-bold">Histórico de Comunicações</CardTitle>
+          <Input
+            placeholder="Filtrar histórico por CPF/CNPJ..."
+            value={historyCpfCnpjSearch}
+            onChange={(e) => setHistoryCpfCnpjSearch(e.target.value)}
+            className="w-full sm:w-64 text-xs h-8 bg-white"
+          />
         </CardHeader>
         <div className="overflow-x-auto">
           <table className="w-full text-left text-sm text-slate-700">
@@ -227,14 +284,14 @@ export default function Communication() {
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-100">
-              {comms.length === 0 ? (
+              {filteredComms.length === 0 ? (
                 <tr>
                   <td colSpan={5} className="text-center p-6 text-slate-500">
                     Nenhuma comunicação registrada.
                   </td>
                 </tr>
               ) : (
-                comms.map((cm) => (
+                filteredComms.map((cm) => (
                   <tr key={cm.id} className="hover:bg-slate-50">
                     <td className="p-3.5 font-bold">{cm.type}</td>
                     <td className="p-3.5">{cm.expand?.client?.name || '-'}</td>

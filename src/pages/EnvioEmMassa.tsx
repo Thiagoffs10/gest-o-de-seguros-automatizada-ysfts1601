@@ -53,10 +53,38 @@ export default function EnvioEmMassa() {
   const [customSubject, setCustomSubject] = useState('')
   const [customBody, setCustomBody] = useState('')
   const [filter, setFilter] = useState<FilterId | null>('todos')
-  const [fromEmail, setFromEmail] = useState('onboarding@resend.dev')
+  const [fromEmail, setFromEmail] = useState(
+    import.meta.env.VITE_SENDER_EMAIL || 'contato@cred10mix.com.br',
+  )
+  const [selectedClientIds, setSelectedClientIds] = useState<string[]>([])
   const [showConfirm, setShowConfirm] = useState(false)
   const [sending, setSending] = useState(false)
   const [results, setResults] = useState<SendResults | null>(null)
+
+  useEffect(() => {
+    setSelectedClientIds(filteredClients.map((c) => c.id))
+  }, [filteredClients])
+
+  const selectedClients = useMemo(() => {
+    return filteredClients.filter((c) => selectedClientIds.includes(c.id))
+  }, [filteredClients, selectedClientIds])
+
+  const isAllSelected =
+    filteredClients.length > 0 && selectedClientIds.length === filteredClients.length
+
+  const toggleSelectAll = () => {
+    if (isAllSelected) {
+      setSelectedClientIds([])
+    } else {
+      setSelectedClientIds(filteredClients.map((c) => c.id))
+    }
+  }
+
+  const toggleSelectClient = (id: string) => {
+    setSelectedClientIds((prev) =>
+      prev.includes(id) ? prev.filter((i) => i !== id) : [...prev, id],
+    )
+  }
 
   useEffect(() => {
     Promise.all([getClients(), getPolicies()])
@@ -112,12 +140,12 @@ export default function EnvioEmMassa() {
   }
 
   const isFormValid = useMemo(() => {
-    if (!template || filteredClients.length === 0) return false
+    if (!template || selectedClients.length === 0) return false
     if (template === 'personalizado') {
       return customSubject.trim().length > 0 && customBody.trim().length > 0
     }
     return true
-  }, [template, filteredClients.length, customSubject, customBody])
+  }, [template, selectedClients.length, customSubject, customBody])
 
   const handleSend = () => {
     if (!isFormValid) return
@@ -130,7 +158,7 @@ export default function EnvioEmMassa() {
     setSending(true)
     setResults(null)
 
-    const recipients = filteredClients.map((c) => {
+    const recipients = selectedClients.map((c) => {
       const { subject, body } = getPersonalizedData(c)
       return { to: c.email!, client_id: c.id, subject, body }
     })
@@ -309,9 +337,26 @@ export default function EnvioEmMassa() {
 
           <Card className="shadow-sm">
             <CardHeader className="flex flex-row items-center justify-between">
-              <CardTitle className="text-base">
-                Clientes Selecionados ({filteredClients.length})
-              </CardTitle>
+              <div className="flex items-center gap-3">
+                <CardTitle className="text-base">
+                  Clientes Selecionados ({selectedClients.length} de {filteredClients.length})
+                </CardTitle>
+                <div className="flex items-center gap-1.5 text-xs text-slate-600 bg-slate-100 px-2.5 py-1 rounded-md">
+                  <input
+                    type="checkbox"
+                    id="select-all-clients"
+                    checked={isAllSelected}
+                    onChange={toggleSelectAll}
+                    className="rounded text-blue-600 focus:ring-blue-500 h-3.5 w-3.5 cursor-pointer"
+                  />
+                  <label
+                    htmlFor="select-all-clients"
+                    className="cursor-pointer font-medium select-none"
+                  >
+                    {isAllSelected ? 'Desmarcar Todos' : 'Selecionar Todos'}
+                  </label>
+                </div>
+              </div>
               <Button
                 className="bg-blue-600 hover:bg-blue-700"
                 disabled={!isFormValid || !can('communications', 'create') || sending}
@@ -344,18 +389,33 @@ export default function EnvioEmMassa() {
                 </div>
               )}
               <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-2 max-h-64 overflow-y-auto">
-                {filteredClients.map((c) => (
-                  <div
-                    key={c.id}
-                    className="flex items-center gap-2 p-2 bg-slate-50 rounded text-sm"
-                  >
-                    <Mail className="w-3.5 h-3.5 text-slate-400 shrink-0" />
-                    <div className="min-w-0">
-                      <p className="font-medium truncate">{c.name}</p>
-                      <p className="text-xs text-slate-500 truncate">{c.email}</p>
+                {filteredClients.map((c) => {
+                  const isChecked = selectedClientIds.includes(c.id)
+                  return (
+                    <div
+                      key={c.id}
+                      onClick={() => toggleSelectClient(c.id)}
+                      className={`flex items-center gap-2.5 p-2 rounded text-sm border cursor-pointer transition-colors ${
+                        isChecked
+                          ? 'bg-blue-50/70 border-blue-200'
+                          : 'bg-slate-50 border-slate-200 opacity-60'
+                      }`}
+                    >
+                      <input
+                        type="checkbox"
+                        checked={isChecked}
+                        onChange={() => toggleSelectClient(c.id)}
+                        onClick={(e) => e.stopPropagation()}
+                        className="rounded text-blue-600 focus:ring-blue-500 h-4 w-4 cursor-pointer shrink-0"
+                      />
+                      <Mail className="w-3.5 h-3.5 text-slate-400 shrink-0" />
+                      <div className="min-w-0 flex-1">
+                        <p className="font-medium truncate text-xs sm:text-sm">{c.name}</p>
+                        <p className="text-[11px] text-slate-500 truncate">{c.email}</p>
+                      </div>
                     </div>
-                  </div>
-                ))}
+                  )
+                })}
               </div>
             </CardContent>
           </Card>
@@ -369,7 +429,7 @@ export default function EnvioEmMassa() {
           </DialogHeader>
           <div className="space-y-2 py-2">
             <p className="text-sm text-slate-700">
-              Você está prestes a enviar <strong>{filteredClients.length} e-mails</strong>{' '}
+              Você está prestes a enviar <strong>{selectedClients.length} e-mails</strong>{' '}
               utilizando o tema{' '}
               <strong>{template === 'personalizado' ? 'Modelo Personalizado' : tpl?.name}</strong>.
             </p>

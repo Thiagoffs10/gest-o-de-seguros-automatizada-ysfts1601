@@ -8,6 +8,7 @@ import { Policy, Parceiro, Seguradora, CustoFixo, FilterState } from '@/types'
 import { Card, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
+import { Input } from '@/components/ui/input'
 import { GlobalFilters } from '@/components/GlobalFilters'
 import { FinancialSummaryCards } from '@/components/FinancialSummaryCards'
 import { CommissionEditDialog, FinancialEditData } from '@/components/CommissionEditDialog'
@@ -55,9 +56,18 @@ export default function Financial() {
   })
   const [statusFilter, setStatusFilter] = useState('ALL')
   const [commFilter, setCommFilter] = useState('ALL')
+  const [cpfCnpjFilter, setCpfCnpjFilter] = useState('')
   const [editPolicy, setEditPolicy] = useState<Policy | null>(null)
   const [saving, setSaving] = useState(false)
   const [loading, setLoading] = useState(true)
+  const [commPage, setCommPage] = useState(1)
+  const [repassePage, setRepassePage] = useState(1)
+  const ITEMS_PER_PAGE = 10
+
+  useEffect(() => {
+    setCommPage(1)
+    setRepassePage(1)
+  }, [filters, statusFilter, commFilter, cpfCnpjFilter])
 
   const loadData = useCallback(async () => {
     setLoading(true)
@@ -98,6 +108,21 @@ export default function Financial() {
       p.coverage_type !== filters.tipoSeguro
     )
       return false
+    if (cpfCnpjFilter.trim()) {
+      const rawSearch = cpfCnpjFilter.trim().toLowerCase()
+      const cleanSearch = rawSearch.replace(/\D/g, '')
+      const client = p.expand?.client
+      if (!client) return false
+      const cpf = client.cpf || ''
+      const cnpj = client.cnpj || ''
+      const matchesRaw =
+        cpf.toLowerCase().includes(rawSearch) || cnpj.toLowerCase().includes(rawSearch)
+      const matchesClean = cleanSearch
+        ? cpf.replace(/\D/g, '').includes(cleanSearch) ||
+          cnpj.replace(/\D/g, '').includes(cleanSearch)
+        : false
+      if (!matchesRaw && !matchesClean) return false
+    }
     return true
   }
 
@@ -109,6 +134,19 @@ export default function Financial() {
     () => allPolicies.filter((p) => applyNonDateFilters(p)),
     [allPolicies, statusFilter, commFilter, filters],
   )
+
+  const totalCommPages = Math.ceil(tablePolicies.length / ITEMS_PER_PAGE) || 1
+  const paginatedCommPolicies = useMemo(() => {
+    const start = (commPage - 1) * ITEMS_PER_PAGE
+    return tablePolicies.slice(start, start + ITEMS_PER_PAGE)
+  }, [tablePolicies, commPage])
+
+  const totalRepassePages = Math.ceil((metrics?.partnerPols?.length || 0) / ITEMS_PER_PAGE) || 1
+  const paginatedPartnerPols = useMemo(() => {
+    const partnerPols = metrics?.partnerPols || []
+    const start = (repassePage - 1) * ITEMS_PER_PAGE
+    return partnerPols.slice(start, start + ITEMS_PER_PAGE)
+  }, [metrics?.partnerPols, repassePage])
 
   const metrics = useMemo(() => {
     const expectedCommissions = computeExpectedCommissions(allPolicies, period)
@@ -223,9 +261,15 @@ export default function Financial() {
           seguradoras={seguradoras}
           showTipoSeguroFilter
         />
-        <div className="flex items-center gap-2">
+        <div className="flex flex-wrap items-center gap-2">
+          <Input
+            placeholder="Filtrar por CPF/CNPJ"
+            value={cpfCnpjFilter}
+            onChange={(e) => setCpfCnpjFilter(e.target.value)}
+            className="w-[170px] text-xs h-9 bg-white"
+          />
           <Select value={statusFilter} onValueChange={setStatusFilter}>
-            <SelectTrigger className="w-[180px]">
+            <SelectTrigger className="w-[160px]">
               <SelectValue placeholder="Status" />
             </SelectTrigger>
             <SelectContent>
@@ -237,7 +281,7 @@ export default function Financial() {
             </SelectContent>
           </Select>
           <Select value={commFilter} onValueChange={setCommFilter}>
-            <SelectTrigger className="w-[180px]">
+            <SelectTrigger className="w-[160px]">
               <SelectValue placeholder="Comissão" />
             </SelectTrigger>
             <SelectContent>
@@ -256,6 +300,7 @@ export default function Financial() {
               })
               setStatusFilter('ALL')
               setCommFilter('ALL')
+              setCpfCnpjFilter('')
             }}
           >
             Limpar Filtros
@@ -293,7 +338,7 @@ export default function Financial() {
                   </td>
                 </tr>
               ) : (
-                tablePolicies.map((p) => (
+                paginatedCommPolicies.map((p) => (
                   <tr key={p.id} className="hover:bg-slate-50/80">
                     <td className="p-3 font-bold text-slate-900">{p.policy_number}</td>
                     <td className="p-3">{p.expand?.client?.name || '-'}</td>
@@ -346,6 +391,36 @@ export default function Financial() {
             </tbody>
           </table>
         </div>
+        <div className="p-3 border-t flex flex-col sm:flex-row items-center justify-between gap-2 bg-slate-50 text-xs text-slate-600">
+          <span>
+            Exibindo {tablePolicies.length === 0 ? 0 : (commPage - 1) * ITEMS_PER_PAGE + 1} a{' '}
+            {Math.min(commPage * ITEMS_PER_PAGE, tablePolicies.length)} de {tablePolicies.length}{' '}
+            registros
+          </span>
+          <div className="flex items-center gap-2">
+            <Button
+              variant="outline"
+              size="sm"
+              className="h-8 px-2.5 text-xs"
+              disabled={commPage <= 1}
+              onClick={() => setCommPage((p) => Math.max(1, p - 1))}
+            >
+              Anterior
+            </Button>
+            <span className="font-semibold px-1">
+              Página {commPage} de {totalCommPages}
+            </span>
+            <Button
+              variant="outline"
+              size="sm"
+              className="h-8 px-2.5 text-xs"
+              disabled={commPage >= totalCommPages}
+              onClick={() => setCommPage((p) => Math.min(totalCommPages, p + 1))}
+            >
+              Próxima
+            </Button>
+          </div>
+        </div>
       </Card>
 
       <Card className="shadow-sm overflow-hidden border">
@@ -375,7 +450,7 @@ export default function Financial() {
                   </td>
                 </tr>
               ) : (
-                metrics.partnerPols.map((p) => (
+                paginatedPartnerPols.map((p) => (
                   <tr key={p.id} className="hover:bg-slate-50/80">
                     <td className="p-3 font-bold text-slate-900">{p.policy_number}</td>
                     <td className="p-3">{p.expand?.client?.name || '-'}</td>
@@ -422,6 +497,36 @@ export default function Financial() {
               )}
             </tbody>
           </table>
+        </div>
+        <div className="p-3 border-t flex flex-col sm:flex-row items-center justify-between gap-2 bg-slate-50 text-xs text-slate-600">
+          <span>
+            Exibindo {metrics.partnerPols.length === 0 ? 0 : (repassePage - 1) * ITEMS_PER_PAGE + 1}{' '}
+            a {Math.min(repassePage * ITEMS_PER_PAGE, metrics.partnerPols.length)} de{' '}
+            {metrics.partnerPols.length} registros
+          </span>
+          <div className="flex items-center gap-2">
+            <Button
+              variant="outline"
+              size="sm"
+              className="h-8 px-2.5 text-xs"
+              disabled={repassePage <= 1}
+              onClick={() => setRepassePage((p) => Math.max(1, p - 1))}
+            >
+              Anterior
+            </Button>
+            <span className="font-semibold px-1">
+              Página {repassePage} de {totalRepassePages}
+            </span>
+            <Button
+              variant="outline"
+              size="sm"
+              className="h-8 px-2.5 text-xs"
+              disabled={repassePage >= totalRepassePages}
+              onClick={() => setRepassePage((p) => Math.min(totalRepassePages, p + 1))}
+            >
+              Próxima
+            </Button>
+          </div>
         </div>
       </Card>
 
