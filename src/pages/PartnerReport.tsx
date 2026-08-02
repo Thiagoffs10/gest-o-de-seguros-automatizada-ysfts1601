@@ -17,6 +17,7 @@ import {
   SelectValue,
 } from '@/components/ui/select'
 import { generatePartnerReportPDF, PartnerReportEntry } from '@/lib/partner-report-pdf'
+import { matchDocument } from '@/lib/document-validators'
 import { useToast } from '@/hooks/use-toast'
 
 const fmt = (v: number) =>
@@ -74,23 +75,7 @@ export default function PartnerReport() {
       })
     }
     if (cpfCnpjSearch.trim()) {
-      const rawSearch = cpfCnpjSearch.trim().toLowerCase()
-      const cleanSearch = rawSearch.replace(/\D/g, '')
-      result = result.filter((p) => {
-        const client = p.expand?.client
-        if (!client) return false
-        const cpf = client.cpf || ''
-        const cnpj = client.cnpj || ''
-        if (cpf.toLowerCase().includes(rawSearch) || cnpj.toLowerCase().includes(rawSearch))
-          return true
-        if (
-          cleanSearch &&
-          (cpf.replace(/\D/g, '').includes(cleanSearch) ||
-            cnpj.replace(/\D/g, '').includes(cleanSearch))
-        )
-          return true
-        return false
-      })
+      result = result.filter((p) => matchDocument(p.expand?.client, cpfCnpjSearch))
     }
     return result.map((p) => {
       const valorLiquido = p.valor_liquido || p.premium_amount || 0

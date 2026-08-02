@@ -17,6 +17,7 @@ import {
   SelectValue,
 } from '@/components/ui/select'
 import { Badge } from '@/components/ui/badge'
+import { matchDocument } from '@/lib/document-validators'
 import { useToast } from '@/hooks/use-toast'
 import { usePermissions } from '@/hooks/use-permissions'
 
@@ -35,22 +36,31 @@ export default function Communication() {
 
   const clientsMatchingCpfCnpj = useMemo(() => {
     if (!clientCpfCnpjSearch.trim()) return clients
-    const rawSearch = clientCpfCnpjSearch.trim().toLowerCase()
-    const cleanSearch = rawSearch.replace(/\D/g, '')
-    return clients.filter((c) => {
-      const cpf = c.cpf || ''
-      const cnpj = c.cnpj || ''
-      if (cpf.toLowerCase().includes(rawSearch) || cnpj.toLowerCase().includes(rawSearch))
-        return true
-      if (
-        cleanSearch &&
-        (cpf.replace(/\D/g, '').includes(cleanSearch) ||
-          cnpj.replace(/\D/g, '').includes(cleanSearch))
-      )
-        return true
-      return false
-    })
+    return clients.filter((c) => matchDocument(c, clientCpfCnpjSearch))
   }, [clients, clientCpfCnpjSearch])
+
+  useEffect(() => {
+    const query = clientCpfCnpjSearch.trim()
+    if (!query) return
+
+    const matches = clients.filter((c) => matchDocument(c, query))
+
+    if (matches.length === 1) {
+      setSelectedClientId(matches[0].id)
+    } else if (matches.length > 1) {
+      const cleanQuery = query.replace(/\D/g, '')
+      const exactMatch = matches.find((c) => {
+        const cpfClean = (c.cpf || '').replace(/\D/g, '')
+        const cnpjClean = (c.cnpj || '').replace(/\D/g, '')
+        return cleanQuery && (cpfClean === cleanQuery || cnpjClean === cleanQuery)
+      })
+      if (exactMatch) {
+        setSelectedClientId(exactMatch.id)
+      }
+    } else if (matches.length === 0) {
+      setSelectedClientId('')
+    }
+  }, [clientCpfCnpjSearch, clients])
 
   const filteredComms = useMemo(() => {
     if (!historyCpfCnpjSearch.trim()) return comms
@@ -194,12 +204,18 @@ export default function Communication() {
                     <SelectValue placeholder="Escolha um cliente..." />
                   </SelectTrigger>
                   <SelectContent>
-                    {clientsMatchingCpfCnpj.map((c) => (
-                      <SelectItem key={c.id} value={c.id}>
-                        {c.name} {c.cpf ? `(CPF: ${c.cpf})` : c.cnpj ? `(CNPJ: ${c.cnpj})` : ''} (
-                        {c.phone || c.email || 'Sem contato'})
+                    {clientsMatchingCpfCnpj.length === 0 ? (
+                      <SelectItem value="_empty" disabled className="text-slate-400 text-xs">
+                        Nenhum segurado encontrado
                       </SelectItem>
-                    ))}
+                    ) : (
+                      clientsMatchingCpfCnpj.map((c) => (
+                        <SelectItem key={c.id} value={c.id}>
+                          {c.name} {c.cpf ? `(CPF: ${c.cpf})` : c.cnpj ? `(CNPJ: ${c.cnpj})` : ''} (
+                          {c.phone || c.email || 'Sem contato'})
+                        </SelectItem>
+                      ))
+                    )}
                   </SelectContent>
                 </Select>
               </div>

@@ -15,6 +15,7 @@ import { CommissionEditDialog, FinancialEditData } from '@/components/Commission
 import { useToast } from '@/hooks/use-toast'
 import { useRealtime } from '@/hooks/use-realtime'
 import { usePermissions } from '@/hooks/use-permissions'
+import { matchDocument } from '@/lib/document-validators'
 import { computePeriodFromFilters, isDateInPeriod } from '@/lib/date-filter'
 import {
   calcNetCommission,
@@ -96,43 +97,34 @@ export default function Financial() {
 
   const period = useMemo(() => computePeriodFromFilters(filters), [filters])
 
-  const applyNonDateFilters = (p: Policy): boolean => {
-    if (statusFilter !== 'ALL' && p.status !== statusFilter) return false
-    if (commFilter === 'received' && !p.comissao_recebida) return false
-    if (commFilter === 'pending' && p.comissao_recebida) return false
-    if (filters.partnerId && p.parceiro !== filters.partnerId) return false
-    if (filters.seguradoraId && p.seguradora !== filters.seguradoraId) return false
-    if (
-      filters.tipoSeguro &&
-      p.tipo_de_seguro !== filters.tipoSeguro &&
-      p.coverage_type !== filters.tipoSeguro
-    )
-      return false
-    if (cpfCnpjFilter.trim()) {
-      const rawSearch = cpfCnpjFilter.trim().toLowerCase()
-      const cleanSearch = rawSearch.replace(/\D/g, '')
-      const client = p.expand?.client
-      if (!client) return false
-      const cpf = client.cpf || ''
-      const cnpj = client.cnpj || ''
-      const matchesRaw =
-        cpf.toLowerCase().includes(rawSearch) || cnpj.toLowerCase().includes(rawSearch)
-      const matchesClean = cleanSearch
-        ? cpf.replace(/\D/g, '').includes(cleanSearch) ||
-          cnpj.replace(/\D/g, '').includes(cleanSearch)
-        : false
-      if (!matchesRaw && !matchesClean) return false
-    }
-    return true
-  }
+  const applyNonDateFilters = useCallback(
+    (p: Policy): boolean => {
+      if (statusFilter !== 'ALL' && p.status !== statusFilter) return false
+      if (commFilter === 'received' && !p.comissao_recebida) return false
+      if (commFilter === 'pending' && p.comissao_recebida) return false
+      if (filters.partnerId && p.parceiro !== filters.partnerId) return false
+      if (filters.seguradoraId && p.seguradora !== filters.seguradoraId) return false
+      if (
+        filters.tipoSeguro &&
+        p.tipo_de_seguro !== filters.tipoSeguro &&
+        p.coverage_type !== filters.tipoSeguro
+      )
+        return false
+      if (cpfCnpjFilter.trim()) {
+        if (!matchDocument(p.expand?.client, cpfCnpjFilter)) return false
+      }
+      return true
+    },
+    [statusFilter, commFilter, filters, cpfCnpjFilter],
+  )
 
   const policies = useMemo(
     () => allPolicies.filter((p) => applyNonDateFilters(p) && isDateInPeriod(period, p.start_date)),
-    [allPolicies, filters, period, statusFilter, commFilter],
+    [allPolicies, applyNonDateFilters, period],
   )
   const tablePolicies = useMemo(
     () => allPolicies.filter((p) => applyNonDateFilters(p)),
-    [allPolicies, statusFilter, commFilter, filters],
+    [allPolicies, applyNonDateFilters],
   )
 
   const metrics = useMemo(() => {
