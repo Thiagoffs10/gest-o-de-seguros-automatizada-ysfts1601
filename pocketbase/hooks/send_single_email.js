@@ -14,7 +14,7 @@ routerAdd(
 
     var verifiedEmailSecret = $secrets.get('VERIFIED_FROM_EMAIL') || $secrets.get('SENDER_EMAIL')
     var defaultSender = verifiedEmailSecret || 'contato@cred10mix.com.br'
-    const fromEmail = body.from && body.from !== 'onboarding@resend.dev' ? body.from : defaultSender
+    const fromEmail = body.from || defaultSender
 
     var apiKey = $secrets.get('RESEND_API_KEY')
     if (!apiKey) {

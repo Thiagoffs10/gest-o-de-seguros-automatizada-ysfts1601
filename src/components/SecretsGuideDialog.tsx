@@ -8,7 +8,7 @@ import {
 } from '@/components/ui/dialog'
 import { Button } from '@/components/ui/button'
 import { Card } from '@/components/ui/card'
-import { HelpCircle, Server, KeyRound, Plus, Save, ExternalLink, Globe } from 'lucide-react'
+import { HelpCircle, Server, KeyRound, Plus, Save, ExternalLink, Globe, Mail } from 'lucide-react'
 
 interface SecretsGuideDialogProps {
   trigger?: React.ReactNode
@@ -40,10 +40,16 @@ const STEPS = [
       'Clique no botão "Add new secret". Preencha os campos: Key (Chave): RESEND_API_KEY — Value (Valor): cole sua chave de API do Resend (começa com "re_").',
   },
   {
+    icon: Mail,
+    title: 'Adicione o segredo VERIFIED_FROM_EMAIL (opcional)',
+    description:
+      'Para testar o envio sem verificar seu domínio, adicione outro secret: Key: VERIFIED_FROM_EMAIL — Value: onboarding@resend.dev (sender de teste do Resend). Sem este secret, o sistema usará contato@cred10mix.com.br como remetente padrão.',
+  },
+  {
     icon: Save,
     title: 'Salve a configuração',
     description:
-      'Após preencher os campos, clique em "Save". O segredo será armazenado com segurança e estará disponível para os hooks do backend via $secrets.get("RESEND_API_KEY").',
+      'Após preencher os campos, clique em "Save". Os segredos serão armazenados com segurança e estarão disponíveis para os hooks do backend via $secrets.get().',
   },
 ]
 
@@ -123,6 +129,32 @@ export function SecretsGuideDialog({ trigger }: SecretsGuideDialogProps) {
                   >
                     resend.com/api-keys
                   </a>
+                </p>
+              </div>
+            </div>
+          </Card>
+          <Card className="p-4 bg-emerald-50 border-emerald-200">
+            <div className="flex items-start gap-3">
+              <Mail className="w-5 h-5 text-emerald-600 shrink-0 mt-0.5" />
+              <div className="space-y-1">
+                <h4 className="font-semibold text-sm text-emerald-900">
+                  Teste sem verificar domínio
+                </h4>
+                <p className="text-xs text-emerald-800">
+                  <strong>Key:</strong>{' '}
+                  <code className="bg-emerald-100 px-1.5 py-0.5 rounded font-mono text-emerald-900">
+                    VERIFIED_FROM_EMAIL
+                  </code>
+                </p>
+                <p className="text-xs text-emerald-800">
+                  <strong>Value:</strong>{' '}
+                  <code className="bg-emerald-100 px-1.5 py-0.5 rounded font-mono text-emerald-900">
+                    onboarding@resend.dev
+                  </code>
+                </p>
+                <p className="text-xs text-emerald-700 pt-1">
+                  Use o sender de teste do Resend para validar o fluxo de e-mails. Os envios serão
+                  entregues apenas para o e-mail do proprietário da conta Resend.
                 </p>
               </div>
             </div>
