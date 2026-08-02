@@ -29,3 +29,17 @@ export const updateClient = async (id: string, data: Partial<Client>) => {
 export const deleteClient = async (id: string) => {
   return pb.collection('clients').delete(id)
 }
+
+export const findClientByDocument = async (document: string): Promise<Client | null> => {
+  const digits = document.replace(/\D/g, '')
+  if (digits.length !== 11 && digits.length !== 14) return null
+
+  const clients = await pb.collection('clients').getFullList<Client>()
+  return (
+    clients.find((c) => {
+      const cpfDigits = (c.cpf || '').replace(/\D/g, '')
+      const cnpjDigits = (c.cnpj || '').replace(/\D/g, '')
+      return cpfDigits === digits || cnpjDigits === digits
+    }) || null
+  )
+}

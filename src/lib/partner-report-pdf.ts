@@ -2,12 +2,14 @@ import logoImg from '@/assets/cred10mixlogooficialfundobranco4k-12574.jpg'
 
 export interface PartnerReportEntry {
   clientName: string
+  clientCpfCnpj: string
   seguradoraName: string
   tipoSeguro: string
   valorLiquido: number
   repassePercent: number
   valorRepasse: number
   status: 'Pago' | 'Em aberto'
+  paymentDate?: string
 }
 
 export interface PartnerReportInfo {
@@ -22,6 +24,8 @@ export interface PartnerReportData {
   partnerName: string
   partnerInfo?: PartnerReportInfo | null
   isAllPartners?: boolean
+  foundClientName?: string | null
+  foundClientDocument?: string | null
   generatedAt: Date
   entries: PartnerReportEntry[]
   totalPaid: number
@@ -53,16 +57,28 @@ export function generatePartnerReportPDF(data: PartnerReportData) {
       </div>`
       : `<div class="partner-header"><h2>${data.partnerName}</h2></div>`
 
+  const foundClientSection = data.foundClientName
+    ? `<div class="partner-header" style="border-left-color:#16a34a">
+        <h2>Cliente Localizado</h2>
+        <div class="partner-grid">
+          <div class="partner-field"><span class="partner-label">Nome:</span> ${data.foundClientName}</div>
+          ${data.foundClientDocument ? `<div class="partner-field"><span class="partner-label">CPF/CNPJ:</span> ${data.foundClientDocument}</div>` : ''}
+        </div>
+      </div>`
+    : ''
+
   const rows = data.entries
     .map(
       (e) => `<tr>
         <td>${e.clientName}</td>
+        <td>${e.clientCpfCnpj || '-'}</td>
         <td>${e.seguradoraName}</td>
         <td>${e.tipoSeguro}</td>
         <td class="right">R$ ${fmt(e.valorLiquido)}</td>
         <td class="center">${e.repassePercent}%</td>
         <td class="right">R$ ${fmt(e.valorRepasse)}</td>
         <td class="center"><span class="badge ${e.status === 'Pago' ? 'paid' : 'pending'}">${e.status}</span></td>
+        <td class="center">${e.paymentDate || '-'}</td>
       </tr>`,
     )
     .join('')
@@ -85,9 +101,9 @@ body{font-family:Arial,sans-serif;padding:30px;color:#1e293b}
 .partner-grid{display:flex;flex-wrap:wrap;gap:6px 30px}
 .partner-field{font-size:13px;color:#334155}
 .partner-label{font-weight:600;color:#64748b;display:inline-block;min-width:140px}
-table{width:100%;border-collapse:collapse;font-size:12px}
-th{background:#1e293b;color:#fff;padding:8px 6px;text-align:left;font-weight:600}
-td{padding:7px 6px;border-bottom:1px solid #e2e8f0}
+table{width:100%;border-collapse:collapse;font-size:11px}
+th{background:#1e293b;color:#fff;padding:8px 5px;text-align:left;font-weight:600}
+td{padding:7px 5px;border-bottom:1px solid #e2e8f0}
 td.right,th.right{text-align:right}
 td.center,th.center{text-align:center}
 tr:nth-child(even){background:#f8fafc}
@@ -119,11 +135,12 @@ tr:nth-child(even){background:#f8fafc}
   </div>
 </div>
 ${partnerHeader}
+${foundClientSection}
 <table>
 <thead><tr>
-<th>Nome</th><th>Seguradora</th><th>Tipo de Seguro</th>
-<th class="right">Valor Líquido</th><th class="center">Percentual de Repasse</th>
-<th class="right">Valor do Repasse</th><th class="center">Status</th>
+<th>Nome</th><th>CPF/CNPJ</th><th>Seguradora</th><th>Tipo de Seguro</th>
+<th class="right">Valor Líquido</th><th class="center">% Repasse</th>
+<th class="right">Valor do Repasse</th><th class="center">Status</th><th class="center">Data Pagamento</th>
 </tr></thead>
 <tbody>${rows}</tbody>
 </table>

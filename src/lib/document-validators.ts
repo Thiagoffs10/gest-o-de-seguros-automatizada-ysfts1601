@@ -52,3 +52,24 @@ export function matchDocument(
 
   return cpfClean.includes(cleanQuery) || cnpjClean.includes(cleanQuery)
 }
+
+export function maskDocument(value: string): string {
+  const digits = value.replace(/\D/g, '')
+  if (digits.length <= 11) {
+    return maskCpf(digits)
+  }
+  return maskCnpj(digits)
+}
+
+export function formatClientDocument(client: {
+  tipo_pessoa?: string
+  cpf?: string
+  cnpj?: string
+}): string {
+  if (client.tipo_pessoa === 'PJ' && client.cnpj) {
+    return maskCnpj(client.cnpj)
+  }
+  if (client.cpf) return maskCpf(client.cpf)
+  if (client.cnpj) return maskCnpj(client.cnpj)
+  return ''
+}
