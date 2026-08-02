@@ -38,3 +38,17 @@ export function formatDocumentLabel(client: {
   }
   return client.cpf ? `CPF: ${client.cpf}` : 'CPF: -'
 }
+
+export function matchDocument(
+  client?: { cpf?: string; cnpj?: string } | null,
+  query?: string,
+): boolean {
+  if (!client || !query) return false
+  const cleanQuery = query.replace(/\D/g, '')
+  if (!cleanQuery) return false
+
+  const cpfClean = (client.cpf || '').replace(/\D/g, '')
+  const cnpjClean = (client.cnpj || '').replace(/\D/g, '')
+
+  return cpfClean.includes(cleanQuery) || cnpjClean.includes(cleanQuery)
+}
