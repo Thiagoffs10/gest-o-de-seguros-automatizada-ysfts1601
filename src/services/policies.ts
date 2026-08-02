@@ -173,6 +173,7 @@ export const updatePolicyFinancial = async (
     data_recebimento_comissao?: string | null
     pago_parceiro?: boolean
     data_pagamento_parceiro?: string | null
+    forma_pagamento_repasse?: string | null
   },
 ) => {
   return pb.collection('policies').update<Policy>(id, data)

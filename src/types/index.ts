@@ -92,6 +92,7 @@ export interface Policy {
   valor_repasse?: number
   data_pagamento_parceiro?: string
   pago_parceiro?: boolean
+  forma_pagamento_repasse?: string
   data_recebimento_comissao?: string
   comissao_recebida?: boolean
   notes?: string
@@ -157,6 +158,25 @@ export interface CustoFixo {
     | 'Outros'
   observacoes?: string
   tipo?: 'Fixo' | 'Variável'
+  pago?: boolean
+  data_pagamento?: string
+  forma_pagamento?: 'PIX' | 'Transferência' | 'Dinheiro' | 'Cartão' | 'Boleto' | 'Outro'
+  recorrente?: boolean
+  frequencia_recorrencia?: 'Mensal' | 'Trimestral' | 'Semestral' | 'Anual'
+  created: string
+  updated: string
+}
+
+export interface Conciliacao {
+  id: string
+  mes: number
+  ano: number
+  data_fechamento?: string
+  usuario_fechamento?: string
+  usuario_id?: string
+  resumo?: string
+  pendencias?: string
+  observacoes?: string
   created: string
   updated: string
 }

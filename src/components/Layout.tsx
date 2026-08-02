@@ -18,6 +18,7 @@ import {
   Mail,
   Receipt,
   Database,
+  ClipboardCheck,
 } from 'lucide-react'
 import logoImg from '@/assets/cred10mixlogooficialfundobranco4k-12574.jpg'
 import { useAuth } from '@/hooks/use-auth'
@@ -74,6 +75,9 @@ export default function Layout() {
     { title: 'Parceiros', path: '/parceiros', icon: Handshake },
     { title: 'Seguradoras', path: '/seguradoras', icon: Building2 },
     { title: 'Financeiro', path: '/financeiro', icon: Wallet },
+    ...(can('conciliacoes', 'read')
+      ? [{ title: 'Conciliação', path: '/conciliacao-mensal', icon: ClipboardCheck }]
+      : []),
     ...(can('custos_fixos', 'read')
       ? [{ title: 'Custos', path: '/custos-fixos', icon: Receipt }]
       : []),

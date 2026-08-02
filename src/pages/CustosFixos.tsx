@@ -30,6 +30,8 @@ import {
   computePaidRepasses,
   computeCosts,
   computeNetProfit,
+  computePaidCosts,
+  computePendingCosts,
 } from '@/lib/financial-calcs'
 import { DevTrackingPanel } from '@/components/DevTrackingPanel'
 
@@ -76,7 +78,7 @@ export default function CustosFixos() {
       setCosts(costsData)
       setPolicies(pols)
     } catch {
-      /* intentionally ignored */
+      /* ignored */
     }
     setLoading(false)
   }, [effectivePeriod])
@@ -87,13 +89,23 @@ export default function CustosFixos() {
   useRealtime('custos_fixos', () => loadData())
   useRealtime('policies', () => loadData())
 
-  const { totalReceitas, totalRepasses, totalCustos, lucroLiquido } = useMemo(() => {
-    const totalReceitas = computeReceivedCommissions(policies, effectivePeriod)
-    const totalRepasses = computePaidRepasses(policies, effectivePeriod)
-    const totalCustos = computeCosts(costs, effectivePeriod)
-    const lucroLiquido = computeNetProfit(totalReceitas, totalRepasses, totalCustos)
-    return { totalReceitas, totalRepasses, totalCustos, lucroLiquido }
-  }, [policies, costs, effectivePeriod])
+  const { totalReceitas, totalRepasses, totalCustos, lucroLiquido, custosPagos, custosPendentes } =
+    useMemo(() => {
+      const totalReceitas = computeReceivedCommissions(policies, effectivePeriod)
+      const totalRepasses = computePaidRepasses(policies, effectivePeriod)
+      const totalCustos = computeCosts(costs, effectivePeriod)
+      const custosPagos = computePaidCosts(costs, effectivePeriod)
+      const custosPendentes = computePendingCosts(costs, effectivePeriod)
+      const lucroLiquido = computeNetProfit(totalReceitas, totalRepasses, totalCustos)
+      return {
+        totalReceitas,
+        totalRepasses,
+        totalCustos,
+        lucroLiquido,
+        custosPagos,
+        custosPendentes,
+      }
+    }, [policies, costs, effectivePeriod])
 
   const sortedCosts = [...costs].sort((a, b) => {
     const cmp =
@@ -170,26 +182,30 @@ export default function CustosFixos() {
         totalReceitas={totalReceitas}
       />
 
-      <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
-        <Card className="shadow-sm p-4">
-          <p className="text-xs text-slate-500">Total de Receitas</p>
-          <p className="text-lg font-bold text-emerald-700">R$ {fmt(totalReceitas)}</p>
-          <p className="text-[10px] text-slate-400 mt-0.5">Período: {effectivePeriod.label}</p>
+      <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-3">
+        <Card className="shadow-sm p-3">
+          <p className="text-xs text-slate-500">Receitas</p>
+          <p className="text-base font-bold text-emerald-700">R$ {fmt(totalReceitas)}</p>
         </Card>
-        <Card className="shadow-sm p-4">
-          <p className="text-xs text-slate-500">Total de Repasses</p>
-          <p className="text-lg font-bold text-amber-700">R$ {fmt(totalRepasses)}</p>
-          <p className="text-[10px] text-slate-400 mt-0.5">{effectivePeriod.label}</p>
+        <Card className="shadow-sm p-3">
+          <p className="text-xs text-slate-500">Repasses</p>
+          <p className="text-base font-bold text-amber-700">R$ {fmt(totalRepasses)}</p>
         </Card>
-        <Card className="shadow-sm p-4">
-          <p className="text-xs text-slate-500">Total de Custos</p>
-          <p className="text-lg font-bold text-red-700">R$ {fmt(totalCustos)}</p>
-          <p className="text-[10px] text-slate-400 mt-0.5">{effectivePeriod.label}</p>
+        <Card className="shadow-sm p-3">
+          <p className="text-xs text-slate-500">Custos Pagos</p>
+          <p className="text-base font-bold text-emerald-700">R$ {fmt(custosPagos)}</p>
         </Card>
-        <Card className="shadow-sm p-4">
-          <p className="text-xs text-slate-500">Lucro Líquido Real</p>
-          <p className="text-lg font-bold text-blue-700">R$ {fmt(lucroLiquido)}</p>
-          <p className="text-[10px] text-slate-400 mt-0.5">{effectivePeriod.label}</p>
+        <Card className="shadow-sm p-3">
+          <p className="text-xs text-slate-500">Custos Pendentes</p>
+          <p className="text-base font-bold text-red-700">R$ {fmt(custosPendentes)}</p>
+        </Card>
+        <Card className="shadow-sm p-3">
+          <p className="text-xs text-slate-500">Total Custos</p>
+          <p className="text-base font-bold text-red-700">R$ {fmt(totalCustos)}</p>
+        </Card>
+        <Card className="shadow-sm p-3">
+          <p className="text-xs text-slate-500">Lucro Líquido</p>
+          <p className="text-base font-bold text-blue-700">R$ {fmt(lucroLiquido)}</p>
         </Card>
       </div>
 
@@ -198,12 +214,12 @@ export default function CustosFixos() {
         <Button
           variant="outline"
           size="sm"
-          onClick={() => {
+          onClick={() =>
             setFilters({
               year: String(new Date().getFullYear()),
               month: String(new Date().getMonth() + 1),
             })
-          }}
+          }
         >
           Limpar filtros
         </Button>
@@ -230,6 +246,8 @@ export default function CustosFixos() {
                   </span>
                 </th>
                 <th className="p-3.5">Categoria</th>
+                <th className="p-3.5">Situação</th>
+                <th className="p-3.5">Forma Pagto</th>
                 <th className="p-3.5">Observações</th>
                 <th className="p-3.5 text-right">Ações</th>
               </tr>
@@ -237,14 +255,21 @@ export default function CustosFixos() {
             <tbody className="divide-y divide-slate-100">
               {sortedCosts.length === 0 ? (
                 <tr>
-                  <td colSpan={7} className="text-center p-6 text-slate-500">
+                  <td colSpan={9} className="text-center p-6 text-slate-500">
                     Nenhum custo cadastrado no período.
                   </td>
                 </tr>
               ) : (
                 sortedCosts.map((c) => (
                   <tr key={c.id} className="hover:bg-slate-50/80">
-                    <td className="p-3.5 font-medium">{c.descricao}</td>
+                    <td className="p-3.5 font-medium">
+                      {c.descricao}
+                      {c.recorrente && (
+                        <Badge className="ml-2 bg-indigo-100 text-indigo-800 text-[10px]">
+                          Recorrente
+                        </Badge>
+                      )}
+                    </td>
                     <td className="p-3.5">
                       <Badge
                         className={
@@ -262,6 +287,21 @@ export default function CustosFixos() {
                       <Badge className={CATEGORIA_COLORS[c.categoria] || 'bg-slate-100'}>
                         {c.categoria}
                       </Badge>
+                    </td>
+                    <td className="p-3.5">
+                      <Badge
+                        className={
+                          c.pago ? 'bg-emerald-100 text-emerald-800' : 'bg-amber-100 text-amber-800'
+                        }
+                      >
+                        {c.pago ? 'Pago' : 'Pendente'}
+                      </Badge>
+                    </td>
+                    <td className="p-3.5 text-xs text-slate-500">
+                      {c.forma_pagamento || '-'}
+                      {c.data_pagamento
+                        ? ` (${new Date(c.data_pagamento).toLocaleDateString('pt-BR')})`
+                        : ''}
                     </td>
                     <td className="p-3.5 text-slate-500 max-w-xs truncate">
                       {c.observacoes || '-'}

@@ -1,5 +1,5 @@
 import { useEffect, useState, useCallback, useMemo } from 'react'
-import { Edit2 } from 'lucide-react'
+import { Edit2, CheckCircle2, Check } from 'lucide-react'
 import { getPolicies, updatePolicyFinancial } from '@/services/policies'
 import { getParceiros } from '@/services/parceiros'
 import { getSeguradoras } from '@/services/seguradoras'
@@ -18,13 +18,15 @@ import { computePeriodFromFilters, isDateInPeriod } from '@/lib/date-filter'
 import {
   calcNetCommission,
   computeReceivedCommissions,
-  computePendingCommissions,
-  computePaidRepasses,
   computePendingRepasses,
+  computePaidRepasses,
+  computePaidCosts,
+  computePendingCosts,
+  computeExpectedCommissions,
+  computeExpectedRepasses,
   computeCosts,
-  computeNetProfit,
-  computeTotalGross,
-  computeTotalNet,
+  computeExpectedProfit,
+  computeRealProfit,
   getPartnerPolicies,
 } from '@/lib/financial-calcs'
 import { DevTrackingPanel } from '@/components/DevTrackingPanel'
@@ -71,7 +73,7 @@ export default function Financial() {
       setSeguradoras(segs)
       setCustosFixos(custos)
     } catch {
-      /* intentionally ignored */
+      /* ignored */
     }
     setLoading(false)
   }, [])
@@ -103,46 +105,65 @@ export default function Financial() {
     () => allPolicies.filter((p) => applyNonDateFilters(p) && isDateInPeriod(period, p.start_date)),
     [allPolicies, filters, period, statusFilter, commFilter],
   )
-
   const tablePolicies = useMemo(
     () => allPolicies.filter((p) => applyNonDateFilters(p)),
     [allPolicies, statusFilter, commFilter, filters],
   )
 
-  const periodLabel = period.label
-
-  const {
-    totalGross,
-    totalNet,
-    commReceived,
-    commPending,
-    partnerPols,
-    repassePaid,
-    repassePending,
-    totalCustos,
-    lucroLiquido,
-  } = useMemo(() => {
-    const totalGross = computeTotalGross(policies)
-    const totalNet = computeTotalNet(policies)
-    const commReceived = computeReceivedCommissions(allPolicies, period)
-    const commPending = computePendingCommissions(allPolicies)
-    const partnerPols = getPartnerPolicies(tablePolicies)
-    const repassePaid = computePaidRepasses(allPolicies, period)
-    const repassePending = computePendingRepasses(allPolicies)
+  const metrics = useMemo(() => {
+    const expectedCommissions = computeExpectedCommissions(allPolicies, period)
+    const receivedCommissions = computeReceivedCommissions(allPolicies, period)
+    const pendingCommissions = expectedCommissions - receivedCommissions
+    const pendingRepasses = computePendingRepasses(allPolicies)
+    const paidCosts = computePaidCosts(custosFixos, period)
+    const pendingCosts = computePendingCosts(custosFixos, period)
+    const expectedRepasses = computeExpectedRepasses(allPolicies, period)
     const totalCustos = computeCosts(custosFixos, period)
-    const lucroLiquido = computeNetProfit(commReceived, repassePaid, totalCustos)
+    const expectedProfit = computeExpectedProfit(expectedCommissions, expectedRepasses, totalCustos)
+    const realProfit = computeRealProfit(
+      receivedCommissions,
+      computePaidRepasses(allPolicies, period),
+      paidCosts,
+    )
+    const partnerPols = getPartnerPolicies(tablePolicies)
     return {
-      totalGross,
-      totalNet,
-      commReceived,
-      commPending,
+      expectedCommissions,
+      receivedCommissions,
+      pendingCommissions,
+      pendingRepasses,
+      paidCosts,
+      pendingCosts,
+      expectedProfit,
+      realProfit,
       partnerPols,
-      repassePaid,
-      repassePending,
-      totalCustos,
-      lucroLiquido,
     }
-  }, [policies, allPolicies, tablePolicies, custosFixos, period])
+  }, [allPolicies, tablePolicies, custosFixos, period])
+
+  const handleQuickReceive = async (policyId: string) => {
+    try {
+      await updatePolicyFinancial(policyId, {
+        comissao_recebida: true,
+        data_recebimento_comissao: new Date().toISOString().split('T')[0],
+      })
+      toast({ title: 'Comissão marcada como recebida!' })
+      loadData()
+    } catch (err: any) {
+      toast({ title: 'Erro', description: err.message, variant: 'destructive' })
+    }
+  }
+
+  const handleQuickPayRepasse = async (policyId: string) => {
+    try {
+      await updatePolicyFinancial(policyId, {
+        pago_parceiro: true,
+        data_pagamento_parceiro: new Date().toISOString().split('T')[0],
+      })
+      toast({ title: 'Repasse marcado como pago!' })
+      loadData()
+    } catch (err: any) {
+      toast({ title: 'Erro', description: err.message, variant: 'destructive' })
+    }
+  }
 
   const handleSave = async (data: FinancialEditData) => {
     if (!editPolicy) return
@@ -175,18 +196,22 @@ export default function Financial() {
       </div>
 
       <FinancialSummaryCards
-        totalGross={totalGross}
-        totalNet={totalNet}
-        commReceived={commReceived}
-        commPending={commPending}
-        repassePaid={repassePaid}
-        repassePending={repassePending}
-        totalCustos={totalCustos}
-        lucroLiquido={lucroLiquido}
-        periodLabel={periodLabel}
+        expectedCommissions={metrics.expectedCommissions}
+        receivedCommissions={metrics.receivedCommissions}
+        pendingCommissions={metrics.pendingCommissions}
+        pendingRepasses={metrics.pendingRepasses}
+        paidCosts={metrics.paidCosts}
+        pendingCosts={metrics.pendingCosts}
+        expectedProfit={metrics.expectedProfit}
+        realProfit={metrics.realProfit}
+        periodLabel={period.label}
       />
 
-      <DevTrackingPanel policies={allPolicies} period={period} totalReceitas={commReceived} />
+      <DevTrackingPanel
+        policies={allPolicies}
+        period={period}
+        totalReceitas={metrics.receivedCommissions}
+      />
 
       <div className="flex flex-wrap items-center justify-between gap-2">
         <GlobalFilters
@@ -257,7 +282,7 @@ export default function Financial() {
                 <th className="p-3 text-right">Com. Líquida</th>
                 <th className="p-3 text-center">Recebida</th>
                 <th className="p-3">Data Receb.</th>
-                <th className="p-3 text-right">Ação</th>
+                <th className="p-3 text-right">Ações</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-100">
@@ -296,13 +321,24 @@ export default function Financial() {
                         : '-'}
                     </td>
                     <td className="p-3 text-right">
-                      {can('policies', 'update') ? (
-                        <Button size="sm" variant="ghost" onClick={() => setEditPolicy(p)}>
-                          <Edit2 className="w-3.5 h-3.5" />
-                        </Button>
-                      ) : (
-                        <span className="text-xs text-slate-400">—</span>
-                      )}
+                      <div className="flex items-center justify-end gap-1">
+                        {can('policies', 'update') && !p.comissao_recebida && (
+                          <Button
+                            size="sm"
+                            variant="ghost"
+                            className="text-emerald-600"
+                            title="Receber Comissão"
+                            onClick={() => handleQuickReceive(p.id)}
+                          >
+                            <CheckCircle2 className="w-4 h-4" />
+                          </Button>
+                        )}
+                        {can('policies', 'update') && (
+                          <Button size="sm" variant="ghost" onClick={() => setEditPolicy(p)}>
+                            <Edit2 className="w-3.5 h-3.5" />
+                          </Button>
+                        )}
+                      </div>
                     </td>
                   </tr>
                 ))
@@ -327,18 +363,19 @@ export default function Financial() {
                 <th className="p-3 text-right">Repasse (R$)</th>
                 <th className="p-3 text-center">Pago</th>
                 <th className="p-3">Data Pagto</th>
-                <th className="p-3 text-right">Ação</th>
+                <th className="p-3">Forma</th>
+                <th className="p-3 text-right">Ações</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-100">
-              {partnerPols.length === 0 ? (
+              {metrics.partnerPols.length === 0 ? (
                 <tr>
-                  <td colSpan={8} className="text-center p-6 text-slate-500">
+                  <td colSpan={9} className="text-center p-6 text-slate-500">
                     Nenhuma apólice de parceiro encontrada.
                   </td>
                 </tr>
               ) : (
-                partnerPols.map((p) => (
+                metrics.partnerPols.map((p) => (
                   <tr key={p.id} className="hover:bg-slate-50/80">
                     <td className="p-3 font-bold text-slate-900">{p.policy_number}</td>
                     <td className="p-3">{p.expand?.client?.name || '-'}</td>
@@ -359,14 +396,26 @@ export default function Financial() {
                         ? new Date(p.data_pagamento_parceiro).toLocaleDateString('pt-BR')
                         : '-'}
                     </td>
+                    <td className="p-3 text-xs">{p.forma_pagamento_repasse || '-'}</td>
                     <td className="p-3 text-right">
-                      {can('policies', 'update') ? (
-                        <Button size="sm" variant="ghost" onClick={() => setEditPolicy(p)}>
-                          <Edit2 className="w-3.5 h-3.5" />
-                        </Button>
-                      ) : (
-                        <span className="text-xs text-slate-400">—</span>
-                      )}
+                      <div className="flex items-center justify-end gap-1">
+                        {can('policies', 'update') && !p.pago_parceiro && (
+                          <Button
+                            size="sm"
+                            variant="ghost"
+                            className="text-emerald-600"
+                            title="Pagar Repasse"
+                            onClick={() => handleQuickPayRepasse(p.id)}
+                          >
+                            <Check className="w-4 h-4" />
+                          </Button>
+                        )}
+                        {can('policies', 'update') && (
+                          <Button size="sm" variant="ghost" onClick={() => setEditPolicy(p)}>
+                            <Edit2 className="w-3.5 h-3.5" />
+                          </Button>
+                        )}
+                      </div>
                     </td>
                   </tr>
                 ))

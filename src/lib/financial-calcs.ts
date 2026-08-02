@@ -93,3 +93,49 @@ export function calculateFinancialMetrics(
     lucroLiquido: computeNetProfit(totalReceitas, totalRepasses, totalCustos),
   }
 }
+
+export function computeExpectedCommissions(policies: Policy[], period: DatePeriod): number {
+  return policies
+    .filter((p) => isDateInPeriod(period, p.start_date))
+    .reduce((s, p) => s + calcNetCommission(p), 0)
+}
+
+export function computeExpectedRepasses(policies: Policy[], period: DatePeriod): number {
+  return policies
+    .filter(
+      (p) =>
+        p.tipo_de_venda === 'Parceiro' &&
+        (p.parceiro || p.expand?.parceiro) &&
+        (p.valor_repasse || 0) > 0 &&
+        isDateInPeriod(period, p.start_date),
+    )
+    .reduce((s, p) => s + (p.valor_repasse || 0), 0)
+}
+
+export function computePaidCosts(custos: CustoFixo[], period: DatePeriod): number {
+  return custos
+    .filter((c) => c.pago === true && isDateInPeriod(period, c.data))
+    .reduce((s, c) => s + (c.valor || 0), 0)
+}
+
+export function computePendingCosts(custos: CustoFixo[], period: DatePeriod): number {
+  return custos
+    .filter((c) => c.pago !== true && isDateInPeriod(period, c.data))
+    .reduce((s, c) => s + (c.valor || 0), 0)
+}
+
+export function computeExpectedProfit(
+  expectedComm: number,
+  expectedRepasses: number,
+  totalCustos: number,
+): number {
+  return expectedComm - expectedRepasses - totalCustos
+}
+
+export function computeRealProfit(
+  commReceived: number,
+  repassePaid: number,
+  paidCosts: number,
+): number {
+  return commReceived - repassePaid - paidCosts
+}

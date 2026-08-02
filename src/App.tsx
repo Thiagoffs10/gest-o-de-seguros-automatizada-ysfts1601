@@ -19,6 +19,7 @@ import Parceiros from '@/pages/Parceiros'
 import Seguradoras from '@/pages/Seguradoras'
 import PartnerReport from '@/pages/PartnerReport'
 import Financial from '@/pages/Financial'
+import ConciliacaoMensal from '@/pages/ConciliacaoMensal'
 import CustosFixos from '@/pages/CustosFixos'
 import RemindersPage from '@/pages/RemindersPage'
 import Communication from '@/pages/Communication'
@@ -52,6 +53,7 @@ const App = () => (
                 <Route path="/seguradoras" element={<Seguradoras />} />
                 <Route path="/relatorio-comissoes" element={<PartnerReport />} />
                 <Route path="/financeiro" element={<Financial />} />
+                <Route path="/conciliacao-mensal" element={<ConciliacaoMensal />} />
                 <Route path="/custos-fixos" element={<CustosFixos />} />
                 <Route path="/lembretes" element={<RemindersPage />} />
                 <Route path="/comunicacao" element={<Communication />} />

@@ -10,6 +10,7 @@ import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Textarea } from '@/components/ui/textarea'
 import { Button } from '@/components/ui/button'
+import { Checkbox } from '@/components/ui/checkbox'
 import {
   Select,
   SelectContent,
@@ -28,6 +29,8 @@ const CATEGORIAS = [
   'Marketing',
   'Outros',
 ]
+const FORMAS_PAGAMENTO = ['PIX', 'Transferência', 'Dinheiro', 'Cartão', 'Boleto', 'Outro']
+const FREQUENCIAS = ['Mensal', 'Trimestral', 'Semestral', 'Anual']
 
 const EMPTY = {
   descricao: '',
@@ -36,6 +39,11 @@ const EMPTY = {
   categoria: 'Outros',
   tipo: 'Fixo',
   observacoes: '',
+  pago: false,
+  data_pagamento: '',
+  forma_pagamento: '',
+  recorrente: false,
+  frequencia_recorrencia: '',
 }
 
 interface Props {
@@ -66,6 +74,11 @@ export function CustoFixoFormDialog({
         categoria: initialData.categoria || 'Outros',
         tipo: initialData.tipo || 'Fixo',
         observacoes: initialData.observacoes || '',
+        pago: !!initialData.pago,
+        data_pagamento: initialData.data_pagamento?.split(' ')[0] || '',
+        forma_pagamento: initialData.forma_pagamento || '',
+        recorrente: !!initialData.recorrente,
+        frequencia_recorrencia: initialData.frequencia_recorrencia || '',
       })
     } else {
       setForm(EMPTY)
@@ -84,17 +97,22 @@ export function CustoFixoFormDialog({
         categoria: form.categoria,
         tipo: form.tipo,
         observacoes: form.observacoes,
+        pago: form.pago,
+        data_pagamento: form.pago ? form.data_pagamento || null : null,
+        forma_pagamento: form.pago ? form.forma_pagamento || null : null,
+        recorrente: form.recorrente,
+        frequencia_recorrencia: form.recorrente ? form.frequencia_recorrencia || null : null,
       })
     } finally {
       setLoading(false)
     }
   }
 
-  const set = (k: string, v: string) => setForm((p) => ({ ...p, [k]: v }))
+  const set = (k: string, v: any) => setForm((p) => ({ ...p, [k]: v }))
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="sm:max-w-md">
+      <DialogContent className="sm:max-w-md max-h-[90vh] overflow-y-auto">
         <DialogHeader>
           <DialogTitle>{title}</DialogTitle>
         </DialogHeader>
@@ -156,6 +174,76 @@ export function CustoFixoFormDialog({
                 </SelectContent>
               </Select>
             </div>
+          </div>
+          <div className="border-t pt-3 space-y-2">
+            <div className="flex items-center gap-2">
+              <Checkbox
+                id="recorrente"
+                checked={form.recorrente}
+                onCheckedChange={(v) => set('recorrente', !!v)}
+              />
+              <Label htmlFor="recorrente" className="text-sm cursor-pointer">
+                Custo Recorrente
+              </Label>
+            </div>
+            {form.recorrente && (
+              <div>
+                <Label className="text-xs font-semibold">Frequência</Label>
+                <Select
+                  value={form.frequencia_recorrencia}
+                  onValueChange={(v) => set('frequencia_recorrencia', v)}
+                >
+                  <SelectTrigger>
+                    <SelectValue placeholder="Selecione" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {FREQUENCIAS.map((f) => (
+                      <SelectItem key={f} value={f}>
+                        {f}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+            )}
+          </div>
+          <div className="border-t pt-3 space-y-2">
+            <div className="flex items-center gap-2">
+              <Checkbox id="pago" checked={form.pago} onCheckedChange={(v) => set('pago', !!v)} />
+              <Label htmlFor="pago" className="text-sm cursor-pointer">
+                Pago
+              </Label>
+            </div>
+            {form.pago && (
+              <div className="grid grid-cols-2 gap-2">
+                <div>
+                  <Label className="text-xs font-semibold">Data Pagamento</Label>
+                  <Input
+                    type="date"
+                    value={form.data_pagamento}
+                    onChange={(e) => set('data_pagamento', e.target.value)}
+                  />
+                </div>
+                <div>
+                  <Label className="text-xs font-semibold">Forma de Pagamento</Label>
+                  <Select
+                    value={form.forma_pagamento}
+                    onValueChange={(v) => set('forma_pagamento', v)}
+                  >
+                    <SelectTrigger>
+                      <SelectValue placeholder="Selecione" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {FORMAS_PAGAMENTO.map((f) => (
+                        <SelectItem key={f} value={f}>
+                          {f}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+              </div>
+            )}
           </div>
           <div>
             <Label className="text-xs font-semibold">Observações</Label>

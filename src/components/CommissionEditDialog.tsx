@@ -10,13 +10,23 @@ import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Button } from '@/components/ui/button'
 import { Checkbox } from '@/components/ui/checkbox'
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select'
 import { Policy } from '@/types'
+
+const FORMAS_PAGAMENTO = ['PIX', 'Transferência', 'Dinheiro', 'Cartão', 'Boleto', 'Outro']
 
 export interface FinancialEditData {
   comissao_recebida: boolean
   data_recebimento_comissao: string | null
   pago_parceiro: boolean
   data_pagamento_parceiro: string | null
+  forma_pagamento_repasse?: string | null
 }
 
 interface Props {
@@ -32,6 +42,7 @@ export function CommissionEditDialog({ open, onOpenChange, policy, onSave, savin
   const [dataRecebimento, setDataRecebimento] = useState('')
   const [pagoParceiro, setPagoParceiro] = useState(false)
   const [dataPagamento, setDataPagamento] = useState('')
+  const [formaPagamento, setFormaPagamento] = useState('')
 
   useEffect(() => {
     if (policy) {
@@ -43,6 +54,7 @@ export function CommissionEditDialog({ open, onOpenChange, policy, onSave, savin
       setDataPagamento(
         policy.data_pagamento_parceiro ? policy.data_pagamento_parceiro.split('T')[0] : '',
       )
+      setFormaPagamento(policy.forma_pagamento_repasse || '')
     }
   }, [policy])
 
@@ -53,6 +65,7 @@ export function CommissionEditDialog({ open, onOpenChange, policy, onSave, savin
       data_recebimento_comissao: dataRecebimento || null,
       pago_parceiro: pagoParceiro,
       data_pagamento_parceiro: dataPagamento || null,
+      forma_pagamento_repasse: formaPagamento || null,
     })
   }
 

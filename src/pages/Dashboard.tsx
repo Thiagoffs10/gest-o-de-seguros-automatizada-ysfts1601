@@ -22,6 +22,7 @@ import { Button } from '@/components/ui/button'
 import { SecretsGuideDialog } from '@/components/SecretsGuideDialog'
 import { GlobalFilters } from '@/components/GlobalFilters'
 import { DevTrackingPanel } from '@/components/DevTrackingPanel'
+import { PendenciasPanel } from '@/components/PendenciasPanel'
 import { useRealtime } from '@/hooks/use-realtime'
 import { usePermissions } from '@/hooks/use-permissions'
 import { formatCurrency } from '@/lib/utils'
@@ -274,6 +275,8 @@ export default function Dashboard() {
           </CardContent>
         </Card>
       </div>
+
+      <PendenciasPanel policies={policies} />
 
       <DevTrackingPanel policies={policies} period={period} totalReceitas={metrics.totalReceitas} />
 
