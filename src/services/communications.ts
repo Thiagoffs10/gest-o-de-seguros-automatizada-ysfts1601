@@ -24,6 +24,26 @@ export interface MassEmailRecipient {
   body: string
 }
 
+export interface SingleEmailResult {
+  success: boolean
+  status: string
+  message: string
+}
+
+export const sendSingleEmail = async (data: {
+  to: string
+  client_id?: string
+  subject: string
+  body: string
+  from?: string
+}): Promise<SingleEmailResult> => {
+  return pb.send('/backend/v1/send-single-email', {
+    method: 'POST',
+    body: JSON.stringify(data),
+    headers: { 'Content-Type': 'application/json' },
+  })
+}
+
 export const sendMassEmail = async (recipients: MassEmailRecipient[], from?: string) => {
   return pb.send('/backend/v1/send-mass-email', {
     method: 'POST',

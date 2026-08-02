@@ -1,7 +1,7 @@
 import { useState, useMemo } from 'react'
-import { Send, Mail, MessageSquare, FileText, Cake, RefreshCw } from 'lucide-react'
+import { Send, Mail, MessageSquare, FileText, Cake, RefreshCw, Loader2 } from 'lucide-react'
 import { Client, Policy } from '@/types'
-import { createCommunication } from '@/services/communications'
+import { createCommunication, sendSingleEmail } from '@/services/communications'
 import { formatClientDocument } from '@/lib/document-validators'
 import { EMAIL_TEMPLATES, personalizeTemplate } from '@/lib/constants'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
@@ -37,6 +37,7 @@ export function IndividualTab({ clients, policies, onSuccess }: Props) {
   )
   const [subject, setSubject] = useState('')
   const [body, setBody] = useState('')
+  const [sending, setSending] = useState(false)
 
   const filteredClients = useMemo(() => {
     if (!search.trim()) return clients
@@ -93,29 +94,53 @@ export function IndividualTab({ clients, policies, onSuccess }: Props) {
     }
 
     if (type === 'Email') {
-      window.open(
-        `mailto:${selectedClient.email}?subject=${encodeURIComponent(subject)}&body=${encodeURIComponent(body)}`,
-      )
+      setSending(true)
+      try {
+        const res = await sendSingleEmail({
+          to: selectedClient.email!,
+          client_id: selectedClientId,
+          subject,
+          body,
+        })
+        if (res.success) {
+          toast({ title: 'E-mail enviado com sucesso!' })
+        } else {
+          toast({
+            title: 'Falha ao enviar e-mail',
+            description: res.message || 'Ocorreu um erro no envio.',
+            variant: 'destructive',
+          })
+        }
+        onSuccess()
+      } catch (err: any) {
+        toast({
+          title: 'Erro ao enviar e-mail',
+          description: err?.message || 'Erro inesperado.',
+          variant: 'destructive',
+        })
+      } finally {
+        setSending(false)
+      }
     } else {
       const cleanPhone = (selectedClient.phone || '').replace(/\D/g, '')
       window.open(`https://wa.me/55${cleanPhone}?text=${encodeURIComponent(body)}`)
-    }
 
-    try {
-      await createCommunication({
-        type,
-        client: selectedClientId,
-        subject: type === 'Email' ? subject : 'WhatsApp Direct',
-        body,
-        recipient_email: selectedClient.email,
-        recipient_phone: selectedClient.phone,
-        status: 'Rascunho',
-        sent_date: new Date().toISOString(),
-      })
-      toast({ title: 'Comunicação aberta e registrada no histórico!' })
-      onSuccess()
-    } catch {
-      toast({ title: 'Erro ao registrar histórico', variant: 'destructive' })
+      try {
+        await createCommunication({
+          type,
+          client: selectedClientId,
+          subject: 'WhatsApp Direct',
+          body,
+          recipient_email: selectedClient.email,
+          recipient_phone: selectedClient.phone,
+          status: 'Rascunho',
+          sent_date: new Date().toISOString(),
+        })
+        toast({ title: 'Comunicação aberta e registrada no histórico!' })
+        onSuccess()
+      } catch {
+        toast({ title: 'Erro ao registrar histórico', variant: 'destructive' })
+      }
     }
   }
 
@@ -244,13 +269,24 @@ export function IndividualTab({ clients, policies, onSuccess }: Props) {
             className="w-full bg-blue-600 hover:bg-blue-700 font-bold"
             onClick={handleSend}
             disabled={
-              !selectedClient || (type === 'Email' && !hasEmail) || !can('communications', 'create')
+              sending ||
+              !selectedClient ||
+              (type === 'Email' && !hasEmail) ||
+              !can('communications', 'create')
             }
           >
-            <Send className="w-4 h-4 mr-2" />
-            {can('communications', 'create')
-              ? `Enviar via ${type === 'WhatsApp' ? 'WhatsApp' : 'E-mail'}`
-              : 'Sem permissão para enviar'}
+            {sending ? (
+              <>
+                <Loader2 className="w-4 h-4 mr-2 animate-spin" /> Enviando e-mail...
+              </>
+            ) : (
+              <>
+                <Send className="w-4 h-4 mr-2" />
+                {can('communications', 'create')
+                  ? `Enviar via ${type === 'WhatsApp' ? 'WhatsApp' : 'E-mail'}`
+                  : 'Sem permissão para enviar'}
+              </>
+            )}
           </Button>
         </CardContent>
       </Card>
@@ -262,11 +298,14 @@ export function IndividualTab({ clients, policies, onSuccess }: Props) {
         <CardContent className="text-xs text-blue-800 space-y-3">
           <p>1. Selecione o cliente desejado buscando por nome, e-mail, CPF ou CNPJ.</p>
           <p>
-            2. Escolha entre enviar mensagem via <strong>WhatsApp Web</strong> ou abrir no seu
-            gerenciador de <strong>E-mail</strong>.
+            2. Escolha entre enviar mensagem via <strong>WhatsApp Web</strong> ou enviar
+            automaticamente por <strong>E-mail</strong> através do sistema.
           </p>
           <p>3. Selecione um modelo pronto ou escreva uma mensagem personalizada.</p>
-          <p>4. Todas as comunicações geradas ficam registradas no histórico unificado.</p>
+          <p>
+            4. Os e-mails são enviados automaticamente e o resultado (Enviado/Falhou) é registrado
+            no histórico unificado.
+          </p>
         </CardContent>
       </Card>
     </div>
