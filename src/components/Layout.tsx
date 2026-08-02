@@ -82,8 +82,7 @@ export default function Layout() {
       ? [{ title: 'Custos', path: '/custos-fixos', icon: Receipt }]
       : []),
     { title: 'Lembretes', path: '/lembretes', icon: Bell, badge: reminders.length },
-    { title: 'Comunicação', path: '/comunicacao', icon: Send },
-    ...(canMassSend ? [{ title: 'Envio em Massa', path: '/envio-em-massa', icon: Mail }] : []),
+    { title: 'Central de Comunicação', path: '/comunicacao', icon: Send },
     ...(isAdmin ? [{ title: 'Usuários', path: '/usuarios', icon: UserCog }] : []),
     ...(isAdmin ? [{ title: 'Backup', path: '/backup', icon: Database }] : []),
     { title: 'Configurações', path: '/configuracoes', icon: Settings },

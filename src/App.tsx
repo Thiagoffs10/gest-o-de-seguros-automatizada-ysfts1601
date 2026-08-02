@@ -57,7 +57,8 @@ const App = () => (
                 <Route path="/custos-fixos" element={<CustosFixos />} />
                 <Route path="/lembretes" element={<RemindersPage />} />
                 <Route path="/comunicacao" element={<Communication />} />
-                <Route path="/envio-em-massa" element={<EnvioEmMassa />} />
+                <Route path="/central-de-comunicacao" element={<Communication />} />
+                <Route path="/envio-em-massa" element={<Communication />} />
                 <Route path="/pipeline" element={<Pipeline />} />
                 <Route path="/alterar-senha" element={<ChangePassword />} />
                 <Route path="/usuarios" element={<UsersPage />} />
