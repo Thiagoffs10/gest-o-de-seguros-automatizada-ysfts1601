@@ -1,0 +1,13 @@
+node_modules
+dist
+dev-dist
+.git
+.gitignore
+.env
+.env.local
+*.md
+screenshot.png
+pnpm-store
+.pnpm
+core.[0-9]*
+*.log
