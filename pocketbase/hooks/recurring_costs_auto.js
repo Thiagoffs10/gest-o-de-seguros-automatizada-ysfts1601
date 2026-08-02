@@ -1,39 +1,59 @@
 onRecordAfterCreateSuccess((e) => {
-  const rec = e.record
-  const isRecorrente = rec.get('recorrente')
-  if (!isRecorrente) return e.next()
+  const record = e.record
+  if (!record.getBool('recorrente')) return e.next()
 
-  const frequencia = rec.getString('frequencia_recorrencia')
-  if (!frequencia) return e.next()
+  const obs = record.getString('observacoes') || ''
+  if (obs.includes('[Gerado automaticamente]')) return e.next()
 
-  const avancoMap = { Mensal: 1, Trimestral: 3, Semestral: 6, Anual: 12 }
-  const avanco = avancoMap[frequencia]
-  if (!avanco) return e.next()
+  const freq = record.getString('frequencia_recorrencia')
+  if (!freq) return e.next()
 
+  let count = 0
+  let stepMonths = 0
+
+  if (freq === 'Mensal') {
+    count = 11
+    stepMonths = 1
+  } else if (freq === 'Trimestral') {
+    count = 3
+    stepMonths = 3
+  } else if (freq === 'Semestral') {
+    count = 1
+    stepMonths = 6
+  } else if (freq === 'Anual') {
+    count = 1
+    stepMonths = 12
+  }
+
+  if (count === 0) return e.next()
+
+  const baseDateStr = record.getString('data')
+  if (!baseDateStr) return e.next()
+
+  const baseDate = new Date(baseDateStr.split(' ')[0] + 'T12:00:00Z')
   const col = $app.findCollectionByNameOrId('custos_fixos')
-  const dataOriginal = rec.getString('data').split(' ')[0]
-  const d = new Date(dataOriginal + 'T00:00:00')
 
-  for (let i = 1; i <= 12; i++) {
-    const novaData = new Date(d.getTime())
-    novaData.setMonth(novaData.getMonth() + avanco * i)
-    const dataStr =
-      novaData.getFullYear() +
-      '-' +
-      String(novaData.getMonth() + 1).padStart(2, '0') +
-      '-' +
-      String(novaData.getDate()).padStart(2, '0')
+  for (let i = 1; i <= count; i++) {
+    const nextDate = new Date(baseDate)
+    nextDate.setUTCMonth(nextDate.getUTCMonth() + i * stepMonths)
+    const formattedDate = nextDate.toISOString().split('T')[0]
 
-    const novo = new Record(col)
-    novo.set('descricao', rec.getString('descricao'))
-    novo.set('valor', rec.get('valor'))
-    novo.set('data', dataStr)
-    novo.set('categoria', rec.getString('categoria'))
-    novo.set('observacoes', rec.getString('observacoes'))
-    novo.set('tipo', rec.getString('tipo') || 'Fixo')
-    novo.set('pago', false)
-    novo.set('recorrente', false)
-    $app.save(novo)
+    const newRec = new Record(col)
+    newRec.set('descricao', record.getString('descricao'))
+    newRec.set('valor', record.getNumber('valor'))
+    newRec.set('data', formattedDate)
+    newRec.set('categoria', record.getString('categoria'))
+    newRec.set('tipo', record.getString('tipo') || 'Fixo')
+    newRec.set('pago', false)
+    newRec.set('recorrente', true)
+    newRec.set('frequencia_recorrencia', freq)
+    newRec.set('observacoes', (obs ? obs + ' ' : '') + '[Gerado automaticamente]')
+
+    try {
+      $app.save(newRec)
+    } catch (err) {
+      $app.logger().error('Erro ao gerar custo recorrente automatico', 'error', String(err))
+    }
   }
 
   return e.next()

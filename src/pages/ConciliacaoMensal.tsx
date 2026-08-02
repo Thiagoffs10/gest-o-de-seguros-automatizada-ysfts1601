@@ -135,6 +135,15 @@ export default function ConciliacaoMensal() {
 
   const handleClose = async () => {
     if (m.pendencias.length > 0) {
+      if (!isAdmin) {
+        toast({
+          title: 'Não é possível fechar o mês',
+          description:
+            'Existem pendências ativas no período. Apenas Administradores podem sobrescrever pendências para fechar o mês.',
+          variant: 'destructive',
+        })
+        return
+      }
       const confirmar = window.confirm(
         `Atenção! Existem pendências:\n\n${m.pendencias.join('\n')}\n\nDeseja fechar o mês mesmo assim?`,
       )
@@ -156,7 +165,17 @@ export default function ConciliacaoMensal() {
       generateConciliacaoPDF({
         mes,
         ano,
-        ...m,
+        totalApolices: m.totalApolices,
+        comissaoPrevista: m.expectedComm,
+        comissaoRecebida: m.receivedComm,
+        comissaoPendente: m.pendingComm,
+        repassesPagos: m.paidRepasses,
+        repassesPendentes: m.pendingRepasses,
+        custosPagos: m.paidCustos,
+        custosPendentes: m.pendingCustos,
+        lucroPrevisto: m.lucroPrevisto,
+        lucroReal: m.lucroReal,
+        pendencias: m.pendencias,
         dataFechamento: conc.data_fechamento || new Date().toISOString(),
         usuarioFechamento: conc.usuario_fechamento || '',
       })
@@ -363,7 +382,17 @@ export default function ConciliacaoMensal() {
               generateConciliacaoPDF({
                 mes,
                 ano,
-                ...m,
+                totalApolices: m.totalApolices,
+                comissaoPrevista: m.expectedComm,
+                comissaoRecebida: m.receivedComm,
+                comissaoPendente: m.pendingComm,
+                repassesPagos: m.paidRepasses,
+                repassesPendentes: m.pendingRepasses,
+                custosPagos: m.paidCustos,
+                custosPendentes: m.pendingCustos,
+                lucroPrevisto: m.lucroPrevisto,
+                lucroReal: m.lucroReal,
+                pendencias: m.pendencias,
                 dataFechamento: conciliacao.data_fechamento || new Date().toISOString(),
                 usuarioFechamento: conciliacao.usuario_fechamento || '',
               })

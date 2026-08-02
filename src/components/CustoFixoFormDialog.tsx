@@ -209,7 +209,21 @@ export function CustoFixoFormDialog({
           </div>
           <div className="border-t pt-3 space-y-2">
             <div className="flex items-center gap-2">
-              <Checkbox id="pago" checked={form.pago} onCheckedChange={(v) => set('pago', !!v)} />
+              <Checkbox
+                id="pago"
+                checked={form.pago}
+                onCheckedChange={(v) => {
+                  const isPaid = !!v
+                  setForm((p) => ({
+                    ...p,
+                    pago: isPaid,
+                    data_pagamento:
+                      isPaid && !p.data_pagamento
+                        ? new Date().toISOString().split('T')[0]
+                        : p.data_pagamento,
+                  }))
+                }}
+              />
               <Label htmlFor="pago" className="text-sm cursor-pointer">
                 Pago
               </Label>

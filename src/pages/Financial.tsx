@@ -135,19 +135,6 @@ export default function Financial() {
     [allPolicies, statusFilter, commFilter, filters],
   )
 
-  const totalCommPages = Math.ceil(tablePolicies.length / ITEMS_PER_PAGE) || 1
-  const paginatedCommPolicies = useMemo(() => {
-    const start = (commPage - 1) * ITEMS_PER_PAGE
-    return tablePolicies.slice(start, start + ITEMS_PER_PAGE)
-  }, [tablePolicies, commPage])
-
-  const totalRepassePages = Math.ceil((metrics?.partnerPols?.length || 0) / ITEMS_PER_PAGE) || 1
-  const paginatedPartnerPols = useMemo(() => {
-    const partnerPols = metrics?.partnerPols || []
-    const start = (repassePage - 1) * ITEMS_PER_PAGE
-    return partnerPols.slice(start, start + ITEMS_PER_PAGE)
-  }, [metrics?.partnerPols, repassePage])
-
   const metrics = useMemo(() => {
     const expectedCommissions = computeExpectedCommissions(allPolicies, period)
     const receivedCommissions = computeReceivedCommissions(allPolicies, period)
@@ -176,6 +163,19 @@ export default function Financial() {
       partnerPols,
     }
   }, [allPolicies, tablePolicies, custosFixos, period])
+
+  const totalCommPages = Math.ceil(tablePolicies.length / ITEMS_PER_PAGE) || 1
+  const paginatedCommPolicies = useMemo(() => {
+    const start = (commPage - 1) * ITEMS_PER_PAGE
+    return tablePolicies.slice(start, start + ITEMS_PER_PAGE)
+  }, [tablePolicies, commPage])
+
+  const totalRepassePages = Math.ceil((metrics?.partnerPols?.length || 0) / ITEMS_PER_PAGE) || 1
+  const paginatedPartnerPols = useMemo(() => {
+    const partnerPols = metrics?.partnerPols || []
+    const start = (repassePage - 1) * ITEMS_PER_PAGE
+    return partnerPols.slice(start, start + ITEMS_PER_PAGE)
+  }, [metrics?.partnerPols, repassePage])
 
   const handleQuickReceive = async (policyId: string) => {
     try {
