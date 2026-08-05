@@ -22,7 +22,7 @@ import { TIPOS_DE_SEGURO, TIPOS_DE_VENDA } from '@/lib/constants'
 import { Client, Seguradora, Parceiro, Policy } from '@/types'
 import { ClientAutocomplete } from '@/components/ClientAutocomplete'
 import type { FieldErrors } from '@/lib/pocketbase/errors'
-import { formatCurrency, formatDateForInput } from '@/lib/utils'
+import { formatCurrency, formatDateForInput, todayLocalDate, toLocalDate } from '@/lib/utils'
 
 const DEFAULT_FORM = {
   client: '',
@@ -43,8 +43,8 @@ const DEFAULT_FORM = {
   percentual_repasse: 50,
   valor_repasse: 0,
   notes: '',
-  start_date: new Date().toISOString().split('T')[0],
-  end_date: new Date(Date.now() + 365 * 86400000).toISOString().split('T')[0],
+  start_date: todayLocalDate(),
+  end_date: toLocalDate(new Date(Date.now() + 365 * 86400000)),
   status: 'Ativa',
 }
 
@@ -220,7 +220,7 @@ export function PolicyFormDialog({
     setLoading(true)
     try {
       const endDate = new Date(form.end_date + 'T00:00:00')
-      const renewalDate = new Date(endDate.getTime() - 30 * 86400000).toISOString().split('T')[0]
+      const renewalDate = toLocalDate(new Date(endDate.getTime() - 30 * 86400000))
       await onSubmit({ ...form, renewal_date: renewalDate })
     } catch {
       setLoading(false)

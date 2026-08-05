@@ -16,6 +16,7 @@ import { useToast } from '@/hooks/use-toast'
 import { useRealtime } from '@/hooks/use-realtime'
 import { usePermissions } from '@/hooks/use-permissions'
 import { matchDocument } from '@/lib/document-validators'
+import { todayLocalDate, formatDateDisplay } from '@/lib/utils'
 import { computePeriodFromFilters, isDateInPeriod } from '@/lib/date-filter'
 import {
   calcNetCommission,
@@ -173,7 +174,7 @@ export default function Financial() {
     try {
       await updatePolicyFinancial(policyId, {
         comissao_recebida: true,
-        data_recebimento_comissao: new Date().toISOString().split('T')[0],
+        data_recebimento_comissao: todayLocalDate(),
       })
       toast({ title: 'Comissão marcada como recebida!' })
       loadData()
@@ -186,7 +187,7 @@ export default function Financial() {
     try {
       await updatePolicyFinancial(policyId, {
         pago_parceiro: true,
-        data_pagamento_parceiro: new Date().toISOString().split('T')[0],
+        data_pagamento_parceiro: todayLocalDate(),
       })
       toast({ title: 'Repasse marcado como pago!' })
       loadData()
@@ -353,9 +354,7 @@ export default function Financial() {
                       </Badge>
                     </td>
                     <td className="p-3 text-xs">
-                      {p.data_recebimento_comissao
-                        ? new Date(p.data_recebimento_comissao).toLocaleDateString('pt-BR')
-                        : '-'}
+                      {formatDateDisplay(p.data_recebimento_comissao)}
                     </td>
                     <td className="p-3 text-right">
                       <div className="flex items-center justify-end gap-1">
@@ -458,11 +457,7 @@ export default function Financial() {
                         {p.pago_parceiro ? 'Pago' : 'Pendente'}
                       </Badge>
                     </td>
-                    <td className="p-3 text-xs">
-                      {p.data_pagamento_parceiro
-                        ? new Date(p.data_pagamento_parceiro).toLocaleDateString('pt-BR')
-                        : '-'}
-                    </td>
+                    <td className="p-3 text-xs">{formatDateDisplay(p.data_pagamento_parceiro)}</td>
                     <td className="p-3 text-xs">{p.forma_pagamento_repasse || '-'}</td>
                     <td className="p-3 text-right">
                       <div className="flex items-center justify-end gap-1">

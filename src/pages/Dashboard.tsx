@@ -177,6 +177,17 @@ export default function Dashboard() {
     return months.map((m, i) => ({ month: m, value: counts[i] }))
   }, [periodPolicies])
 
+  const insurerCounts = useMemo(() => {
+    const counts: Record<string, number> = {}
+    periodPolicies.forEach((p) => {
+      const name = p.expand?.seguradora?.nome || p.insurance_company || 'Não informada'
+      counts[name] = (counts[name] || 0) + 1
+    })
+    return Object.entries(counts)
+      .sort((a, b) => b[1] - a[1])
+      .map(([name, count]) => ({ name, count }))
+  }, [periodPolicies])
+
   if (loading)
     return <div className="text-slate-500 py-8 text-center">Carregando informações...</div>
 
@@ -341,6 +352,47 @@ export default function Dashboard() {
             </div>
           </div>
         )}
+      </Card>
+
+      <Card className="shadow-sm">
+        <CardHeader className="flex flex-row items-center justify-between">
+          <CardTitle className="text-base font-bold text-slate-800">
+            Apólices por Seguradora
+          </CardTitle>
+          <span className="text-xs text-slate-500">{period.label}</span>
+        </CardHeader>
+        <CardContent>
+          {insurerCounts.length === 0 ? (
+            <p className="text-sm text-slate-500 text-center py-4">
+              Nenhuma apólice cadastrada no período.
+            </p>
+          ) : (
+            <div className="overflow-x-auto">
+              <table className="w-full text-left text-sm text-slate-700">
+                <thead className="bg-slate-100 text-slate-600 font-semibold border-b">
+                  <tr>
+                    <th className="p-3">Seguradora</th>
+                    <th className="p-3 text-right">Quantidade de Apólices</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-slate-100">
+                  {insurerCounts.map((item) => (
+                    <tr key={item.name} className="hover:bg-slate-50/80">
+                      <td className="p-3 font-medium">{item.name}</td>
+                      <td className="p-3 text-right font-bold text-blue-600">{item.count}</td>
+                    </tr>
+                  ))}
+                  <tr className="bg-slate-50 font-bold">
+                    <td className="p-3">Total</td>
+                    <td className="p-3 text-right text-slate-900">
+                      {insurerCounts.reduce((s, i) => s + i.count, 0)}
+                    </td>
+                  </tr>
+                </tbody>
+              </table>
+            </div>
+          )}
+        </CardContent>
       </Card>
 
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">

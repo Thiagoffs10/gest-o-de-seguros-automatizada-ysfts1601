@@ -1,7 +1,7 @@
 import pb from '@/lib/pocketbase/client'
 import { Policy } from '@/types'
 
-import { formatDateForInput } from '@/lib/utils'
+import { formatDateForInput, todayLocalDate, toLocalDate } from '@/lib/utils'
 
 export function preparePolicyPayload(data: Partial<Policy> & Record<string, any>) {
   const tipoSeguro = data.tipo_de_seguro || data.coverage_type || 'Auto'
@@ -116,18 +116,16 @@ export function preparePolicyPayload(data: Partial<Policy> & Record<string, any>
   }
 
   if (payload.start_date) {
-    payload.start_date =
-      formatDateForInput(payload.start_date) || new Date().toISOString().split('T')[0]
+    payload.start_date = formatDateForInput(payload.start_date) || todayLocalDate()
   } else {
-    payload.start_date = new Date().toISOString().split('T')[0]
+    payload.start_date = todayLocalDate()
   }
 
   if (payload.end_date) {
     payload.end_date =
-      formatDateForInput(payload.end_date) ||
-      new Date(Date.now() + 365 * 86400000).toISOString().split('T')[0]
+      formatDateForInput(payload.end_date) || toLocalDate(new Date(Date.now() + 365 * 86400000))
   } else {
-    payload.end_date = new Date(Date.now() + 365 * 86400000).toISOString().split('T')[0]
+    payload.end_date = toLocalDate(new Date(Date.now() + 365 * 86400000))
   }
 
   // Remove expand helper property before sending to PocketBase
@@ -205,8 +203,8 @@ export function prepareRenewalData(policy: Policy): Partial<Policy> {
   return {
     ...data,
     policy_number: '',
-    start_date: new Date().toISOString().split('T')[0],
-    end_date: new Date(Date.now() + 365 * 86400000).toISOString().split('T')[0],
+    start_date: todayLocalDate(),
+    end_date: toLocalDate(new Date(Date.now() + 365 * 86400000)),
     renewal_date: undefined,
     status: 'Ativa',
     comissao_recebida: false,

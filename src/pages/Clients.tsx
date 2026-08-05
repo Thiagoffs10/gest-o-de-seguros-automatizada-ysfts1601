@@ -30,6 +30,8 @@ export default function Clients() {
   const [filters, setFilters] = useState<FilterState>({})
   const [exportLoading, setExportLoading] = useState(false)
   const [loading, setLoading] = useState(true)
+  const [page, setPage] = useState(1)
+  const PAGE_SIZE = 10
 
   const loadClients = useCallback(async () => {
     try {
@@ -44,6 +46,7 @@ export default function Clients() {
   }, [search, filters])
 
   useEffect(() => {
+    setPage(1)
     const timer = setTimeout(() => loadClients(), 300)
     return () => clearTimeout(timer)
   }, [loadClients])
@@ -136,6 +139,12 @@ export default function Clients() {
     }
   }
 
+  const totalPages = Math.max(1, Math.ceil(clients.length / PAGE_SIZE))
+  const paginatedClients = useMemo(
+    () => clients.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE),
+    [clients, page],
+  )
+
   return (
     <div className="space-y-6">
       <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
@@ -184,7 +193,7 @@ export default function Clients() {
         </div>
       ) : (
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-          {clients.map((c) => (
+          {paginatedClients.map((c) => (
             <ClientCard
               key={c.id}
               client={c}
@@ -199,6 +208,36 @@ export default function Clients() {
               }}
             />
           ))}
+        </div>
+      )}
+
+      {totalPages > 1 && (
+        <div className="flex flex-col sm:flex-row items-center justify-between gap-2 text-sm text-slate-600">
+          <span>
+            Exibindo {clients.length === 0 ? 0 : (page - 1) * PAGE_SIZE + 1} a{' '}
+            {Math.min(page * PAGE_SIZE, clients.length)} de {clients.length} clientes
+          </span>
+          <div className="flex items-center gap-2">
+            <Button
+              variant="outline"
+              size="sm"
+              disabled={page <= 1}
+              onClick={() => setPage((p) => p - 1)}
+            >
+              Anterior
+            </Button>
+            <span className="font-semibold px-1">
+              Página {page} de {totalPages}
+            </span>
+            <Button
+              variant="outline"
+              size="sm"
+              disabled={page >= totalPages}
+              onClick={() => setPage((p) => p + 1)}
+            >
+              Próxima
+            </Button>
+          </div>
         </div>
       )}
 

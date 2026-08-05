@@ -118,6 +118,21 @@ export function CommissionEditDialog({ open, onOpenChange, policy, onSave, savin
                   onChange={(e) => setDataPagamento(e.target.value)}
                 />
               </div>
+              <div>
+                <Label className="text-xs font-semibold">Forma de Pagamento</Label>
+                <Select value={formaPagamento} onValueChange={setFormaPagamento}>
+                  <SelectTrigger>
+                    <SelectValue placeholder="Selecione a forma de pagamento" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {FORMAS_PAGAMENTO.map((f) => (
+                      <SelectItem key={f} value={f}>
+                        {f}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
             </div>
           )}
           <DialogFooter>

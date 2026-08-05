@@ -37,5 +37,20 @@ export function formatDateForInput(dateStr?: string | null): string {
   }
   const dateObj = new Date(dateStr)
   if (isNaN(dateObj.getTime())) return ''
-  return dateObj.toISOString().split('T')[0]
+  return toLocalDate(dateObj)
+}
+
+export function toLocalDate(d: Date): string {
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`
+}
+
+export function todayLocalDate(): string {
+  return toLocalDate(new Date())
+}
+
+export function formatDateDisplay(dateStr?: string | null): string {
+  if (!dateStr) return '-'
+  const d = String(dateStr).split('T')[0].split(' ')[0]
+  if (!d || !d.includes('-')) return '-'
+  return d.split('-').reverse().join('/')
 }

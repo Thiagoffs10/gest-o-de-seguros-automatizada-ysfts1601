@@ -61,6 +61,8 @@ export default function Policies() {
   const [deleteTarget, setDeleteTarget] = useState<Policy | null>(null)
   const [deleteLoading, setDeleteLoading] = useState(false)
   const [relatedCount, setRelatedCount] = useState({ payments: 0, reminders: 0 })
+  const [page, setPage] = useState(1)
+  const PAGE_SIZE = 10
 
   const loadData = useCallback(async () => {
     try {
@@ -102,6 +104,7 @@ export default function Policies() {
   }, [search, placaSearch, statusFilter, filters, periodStart, periodEnd])
 
   useEffect(() => {
+    setPage(1)
     setLoading(true)
   }, [search, placaSearch, statusFilter, filters, periodStart, periodEnd])
 
@@ -190,6 +193,9 @@ export default function Policies() {
     setSelectedPolicy(null)
     setFieldErrors({})
   }
+
+  const totalPages = Math.max(1, Math.ceil(policies.length / PAGE_SIZE))
+  const paginatedPolicies = policies.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE)
 
   const initialData =
     dialogMode === 'edit' && selectedPolicy
@@ -367,7 +373,7 @@ export default function Policies() {
                   </td>
                 </tr>
               ) : (
-                policies.map((p) => (
+                paginatedPolicies.map((p) => (
                   <tr
                     key={p.id}
                     className="hover:bg-slate-50/80 cursor-pointer"
@@ -453,6 +459,36 @@ export default function Policies() {
           </table>
         </div>
       </Card>
+
+      {totalPages > 1 && (
+        <div className="flex flex-col sm:flex-row items-center justify-between gap-2 text-sm text-slate-600">
+          <span>
+            Exibindo {policies.length === 0 ? 0 : (page - 1) * PAGE_SIZE + 1} a{' '}
+            {Math.min(page * PAGE_SIZE, policies.length)} de {policies.length} apólices
+          </span>
+          <div className="flex items-center gap-2">
+            <Button
+              variant="outline"
+              size="sm"
+              disabled={page <= 1}
+              onClick={() => setPage((p) => p - 1)}
+            >
+              Anterior
+            </Button>
+            <span className="font-semibold px-1">
+              Página {page} de {totalPages}
+            </span>
+            <Button
+              variant="outline"
+              size="sm"
+              disabled={page >= totalPages}
+              onClick={() => setPage((p) => p + 1)}
+            >
+              Próxima
+            </Button>
+          </div>
+        </div>
+      )}
 
       <PolicyFormDialog
         open={dialogMode !== null}
