@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react'
-import { useNavigate } from 'react-router-dom'
-import { Mail, Lock } from 'lucide-react'
+import { useNavigate, Navigate } from 'react-router-dom'
+import { Mail, Lock, AlertCircle, Loader2 } from 'lucide-react'
+import { ClientResponseError } from 'pocketbase'
 import logoImg from '@/assets/cred10mixlogooficialfundobranco4k-12574.jpg'
 import { useAuth } from '@/hooks/use-auth'
 import { Button } from '@/components/ui/button'
@@ -14,52 +15,107 @@ import {
   CardContent,
   CardFooter,
 } from '@/components/ui/card'
-import { useToast } from '@/hooks/use-toast'
 
 export default function Login() {
+  const { signIn, isAuthenticated } = useAuth()
+  const navigate = useNavigate()
+
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
   const [rememberMe, setRememberMe] = useState(false)
   const [loading, setLoading] = useState(false)
-
-  const { signIn } = useAuth()
-  const navigate = useNavigate()
-  const { toast } = useToast()
+  const [emailError, setEmailError] = useState('')
+  const [passwordError, setPasswordError] = useState('')
+  const [generalError, setGeneralError] = useState('')
 
   useEffect(() => {
+    localStorage.removeItem('rememberedPassword')
     const savedEmail = localStorage.getItem('rememberedEmail')
-    const savedPassword = localStorage.getItem('rememberedPassword')
     if (savedEmail) {
       setEmail(savedEmail)
       setRememberMe(true)
     }
-    if (savedPassword) {
-      setPassword(savedPassword)
-    }
   }, [])
+
+  if (isAuthenticated) {
+    return <Navigate to="/dashboard" replace />
+  }
+
+  const validateEmail = (value: string): boolean => {
+    if (!value.trim()) {
+      setEmailError('E-mail é obrigatório')
+      return false
+    }
+    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/
+    if (!emailRegex.test(value)) {
+      setEmailError('Digite um e-mail válido')
+      return false
+    }
+    setEmailError('')
+    return true
+  }
+
+  const validatePassword = (value: string): boolean => {
+    if (!value) {
+      setPasswordError('Senha é obrigatória')
+      return false
+    }
+    if (value.length < 8) {
+      setPasswordError('A senha deve ter no mínimo 8 caracteres')
+      return false
+    }
+    setPasswordError('')
+    return true
+  }
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
+    setGeneralError('')
+
+    const isEmailValid = validateEmail(email)
+    const isPasswordValid = validatePassword(password)
+
+    if (!isEmailValid || !isPasswordValid) return
+
     setLoading(true)
 
     if (rememberMe) {
       localStorage.setItem('rememberedEmail', email)
-      localStorage.setItem('rememberedPassword', password)
     } else {
       localStorage.removeItem('rememberedEmail')
-      localStorage.removeItem('rememberedPassword')
     }
 
-    const { error } = await signIn(email, password)
-    setLoading(false)
-    if (error) {
-      toast({
-        title: 'Falha no login',
-        description: 'E-mail ou senha incorretos.',
-        variant: 'destructive',
-      })
-    } else {
-      navigate('/dashboard')
+    try {
+      const { error } = await signIn(email, password)
+
+      if (error) {
+        if (error instanceof ClientResponseError) {
+          if (error.status === 0) {
+            setGeneralError(
+              'Não foi possível conectar ao servidor. Verifique sua conexão e tente novamente.',
+            )
+          } else if (error.status === 400) {
+            const fieldData = error.response?.data
+            if (fieldData && (fieldData.identity || fieldData.email)) {
+              setEmailError('E-mail inválido')
+            } else {
+              setGeneralError('E-mail ou senha inválidos.')
+            }
+          } else if (error.status === 401) {
+            setGeneralError('E-mail ou senha inválidos.')
+          } else {
+            setGeneralError('Erro ao fazer login. Tente novamente.')
+          }
+        } else {
+          setGeneralError('Não foi possível conectar. Tente novamente.')
+        }
+      } else {
+        navigate('/dashboard')
+      }
+    } catch {
+      setGeneralError('Ocorreu um erro inesperado. Tente novamente.')
+    } finally {
+      setLoading(false)
     }
   }
 
@@ -84,21 +140,33 @@ export default function Login() {
           </CardDescription>
         </CardHeader>
 
-        <form onSubmit={handleSubmit}>
+        <form onSubmit={handleSubmit} noValidate>
           <CardContent className="space-y-4 pt-4">
+            {generalError && (
+              <div className="flex items-start gap-2 p-3 rounded-lg bg-red-50 border border-red-200 text-red-700 text-sm animate-fade-in">
+                <AlertCircle className="w-4 h-4 mt-0.5 shrink-0" />
+                <span>{generalError}</span>
+              </div>
+            )}
+
             <div className="space-y-1">
               <label className="text-xs font-semibold text-slate-700">E-mail</label>
               <div className="relative">
                 <Mail className="w-4 h-4 absolute left-3 top-3 text-slate-400" />
                 <Input
                   type="email"
-                  className="pl-9"
+                  className={`pl-9 ${emailError ? 'border-red-500 focus-visible:ring-red-500' : ''}`}
                   placeholder="corretor@exemplo.com"
                   value={email}
-                  onChange={(e) => setEmail(e.target.value)}
+                  onChange={(e) => {
+                    setEmail(e.target.value)
+                    setGeneralError('')
+                    if (emailError) validateEmail(e.target.value)
+                  }}
                   required
                 />
               </div>
+              {emailError && <p className="text-xs text-red-500 font-medium">{emailError}</p>}
             </div>
 
             <div className="space-y-1">
@@ -107,14 +175,19 @@ export default function Login() {
                 <Lock className="w-4 h-4 absolute left-3 top-3 text-slate-400" />
                 <Input
                   type="password"
-                  className="pl-9"
+                  className={`pl-9 ${passwordError ? 'border-red-500 focus-visible:ring-red-500' : ''}`}
                   placeholder="••••••••"
                   value={password}
-                  onChange={(e) => setPassword(e.target.value)}
+                  onChange={(e) => {
+                    setPassword(e.target.value)
+                    setGeneralError('')
+                    if (passwordError) validatePassword(e.target.value)
+                  }}
                   required
                   minLength={8}
                 />
               </div>
+              {passwordError && <p className="text-xs text-red-500 font-medium">{passwordError}</p>}
             </div>
 
             <div className="flex items-center gap-2">
@@ -138,7 +211,14 @@ export default function Login() {
               className="w-full bg-blue-600 hover:bg-blue-700 font-semibold"
               disabled={loading}
             >
-              {loading ? 'Aguarde...' : 'Entrar no Sistema'}
+              {loading ? (
+                <>
+                  <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                  Aguarde...
+                </>
+              ) : (
+                'Entrar no Sistema'
+              )}
             </Button>
           </CardFooter>
         </form>
