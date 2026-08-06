@@ -8,7 +8,7 @@ export interface PartnerReportEntry {
   valorLiquido: number
   repassePercent: number
   valorRepasse: number
-  status: 'Pago' | 'Em aberto'
+  status: 'Recebida' | 'Pendente'
   paymentDate?: string
 }
 
@@ -77,7 +77,7 @@ export function generatePartnerReportPDF(data: PartnerReportData) {
         <td class="right">R$ ${fmt(e.valorLiquido)}</td>
         <td class="center">${e.repassePercent}%</td>
         <td class="right">R$ ${fmt(e.valorRepasse)}</td>
-        <td class="center"><span class="badge ${e.status === 'Pago' ? 'paid' : 'pending'}">${e.status}</span></td>
+        <td class="center"><span class="badge ${e.status === 'Recebida' ? 'paid' : 'pending'}">${e.status}</span></td>
         <td class="center">${e.paymentDate || '-'}</td>
       </tr>`,
     )
@@ -145,8 +145,8 @@ ${foundClientSection}
 <tbody>${rows}</tbody>
 </table>
 <div class="totals">
-<div class="total-box paid"><div class="label">Total Pago</div><div class="amount">R$ ${fmt(data.totalPaid)}</div></div>
-<div class="total-box pending"><div class="label">Total Em Aberto</div><div class="amount">R$ ${fmt(data.totalPending)}</div></div>
+<div class="total-box paid"><div class="label">Total Recebido</div><div class="amount">R$ ${fmt(data.totalPaid)}</div></div>
+<div class="total-box pending"><div class="label">Total Pendente</div><div class="amount">R$ ${fmt(data.totalPending)}</div></div>
 </div>
 <div class="footer">Documento gerado por CRED10MIX CORRETORA DE SEGUROS — Sistema de Gestão de Seguros</div>
 <script>window.onload=function(){setTimeout(function(){window.print()},300)}</script>

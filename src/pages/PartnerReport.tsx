@@ -19,6 +19,7 @@ import {
 } from '@/components/ui/select'
 import { generatePartnerReportPDF, PartnerReportEntry } from '@/lib/partner-report-pdf'
 import { maskDocument, formatClientDocument } from '@/lib/document-validators'
+import { formatDateDisplay } from '@/lib/utils'
 import { useToast } from '@/hooks/use-toast'
 
 const fmt = (v: number) =>
@@ -98,17 +99,17 @@ export default function PartnerReport() {
   const reportEntries: PartnerReportEntry[] = useMemo(() => {
     let result = policies
     if (selectedPartner !== 'all') result = result.filter((p) => p.parceiro === selectedPartner)
-    if (status === 'paid') result = result.filter((p) => p.pago_parceiro)
-    else if (status === 'pending') result = result.filter((p) => !p.pago_parceiro)
+    if (status === 'received') result = result.filter((p) => p.comissao_recebida)
+    else if (status === 'pending') result = result.filter((p) => !p.comissao_recebida)
     if (dateFrom) {
       result = result.filter((p) => {
-        const ref = p.pago_parceiro ? p.data_pagamento_parceiro : p.created?.split(' ')[0]
+        const ref = p.data_recebimento_comissao || ''
         return ref && ref >= dateFrom
       })
     }
     if (dateTo) {
       result = result.filter((p) => {
-        const ref = p.pago_parceiro ? p.data_pagamento_parceiro : p.created?.split(' ')[0]
+        const ref = p.data_recebimento_comissao || ''
         return ref && ref <= dateTo
       })
     }
@@ -128,20 +129,19 @@ export default function PartnerReport() {
         valorLiquido,
         repassePercent,
         valorRepasse,
-        status: p.pago_parceiro ? 'Pago' : 'Em aberto',
-        paymentDate:
-          p.pago_parceiro && p.data_pagamento_parceiro
-            ? new Date(p.data_pagamento_parceiro + 'T00:00:00').toLocaleDateString('pt-BR')
-            : '',
+        status: p.comissao_recebida ? 'Recebida' : 'Pendente',
+        paymentDate: p.data_recebimento_comissao
+          ? formatDateDisplay(p.data_recebimento_comissao)
+          : '',
       }
     })
   }, [policies, selectedPartner, status, dateFrom, dateTo, foundClient])
 
   const totalPaid = reportEntries
-    .filter((e) => e.status === 'Pago')
+    .filter((e) => e.status === 'Recebida')
     .reduce((s, e) => s + e.valorRepasse, 0)
   const totalPending = reportEntries
-    .filter((e) => e.status === 'Em aberto')
+    .filter((e) => e.status === 'Pendente')
     .reduce((s, e) => s + e.valorRepasse, 0)
 
   const handleGeneratePDF = () => {
@@ -248,8 +248,8 @@ export default function PartnerReport() {
               </SelectTrigger>
               <SelectContent>
                 <SelectItem value="all">Todos</SelectItem>
-                <SelectItem value="paid">Pago</SelectItem>
-                <SelectItem value="pending">Em aberto</SelectItem>
+                <SelectItem value="received">Recebida</SelectItem>
+                <SelectItem value="pending">Pendente</SelectItem>
               </SelectContent>
             </Select>
           </div>
@@ -324,7 +324,7 @@ export default function PartnerReport() {
                         </td>
                         <td className="p-3.5 text-center">
                           <Badge
-                            className={e.status === 'Pago' ? 'bg-emerald-500' : 'bg-amber-500'}
+                            className={e.status === 'Recebida' ? 'bg-emerald-500' : 'bg-amber-500'}
                           >
                             {e.status}
                           </Badge>
@@ -340,11 +340,11 @@ export default function PartnerReport() {
 
           <div className="flex justify-end gap-4">
             <div className="bg-emerald-50 border border-emerald-200 rounded-lg px-4 py-2 text-sm">
-              <span className="text-emerald-700 font-semibold">Total Pago: </span>
+              <span className="text-emerald-700 font-semibold">Total Recebido: </span>
               <span className="font-bold text-emerald-900">R$ {fmt(totalPaid)}</span>
             </div>
             <div className="bg-amber-50 border border-amber-200 rounded-lg px-4 py-2 text-sm">
-              <span className="text-amber-700 font-semibold">Total Em Aberto: </span>
+              <span className="text-amber-700 font-semibold">Total Pendente: </span>
               <span className="font-bold text-amber-900">R$ {fmt(totalPending)}</span>
             </div>
           </div>
