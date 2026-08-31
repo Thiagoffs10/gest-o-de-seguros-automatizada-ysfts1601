@@ -5,7 +5,7 @@ export const getClients = async (
   searchQuery?: string,
   filterString?: string,
   nameSearch?: string,
-) => {
+): Promise<Client[]> => {
   let filter = filterString || ''
   if (searchQuery) {
     const sanitized = searchQuery.replace(/"/g, '')

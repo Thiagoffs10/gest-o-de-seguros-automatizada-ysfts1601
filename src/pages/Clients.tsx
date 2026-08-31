@@ -1,42 +1,42 @@
 import { useEffect, useState, useCallback, useMemo } from 'react'
-import { Search, UserPlus, X, Download, User } from 'lucide-react'
-import { getClients, createClient, deleteClient, updateClient } from '@/services/clients'
+import { Plus, UserCheck, Search, UserPlus, X, Download, User } from 'lucide-react'
+import { getClients } from '@/services/clients'
 import { getPolicies } from '@/services/policies'
 import { Client, Policy, FilterState } from '@/types'
-import { Input } from '@/components/ui/input'
 import { Button } from '@/components/ui/button'
+import { Input } from '@/components/ui/input'
 import { ClientCard } from '@/components/ClientCard'
 import { ClientFormDialog } from '@/components/ClientFormDialog'
 import { DeleteClientDialog } from '@/components/DeleteClientDialog'
 import { GlobalFilters } from '@/components/GlobalFilters'
 import { buildFilterString } from '@/lib/constants'
-import { exportClientsToCsv } from '@/lib/export-utils'
-import { useToast } from '@/hooks/use-toast'
-import { useRealtime } from '@/hooks/use-realtime'
 import { usePermissions } from '@/hooks/use-permissions'
+import { useRealtime } from '@/hooks/use-realtime'
+import { downloadXlsx } from '@/lib/excel-export'
+import { useToast } from '@/hooks/use-toast'
+import { createClient, updateClient, deleteClient } from '@/services/clients'
+import { extractFieldErrors, getErrorMessage } from '@/lib/pocketbase/errors'
+
+const ITEMS_PER_PAGE = 10
 
 export default function Clients() {
   const { toast } = useToast()
   const { can } = usePermissions()
   const [clients, setClients] = useState<Client[]>([])
   const [policies, setPolicies] = useState<Policy[]>([])
-  const [nameSearch, setNameSearch] = useState('')
   const [search, setSearch] = useState('')
+  const [nameSearch, setNameSearch] = useState('')
   const [isModalOpen, setIsModalOpen] = useState(false)
-  const [editingClient, setEditingClient] = useState<Partial<Client> | null>(null)
-  const [isEditModalOpen, setIsEditModalOpen] = useState(false)
-  const [deletingClient, setDeletingClient] = useState<Client | null>(null)
-  const [isDeleteDialogOpen, setIsDeleteDialogOpen] = useState(false)
+  const [editingClient, setEditingClient] = useState<Client | null>(null)
+  const [deleteTarget, setDeleteTarget] = useState<Client | null>(null)
   const [deleteLoading, setDeleteLoading] = useState(false)
-  const [filters, setFilters] = useState<FilterState>({})
-  const [exportLoading, setExportLoading] = useState(false)
   const [loading, setLoading] = useState(true)
   const [page, setPage] = useState(1)
-  const PAGE_SIZE = 10
+  const [filters, setFilters] = useState<FilterState>({})
 
   const loadClients = useCallback(async () => {
     try {
-      const filterStr = buildFilterString('', filters, 'created')
+      const filterStr = buildFilterString(filters)
       const [data, pols] = await Promise.all([
         getClients(search, filterStr, nameSearch),
         getPolicies(),
@@ -57,115 +57,121 @@ export default function Clients() {
   }, [loadClients])
 
   useRealtime('clients', () => loadClients())
+  useRealtime('policies', () => loadClients())
 
-  const activePolicyCounts = useMemo(() => {
-    const map: Record<string, number> = {}
-    policies.forEach((p) => {
-      if (p.status === 'Ativa' && p.client) map[p.client] = (map[p.client] || 0) + 1
-    })
-    return map
-  }, [policies])
+  const totalPages = Math.max(1, Math.ceil(clients.length / ITEMS_PER_PAGE))
+  const paginatedClients = useMemo(() => {
+    const start = (page - 1) * ITEMS_PER_PAGE
+    return clients.slice(start, start + ITEMS_PER_PAGE)
+  }, [clients, page])
 
-  const handleCreate = async (formData: any) => {
+  const totalClients = clients.length
+  const activeClients = useMemo(() => {
+    const clientsWithActivePolicies = new Set(
+      policies.filter((p) => p.status === 'Ativa').map((p) => p.client),
+    )
+    return clients.filter((c) => clientsWithActivePolicies.has(c.id)).length
+  }, [clients, policies])
+
+  const exportAllClients = async () => {
     try {
-      await createClient(formData)
-      toast({ title: 'Cliente adicionado com sucesso!' })
-      setIsModalOpen(false)
-      loadClients()
-    } catch (err: any) {
-      toast({
-        title: 'Erro ao cadastrar cliente',
-        description: err.message,
-        variant: 'destructive',
-      })
-    }
-  }
-
-  const handleEditSubmit = async (formData: any) => {
-    if (!editingClient?.id) return
-    try {
-      await updateClient(editingClient.id, formData)
-      toast({ title: 'Cliente atualizado com sucesso!' })
-      setIsEditModalOpen(false)
-      setEditingClient(null)
-      loadClients()
-    } catch (err: any) {
-      toast({
-        title: 'Erro ao atualizar cliente',
-        description: err.message,
-        variant: 'destructive',
-      })
-    }
-  }
-
-  const handleDeleteConfirm = async () => {
-    if (!deletingClient) return
-    setDeleteLoading(true)
-    try {
-      const pols = await getPolicies(`client = "${deletingClient.id}"`)
-      if (pols.length > 0) {
-        toast({
-          title: 'Não é possível excluir: existem apólices vinculadas.',
-          variant: 'destructive',
-        })
-        setIsDeleteDialogOpen(false)
-        setDeletingClient(null)
-        return
-      }
-      await deleteClient(deletingClient.id)
-      toast({ title: 'Cliente excluído com sucesso!' })
-      setIsDeleteDialogOpen(false)
-      setDeletingClient(null)
-      loadClients()
-    } catch (err: any) {
-      toast({ title: 'Erro ao excluir cliente', description: err.message, variant: 'destructive' })
-    } finally {
-      setDeleteLoading(false)
-    }
-  }
-
-  const handleExport = async () => {
-    setExportLoading(true)
-    try {
-      const filterStr = buildFilterString('', filters, 'created')
+      const filterStr = buildFilterString(filters)
       const exportClients = await getClients(search, filterStr, nameSearch)
-      let allPolicies: any[] = []
-      if (exportClients.length > 0) {
-        const clientIds = exportClients.map((c) => c.id)
-        const policyFilter = clientIds.map((id) => `client = "${id}"`).join(' || ')
-        allPolicies = await getPolicies(policyFilter)
+      const exportPols = await getPolicies()
+      const polsByClient: Record<string, Policy[]> = {}
+      for (const p of exportPols) {
+        if (!polsByClient[p.client]) polsByClient[p.client] = []
+        polsByClient[p.client].push(p)
       }
-      exportClientsToCsv(exportClients, allPolicies)
-      toast({ title: 'Carteira exportada com sucesso!' })
-    } catch (err: any) {
-      toast({ title: 'Erro ao exportar', description: err.message, variant: 'destructive' })
-    } finally {
-      setExportLoading(false)
+      const columns = [
+        { header: 'Nome', type: 'text' as const },
+        { header: 'Tipo', type: 'text' as const },
+        { header: 'CPF/CNPJ', type: 'text' as const },
+        { header: 'E-mail', type: 'text' as const },
+        { header: 'Telefone', type: 'text' as const },
+        { header: 'Cidade', type: 'text' as const },
+        { header: 'UF', type: 'text' as const },
+        { header: 'Total Apólices', type: 'number' as const },
+        { header: 'Apólices Ativas', type: 'number' as const },
+        { header: 'Data Cadastro', type: 'text' as const },
+      ]
+      const rows = exportClients.map((c) => {
+        const cpols = polsByClient[c.id] || []
+        const activeCount = cpols.filter((p) => p.status === 'Ativa').length
+        return [
+          c.name,
+          c.tipo_pessoa === 'PJ' ? 'Pessoa Jurídica' : 'Pessoa Física',
+          c.cpf || c.cnpj || '',
+          c.email || '',
+          c.phone || '',
+          c.cidade || '',
+          c.estado || '',
+          cpols.length,
+          activeCount,
+          c.created ? new Date(c.created).toLocaleDateString('pt-BR') : '',
+        ]
+      })
+      const now = new Date()
+      const dateStr = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`
+      downloadXlsx(`clientes_${dateStr}.xlsx`, 'Clientes', columns, rows)
+      toast({
+        title: 'Exportação concluída!',
+        description: `${exportClients.length} cliente(s) exportado(s).`,
+      })
+    } catch {
+      toast({
+        title: 'Erro na exportação',
+        description: 'Não foi possível gerar a planilha de clientes.',
+        variant: 'destructive',
+      })
     }
   }
-
-  const totalPages = Math.max(1, Math.ceil(clients.length / PAGE_SIZE))
-  const paginatedClients = useMemo(
-    () => clients.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE),
-    [clients, page],
-  )
 
   return (
     <div className="space-y-6">
       <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
         <div>
-          <h1 className="text-2xl font-bold text-slate-900">Gestão de Clientes</h1>
-          <p className="text-slate-500 text-sm">Cadastre e gerencie a base de segurados.</p>
+          <h1 className="text-2xl font-bold text-slate-900">Carteira de Clientes</h1>
+          <p className="text-slate-500 text-sm">
+            Gerencie os segurados e visualize suas apólices ativas.
+          </p>
         </div>
-        <div className="flex gap-2">
-          <Button variant="outline" onClick={handleExport} disabled={exportLoading}>
-            <Download className="w-4 h-4 mr-2" /> Exportar
+        <div className="flex flex-wrap items-center gap-2">
+          <Button variant="outline" onClick={exportAllClients} disabled={clients.length === 0}>
+            <Download className="w-4 h-4 mr-2" /> Exportar Lista
           </Button>
           {can('clients', 'create') && (
-            <Button className="bg-blue-600 hover:bg-blue-700" onClick={() => setIsModalOpen(true)}>
-              <UserPlus className="w-4 h-4 mr-2" /> Adicionar Cliente
+            <Button
+              className="bg-blue-600 hover:bg-blue-700"
+              onClick={() => {
+                setEditingClient(null)
+                setIsModalOpen(true)
+              }}
+            >
+              <Plus className="w-4 h-4 mr-2" /> Novo Cliente
             </Button>
           )}
+        </div>
+      </div>
+
+      <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+        <div className="bg-white p-4 rounded-xl border border-slate-200 flex items-center gap-4 shadow-sm">
+          <div className="p-3 bg-blue-50 text-blue-600 rounded-lg">
+            <UserPlus className="w-6 h-6" />
+          </div>
+          <div>
+            <div className="text-sm font-medium text-slate-500">Total de Clientes</div>
+            <div className="text-2xl font-bold text-slate-900">{totalClients}</div>
+          </div>
+        </div>
+        <div className="bg-white p-4 rounded-xl border border-slate-200 flex items-center gap-4 shadow-sm">
+          <div className="p-3 bg-emerald-50 text-emerald-600 rounded-lg">
+            <UserCheck className="w-6 h-6" />
+          </div>
+          <div>
+            <div className="text-sm font-medium text-slate-500">Clientes Ativos</div>
+            <div className="text-2xl font-bold text-slate-900">{activeClients}</div>
+          </div>
         </div>
       </div>
 
@@ -221,79 +227,109 @@ export default function Clients() {
           {nameSearch ? ` para "${nameSearch}"` : search ? ` para "${search}"` : '.'}
         </div>
       ) : (
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-          {paginatedClients.map((c) => (
-            <ClientCard
-              key={c.id}
-              client={c}
-              activePoliciesCount={activePolicyCounts[c.id] || 0}
-              onEdit={(client) => {
-                setEditingClient(client)
-                setIsEditModalOpen(true)
-              }}
-              onDelete={(client) => {
-                setDeletingClient(client)
-                setIsDeleteDialogOpen(true)
-              }}
-            />
-          ))}
-        </div>
-      )}
-
-      {totalPages > 1 && (
-        <div className="flex flex-col sm:flex-row items-center justify-between gap-2 text-sm text-slate-600">
-          <span>
-            Exibindo {clients.length === 0 ? 0 : (page - 1) * PAGE_SIZE + 1} a{' '}
-            {Math.min(page * PAGE_SIZE, clients.length)} de {clients.length} clientes
-          </span>
-          <div className="flex items-center gap-2">
-            <Button
-              variant="outline"
-              size="sm"
-              disabled={page <= 1}
-              onClick={() => setPage((p) => p - 1)}
-            >
-              Anterior
-            </Button>
-            <span className="font-semibold px-1">
-              Página {page} de {totalPages}
-            </span>
-            <Button
-              variant="outline"
-              size="sm"
-              disabled={page >= totalPages}
-              onClick={() => setPage((p) => p + 1)}
-            >
-              Próxima
-            </Button>
+        <>
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+            {paginatedClients.map((client) => {
+              const clientPolicies = policies.filter((p) => p.client === client.id)
+              const activeCount = clientPolicies.filter((p) => p.status === 'Ativa').length
+              return (
+                <ClientCard
+                  key={client.id}
+                  client={client}
+                  activePoliciesCount={activeCount}
+                  onEdit={(c) => {
+                    setEditingClient(c)
+                    setIsModalOpen(true)
+                  }}
+                  onDelete={(c) => setDeleteTarget(c)}
+                />
+              )
+            })}
           </div>
-        </div>
+
+          <div className="flex items-center justify-between pt-4 border-t border-slate-200">
+            <span className="text-sm text-slate-500">
+              Página {page} de {totalPages} ({clients.length} cliente
+              {clients.length !== 1 ? 's' : ''})
+            </span>
+            <div className="flex gap-2">
+              <Button
+                variant="outline"
+                size="sm"
+                disabled={page <= 1}
+                onClick={() => setPage((p) => Math.max(1, p - 1))}
+              >
+                Anterior
+              </Button>
+              <Button
+                variant="outline"
+                size="sm"
+                disabled={page >= totalPages}
+                onClick={() => setPage((p) => Math.min(totalPages, p + 1))}
+              >
+                Próxima
+              </Button>
+            </div>
+          </div>
+        </>
       )}
 
-      <ClientFormDialog open={isModalOpen} onOpenChange={setIsModalOpen} onSubmit={handleCreate} />
-
-      {editingClient && (
-        <ClientFormDialog
-          open={isEditModalOpen}
-          onOpenChange={(open) => {
-            setIsEditModalOpen(open)
-            if (!open) setEditingClient(null)
-          }}
-          onSubmit={handleEditSubmit}
-          initialData={editingClient}
-          title="Editar Cliente"
-        />
-      )}
+      <ClientFormDialog
+        open={isModalOpen}
+        onOpenChange={(open) => {
+          setIsModalOpen(open)
+          if (!open) setEditingClient(null)
+        }}
+        initialData={editingClient || undefined}
+        title={editingClient ? 'Editar Cliente' : 'Adicionar Novo Cliente'}
+        onSubmit={async (formData) => {
+          try {
+            if (editingClient) {
+              await updateClient(editingClient.id, formData)
+              toast({ title: 'Cliente atualizado com sucesso!' })
+            } else {
+              await createClient(formData)
+              toast({ title: 'Cliente cadastrado com sucesso!' })
+            }
+            setIsModalOpen(false)
+            setEditingClient(null)
+            loadClients()
+          } catch (err) {
+            toast({
+              title: 'Erro ao salvar cliente',
+              description: getErrorMessage(err),
+              variant: 'destructive',
+            })
+            throw err
+          }
+        }}
+      />
 
       <DeleteClientDialog
-        open={isDeleteDialogOpen}
+        open={!!deleteTarget}
         onOpenChange={(open) => {
-          setIsDeleteDialogOpen(open)
-          if (!open) setDeletingClient(null)
+          if (!open) setDeleteTarget(null)
         }}
-        onConfirm={handleDeleteConfirm}
-        clientName={deletingClient?.name || ''}
+        clientName={deleteTarget?.name || ''}
         loading={deleteLoading}
+        onConfirm={async () => {
+          if (!deleteTarget) return
+          setDeleteLoading(true)
+          try {
+            await deleteClient(deleteTarget.id)
+            toast({ title: 'Cliente excluído com sucesso!' })
+            setDeleteTarget(null)
+            loadClients()
+          } catch (err) {
+            toast({
+              title: 'Erro ao excluir cliente',
+              description: getErrorMessage(err),
+              variant: 'destructive',
+            })
+          } finally {
+            setDeleteLoading(false)
+          }
+        }}
       />
     </div>
   )

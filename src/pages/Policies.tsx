@@ -75,7 +75,7 @@ export default function Policies() {
       setParceiros(pars)
       const activeCount = await countActivePolicies()
       setTotalActiveCount(activeCount)
-      let filter = buildFilterString('', filters, 'start_date')
+      let filter = buildFilterString(filters)
       if (periodStart && periodEnd) {
         const periodFilter = `start_date >= "${periodStart}" && start_date <= "${periodEnd} 23:59:59" && status = "Ativa"`
         filter = filter ? `${filter} && (${periodFilter})` : periodFilter

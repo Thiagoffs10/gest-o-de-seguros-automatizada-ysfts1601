@@ -161,14 +161,23 @@ export function preparePolicyPayload(data: Partial<Policy> & Record<string, any>
   return payload
 }
 
-export const getPolicies = async (filterString?: string) => {
+export const getPolicies = async (
+  filterString?: string,
+  searchQuery?: string,
+  nameSearch?: string,
+): Promise<Policy[]> => {
+  let filter = filterString || ''
+  if (nameSearch && nameSearch.trim()) {
+    const sanitizedName = nameSearch.trim().replace(/"/g, '')
+    const qName = `client.name ~ "${sanitizedName}"`
+    filter = filter ? `${filter} && (${qName})` : qName
+  }
   return pb.collection('policies').getFullList<Policy>({
-    filter: filterString || '',
     expand: 'client,seguradora,parceiro',
+    filter,
     sort: '-created',
   })
 }
-
 export const getPolicy = async (id: string) => {
   return pb.collection('policies').getOne<Policy>(id, {
     expand: 'client,seguradora,parceiro',

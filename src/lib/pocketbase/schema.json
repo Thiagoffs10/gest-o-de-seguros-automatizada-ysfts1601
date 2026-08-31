@@ -1,5 +1,5 @@
 {
-  "generatedAt": "2026-08-31T17:07:06.103Z",
+  "generatedAt": "2026-08-31T17:34:41.135Z",
   "collections": [
     {
       "name": "users",
@@ -1057,6 +1057,175 @@
       "indexes": [
         "CREATE INDEX idx_pwd_resets_token ON password_resets (token)",
         "CREATE INDEX idx_pwd_resets_email ON password_resets (email)"
+      ]
+    },
+    {
+      "name": "parceiro_pagamentos",
+      "type": "base",
+      "apiRules": {
+        "list": "@request.auth.id != ''",
+        "view": "@request.auth.id != ''",
+        "create": "@request.auth.id != ''",
+        "update": "@request.auth.id != ''",
+        "delete": "@request.auth.id != ''"
+      },
+      "fields": [
+        {
+          "name": "parceiro",
+          "type": "relation",
+          "required": true,
+          "system": false,
+          "collectionRef": "parceiros"
+        },
+        {
+          "name": "data_pagamento",
+          "type": "date",
+          "required": true,
+          "system": false
+        },
+        {
+          "name": "total_comissoes",
+          "type": "number",
+          "required": false,
+          "system": false
+        },
+        {
+          "name": "total_debitos",
+          "type": "number",
+          "required": false,
+          "system": false
+        },
+        {
+          "name": "taxa_pix",
+          "type": "number",
+          "required": false,
+          "system": false
+        },
+        {
+          "name": "valor_liquido",
+          "type": "number",
+          "required": false,
+          "system": false
+        },
+        {
+          "name": "policies_ids",
+          "type": "text",
+          "required": false,
+          "system": false
+        },
+        {
+          "name": "detalhes_debitos",
+          "type": "text",
+          "required": false,
+          "system": false
+        },
+        {
+          "name": "observacoes",
+          "type": "text",
+          "required": false,
+          "system": false
+        },
+        {
+          "name": "usuario_id",
+          "type": "relation",
+          "required": false,
+          "system": false,
+          "collectionRef": "users"
+        },
+        {
+          "name": "usuario_nome",
+          "type": "text",
+          "required": false,
+          "system": false
+        },
+        {
+          "name": "created",
+          "type": "autodate",
+          "required": false,
+          "system": false,
+          "autodateTriggers": ["onCreate"]
+        },
+        {
+          "name": "updated",
+          "type": "autodate",
+          "required": false,
+          "system": false,
+          "autodateTriggers": ["onCreate", "onUpdate"]
+        }
+      ],
+      "indexes": [
+        "CREATE INDEX idx_parceiro_pagamentos_parceiro ON parceiro_pagamentos (parceiro)",
+        "CREATE INDEX idx_parceiro_pagamentos_data ON parceiro_pagamentos (data_pagamento)"
+      ]
+    },
+    {
+      "name": "parceiro_debitos",
+      "type": "base",
+      "apiRules": {
+        "list": "@request.auth.id != ''",
+        "view": "@request.auth.id != ''",
+        "create": "@request.auth.id != ''",
+        "update": "@request.auth.id != ''",
+        "delete": "@request.auth.id != ''"
+      },
+      "fields": [
+        {
+          "name": "parceiro",
+          "type": "relation",
+          "required": true,
+          "system": false,
+          "collectionRef": "parceiros"
+        },
+        {
+          "name": "descricao",
+          "type": "text",
+          "required": true,
+          "system": false
+        },
+        {
+          "name": "valor",
+          "type": "number",
+          "required": true,
+          "system": false
+        },
+        {
+          "name": "data",
+          "type": "date",
+          "required": false,
+          "system": false
+        },
+        {
+          "name": "status",
+          "type": "select",
+          "required": false,
+          "system": false,
+          "selectValues": ["Pendente", "Pago", "Cancelado"]
+        },
+        {
+          "name": "pagamento",
+          "type": "relation",
+          "required": false,
+          "system": false,
+          "collectionRef": "parceiro_pagamentos"
+        },
+        {
+          "name": "created",
+          "type": "autodate",
+          "required": false,
+          "system": false,
+          "autodateTriggers": ["onCreate"]
+        },
+        {
+          "name": "updated",
+          "type": "autodate",
+          "required": false,
+          "system": false,
+          "autodateTriggers": ["onCreate", "onUpdate"]
+        }
+      ],
+      "indexes": [
+        "CREATE INDEX idx_parceiro_debitos_parceiro ON parceiro_debitos (parceiro)",
+        "CREATE INDEX idx_parceiro_debitos_status ON parceiro_debitos (status)"
       ]
     }
   ]

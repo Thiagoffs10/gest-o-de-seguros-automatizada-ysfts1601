@@ -183,6 +183,45 @@ export interface Conciliacao {
   updated: string
 }
 
+export interface ParceiroDebitoItem {
+  id?: string
+  descricao: string
+  valor: number
+  data?: string
+}
+
+export interface ParceiroDebito {
+  id: string
+  parceiro: string
+  descricao: string
+  valor: number
+  data?: string
+  status?: 'Pendente' | 'Pago' | 'Cancelado'
+  pagamento?: string
+  created: string
+  updated: string
+}
+
+export interface ParceiroPagamento {
+  id: string
+  parceiro: string
+  data_pagamento: string
+  total_comissoes: number
+  total_debitos: number
+  taxa_pix: number
+  valor_liquido: number
+  policies_ids?: string
+  detalhes_debitos?: string // JSON stringified array of ParceiroDebitoItem
+  observacoes?: string
+  usuario_id?: string
+  usuario_nome?: string
+  created: string
+  updated: string
+  expand?: {
+    parceiro?: Parceiro
+  }
+}
+
 export interface FilterState {
   year?: string
   month?: string

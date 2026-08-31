@@ -1,4 +1,5 @@
 import logoImg from '@/assets/cred10mixlogooficialfundobranco4k-12574.jpg'
+import { ParceiroDebitoItem } from '@/types'
 
 export interface PartnerReportEntry {
   clientName: string
@@ -12,9 +13,6 @@ export interface PartnerReportEntry {
   dataPagamentoRepasse?: string
   statusSeguradora: 'Recebida' | 'Pendente'
   dataRecebimentoComissao?: string
-  taxaPercent: number
-  taxaValor: number
-  valorLiquidoRepasse: number
 }
 
 export interface PartnerReportInfo {
@@ -34,10 +32,9 @@ export interface PartnerReportData {
   generatedAt: Date
   entries: PartnerReportEntry[]
   totalBrutoRepasse: number
-  totalTaxaPix: number
-  taxaPixPercent: number
-  totalAdiantamentos: number
-  adiantamentosDescricao?: string
+  totalDebitos: number
+  debitosList?: ParceiroDebitoItem[]
+  taxaPixValor: number
   totalLiquidoAPagar: number
   totalPaid: number
   totalPending: number
@@ -60,7 +57,7 @@ export function generatePartnerReportPDF(data: PartnerReportData) {
         <h2>Dados do Parceiro</h2>
         <div class="partner-grid">
           <div class="partner-field"><span class="partner-label">Nome:</span> ${data.partnerInfo.nome}</div>
-          ${data.partnerInfo.cpf ? `<div class="partner-field"><span class="partner-label">CPF:</span> ${data.partnerInfo.cpf}</div>` : ''}
+          ${data.partnerInfo.cpf ? `<div class="partner-field"><span class="partner-label">CPF/CNPJ:</span> ${data.partnerInfo.cpf}</div>` : ''}
           ${data.partnerInfo.telefone ? `<div class="partner-field"><span class="partner-label">Telefone:</span> ${data.partnerInfo.telefone}</div>` : ''}
           ${data.partnerInfo.email ? `<div class="partner-field"><span class="partner-label">E-mail:</span> ${data.partnerInfo.email}</div>` : ''}
           ${data.partnerInfo.dadosBancarios ? `<div class="partner-field"><span class="partner-label">Dados Bancários/PIX:</span> ${data.partnerInfo.dadosBancarios}</div>` : ''}
@@ -95,34 +92,50 @@ export function generatePartnerReportPDF(data: PartnerReportData) {
     )
     .join('')
 
+  const debitosDetailRows =
+    data.debitosList && data.debitosList.length > 0
+      ? data.debitosList
+          .map(
+            (d) => `<tr>
+              <td class="sum-label" style="padding-left:12px; font-size:11px; color:#64748b">• ${d.descricao || 'Débito'}:</td>
+              <td class="sum-val right text-danger" style="font-size:11px">- R$ ${fmt(d.valor)}</td>
+            </tr>`,
+          )
+          .join('')
+      : ''
+
   const financialSummarySection = `
   <div class="summary-section">
     <div class="summary-table-box">
+      <div style="font-size:13px; font-weight:700; color:#1e293b; margin-bottom:8px; border-bottom:1px solid #cbd5e1; padding-bottom:4px;">
+        Resumo do Pagamento / Fechamento
+      </div>
       <table class="summary-table">
         <tbody>
           <tr>
-            <td class="sum-label">Valor Bruto Total dos Repasses:</td>
-            <td class="sum-val right">R$ ${fmt(data.totalBrutoRepasse)}</td>
+            <td class="sum-label"><strong>Total das Comissões (Bruto):</strong></td>
+            <td class="sum-val right"><strong>R$ ${fmt(data.totalBrutoRepasse)}</strong></td>
           </tr>
           ${
-            data.taxaPixPercent > 0 || data.totalTaxaPix > 0
+            data.totalDebitos > 0
               ? `<tr>
-            <td class="sum-label">Taxa Transferência/PIX (${data.taxaPixPercent}%):</td>
-            <td class="sum-val right text-danger">- R$ ${fmt(data.totalTaxaPix)}</td>
-          </tr>`
+            <td class="sum-label text-danger font-semibold">(-) Débitos do Parceiro:</td>
+            <td class="sum-val right text-danger font-semibold">- R$ ${fmt(data.totalDebitos)}</td>
+          </tr>
+          ${debitosDetailRows}`
               : ''
           }
           ${
-            data.totalAdiantamentos > 0
+            data.taxaPixValor > 0
               ? `<tr>
-            <td class="sum-label">Dívidas / Adiantamentos / Antecipações ${data.adiantamentosDescricao ? `(${data.adiantamentosDescricao})` : ''}:</td>
-            <td class="sum-val right text-danger">- R$ ${fmt(data.totalAdiantamentos)}</td>
+            <td class="sum-label text-danger font-semibold">(-) Taxa de Transferência PIX:</td>
+            <td class="sum-val right text-danger font-semibold">- R$ ${fmt(data.taxaPixValor)}</td>
           </tr>`
               : ''
           }
           <tr class="sum-total-row">
-            <td class="sum-label font-bold">Valor Líquido Final a Pagar:</td>
-            <td class="sum-val right font-bold text-primary">R$ ${fmt(data.totalLiquidoAPagar)}</td>
+            <td class="sum-label font-bold" style="font-size:15px; color:#1e293b;">LÍQUIDO A PAGAR (Transferência):</td>
+            <td class="sum-val right font-bold text-primary" style="font-size:17px;">R$ ${fmt(data.totalLiquidoAPagar)}</td>
           </tr>
         </tbody>
       </table>
@@ -158,12 +171,13 @@ tr:nth-child(even){background:#f8fafc}
 .badge.paid{background:#dcfce7;color:#166534}
 .badge.pending{background:#fef3c7;color:#92400e}
 .summary-section{margin-top:24px;display:flex;justify-content:flex-end}
-.summary-table-box{width:420px;background:#f8fafc;border:1px solid #cbd5e1;border-radius:8px;padding:14px 18px}
+.summary-table-box{width:460px;background:#f8fafc;border:2px solid #2563eb;border-radius:8px;padding:14px 18px}
 .summary-table{width:100%;font-size:12px}
-.summary-table td{padding:5px 0;border-bottom:1px dashed #e2e8f0}
-.sum-total-row td{border-top:2px solid #2563eb;border-bottom:none;padding-top:10px;font-size:14px}
+.summary-table td{padding:6px 0;border-bottom:1px dashed #e2e8f0}
+.sum-total-row td{border-top:2px solid #2563eb;border-bottom:none;padding-top:10px;background:#eff6ff}
 .text-danger{color:#dc2626}
 .text-primary{color:#2563eb}
+.font-semibold{font-weight:600}
 .font-bold{font-weight:bold}
 .totals{margin-top:16px;display:flex;justify-content:flex-end;gap:16px}
 .total-box{padding:10px 18px;border-radius:8px;text-align:center}
