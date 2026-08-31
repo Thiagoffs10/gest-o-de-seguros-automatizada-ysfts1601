@@ -12,7 +12,6 @@ import { Label } from '@/components/ui/label'
 import { Textarea } from '@/components/ui/textarea'
 import { Button } from '@/components/ui/button'
 import { todayLocalDate } from '@/lib/utils'
-import { Banner } from '@/components/ui/alert' // or plain div
 import { AlertCircle } from 'lucide-react'
 
 interface Props {

@@ -132,22 +132,20 @@ export default function Financial() {
     const expectedCommissions = computeExpectedCommissions(allPolicies, period)
     const receivedCommissions = computeReceivedCommissions(allPolicies, period)
     const pendingCommissions = expectedCommissions - receivedCommissions
+    const paidRepasses = computePaidRepasses(allPolicies, period)
     const pendingRepasses = computePendingRepasses(allPolicies)
     const paidCosts = computePaidCosts(custosFixos, period)
     const pendingCosts = computePendingCosts(custosFixos, period)
     const expectedRepasses = computeExpectedRepasses(allPolicies, period)
     const totalCustos = computeCosts(custosFixos, period)
     const expectedProfit = computeExpectedProfit(expectedCommissions, expectedRepasses, totalCustos)
-    const realProfit = computeRealProfit(
-      receivedCommissions,
-      computePaidRepasses(allPolicies, period),
-      paidCosts,
-    )
+    const realProfit = computeRealProfit(receivedCommissions, paidRepasses, paidCosts)
     const partnerPols = getPartnerPolicies(tablePolicies)
     return {
       expectedCommissions,
       receivedCommissions,
       pendingCommissions,
+      paidRepasses,
       pendingRepasses,
       paidCosts,
       pendingCosts,
@@ -230,6 +228,7 @@ export default function Financial() {
         expectedCommissions={metrics.expectedCommissions}
         receivedCommissions={metrics.receivedCommissions}
         pendingCommissions={metrics.pendingCommissions}
+        paidRepasses={metrics.paidRepasses}
         pendingRepasses={metrics.pendingRepasses}
         paidCosts={metrics.paidCosts}
         pendingCosts={metrics.pendingCosts}

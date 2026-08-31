@@ -1,6 +1,12 @@
 import { useEffect, useState } from 'react'
-import { Bell, Plus, CheckCircle, Trash2 } from 'lucide-react'
-import { getReminders, createReminder, updateReminder, deleteReminder } from '@/services/reminders'
+import { Plus, CheckCircle, Trash2, CheckCheck } from 'lucide-react'
+import {
+  getReminders,
+  createReminder,
+  updateReminder,
+  deleteReminder,
+  completeAllPendingReminders,
+} from '@/services/reminders'
 import { getClients } from '@/services/clients'
 import { Reminder, Client } from '@/types'
 import { Card } from '@/components/ui/card'
@@ -43,6 +49,8 @@ export default function RemindersPage() {
   const [reminders, setReminders] = useState<Reminder[]>([])
   const [clients, setClients] = useState<Client[]>([])
   const [isModalOpen, setIsModalOpen] = useState(false)
+  const [completeAllOpen, setCompleteAllOpen] = useState(false)
+  const [completingAll, setCompletingAll] = useState(false)
   const [deleteTarget, setDeleteTarget] = useState<Reminder | null>(null)
   const [loading, setLoading] = useState(true)
   const [formData, setFormData] = useState({
@@ -101,6 +109,27 @@ export default function RemindersPage() {
     }
   }
 
+  const handleCompleteAll = async () => {
+    setCompletingAll(true)
+    try {
+      const count = await completeAllPendingReminders()
+      toast({
+        title: 'Lembretes baixados com sucesso!',
+        description: `${count} lembrete(s) marcado(s) como concluído(s).`,
+      })
+      setCompleteAllOpen(false)
+      loadData()
+    } catch (err: any) {
+      toast({
+        title: 'Erro ao baixar lembretes',
+        description: err.message,
+        variant: 'destructive',
+      })
+    } finally {
+      setCompletingAll(false)
+    }
+  }
+
   const pendingCount = reminders.filter((r) => !r.sent).length
 
   if (loading)
@@ -115,11 +144,22 @@ export default function RemindersPage() {
             Alertas automáticos de renovações e datas importantes. {pendingCount} pendente(s).
           </p>
         </div>
-        {can('reminders', 'create') && (
-          <Button className="bg-blue-600 hover:bg-blue-700" onClick={() => setIsModalOpen(true)}>
-            <Plus className="w-4 h-4 mr-2" /> Criar Lembrete
-          </Button>
-        )}
+        <div className="flex flex-wrap items-center gap-2">
+          {can('reminders', 'update') && pendingCount > 0 && (
+            <Button
+              variant="outline"
+              className="text-emerald-700 border-emerald-300 hover:bg-emerald-50"
+              onClick={() => setCompleteAllOpen(true)}
+            >
+              <CheckCheck className="w-4 h-4 mr-2" /> Baixar todos ({pendingCount})
+            </Button>
+          )}
+          {can('reminders', 'create') && (
+            <Button className="bg-blue-600 hover:bg-blue-700" onClick={() => setIsModalOpen(true)}>
+              <Plus className="w-4 h-4 mr-2" /> Criar Lembrete
+            </Button>
+          )}
+        </div>
       </div>
 
       <Card className="shadow-sm overflow-hidden border">
@@ -263,6 +303,29 @@ export default function RemindersPage() {
             <AlertDialogCancel>Cancelar</AlertDialogCancel>
             <AlertDialogAction className="bg-red-600 hover:bg-red-700" onClick={handleDelete}>
               Excluir
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+
+      <AlertDialog open={completeAllOpen} onOpenChange={setCompleteAllOpen}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Baixar todos os lembretes pendentes?</AlertDialogTitle>
+            <AlertDialogDescription>
+              Tem certeza que deseja marcar{' '}
+              <strong>todos os {pendingCount} lembretes pendentes</strong> como concluídos/baixados
+              de uma única vez?
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel disabled={completingAll}>Cancelar</AlertDialogCancel>
+            <AlertDialogAction
+              className="bg-emerald-600 hover:bg-emerald-700"
+              onClick={handleCompleteAll}
+              disabled={completingAll}
+            >
+              {completingAll ? 'Baixando...' : 'Confirmar e Baixar Todos'}
             </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>

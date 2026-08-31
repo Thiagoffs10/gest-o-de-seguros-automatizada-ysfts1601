@@ -1,5 +1,5 @@
 {
-  "generatedAt": "2026-08-31T16:49:34.429Z",
+  "generatedAt": "2026-08-31T17:07:06.103Z",
   "collections": [
     {
       "name": "users",
@@ -996,6 +996,68 @@
         }
       ],
       "indexes": ["CREATE UNIQUE INDEX idx_conciliacoes_mes_ano ON conciliacoes (mes, ano)"]
+    },
+    {
+      "name": "password_resets",
+      "type": "base",
+      "apiRules": {
+        "list": null,
+        "view": null,
+        "create": null,
+        "update": null,
+        "delete": null
+      },
+      "fields": [
+        {
+          "name": "user",
+          "type": "relation",
+          "required": true,
+          "system": false,
+          "collectionRef": "users"
+        },
+        {
+          "name": "email",
+          "type": "email",
+          "required": true,
+          "system": false
+        },
+        {
+          "name": "token",
+          "type": "text",
+          "required": true,
+          "system": false
+        },
+        {
+          "name": "expires_at",
+          "type": "date",
+          "required": true,
+          "system": false
+        },
+        {
+          "name": "used",
+          "type": "bool",
+          "required": false,
+          "system": false
+        },
+        {
+          "name": "created",
+          "type": "autodate",
+          "required": false,
+          "system": false,
+          "autodateTriggers": ["onCreate"]
+        },
+        {
+          "name": "updated",
+          "type": "autodate",
+          "required": false,
+          "system": false,
+          "autodateTriggers": ["onCreate", "onUpdate"]
+        }
+      ],
+      "indexes": [
+        "CREATE INDEX idx_pwd_resets_token ON password_resets (token)",
+        "CREATE INDEX idx_pwd_resets_email ON password_resets (email)"
+      ]
     }
   ]
 }

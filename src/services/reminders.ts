@@ -20,3 +20,28 @@ export const updateReminder = async (id: string, data: Partial<Reminder>) => {
 export const deleteReminder = async (id: string) => {
   return pb.collection('reminders').delete(id)
 }
+
+export const completeReminder = async (id: string) => {
+  return pb.collection('reminders').update<Reminder>(id, {
+    sent: true,
+  })
+}
+
+export const completeAllPendingReminders = async (): Promise<number> => {
+  const pending = await pb.collection('reminders').getFullList<Reminder>({
+    filter: 'sent = false',
+    requestKey: null,
+  })
+  let updatedCount = 0
+  for (const item of pending) {
+    try {
+      await pb.collection('reminders').update(item.id, {
+        sent: true,
+      })
+      updatedCount++
+    } catch {
+      /* continue */
+    }
+  }
+  return updatedCount
+}

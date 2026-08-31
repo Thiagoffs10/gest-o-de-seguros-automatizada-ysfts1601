@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
-import { Plus, Pencil, RefreshCw, Trash2, Ban } from 'lucide-react'
+import { Plus, Pencil, RefreshCw, Trash2, Ban, AlertOctagon } from 'lucide-react'
 import {
   getPolicy,
   createPolicy,
@@ -39,7 +39,9 @@ import { DeletePolicyDialog } from '@/components/DeletePolicyDialog'
 import { CancelPolicyDialog } from '@/components/CancelPolicyDialog'
 import { useToast } from '@/hooks/use-toast'
 import { useRealtime } from '@/hooks/use-realtime'
+import { usePermissions } from '@/hooks/use-permissions'
 import { extractFieldErrors, getErrorMessage, type FieldErrors } from '@/lib/pocketbase/errors'
+import { formatDateDisplay } from '@/lib/utils'
 
 type DialogMode = 'edit' | 'renew' | null
 
@@ -47,6 +49,7 @@ export default function PolicyDetail() {
   const { id } = useParams<{ id: string }>()
   const navigate = useNavigate()
   const { toast } = useToast()
+  const { can } = usePermissions()
 
   const [policy, setPolicy] = useState<Policy | null>(null)
   const [payments, setPayments] = useState<Payment[]>([])
@@ -137,7 +140,8 @@ export default function PolicyDetail() {
         motivo_cancelamento: data.motivo_cancelamento,
       })
       toast({ title: 'Apólice cancelada com sucesso!' })
-      loadPolicy()
+      setCancelOpen(false)
+      loadData()
     } catch (err: any) {
       toast({
         title: 'Erro ao cancelar apólice',
@@ -199,36 +203,81 @@ export default function PolicyDetail() {
           </Button>
           <h1 className="text-2xl font-bold text-slate-900">Apólice {policy.policy_number}</h1>
         </div>
-        <div className="flex gap-2">
-          <Button
-            variant="outline"
-            onClick={() => {
-              setFieldErrors({})
-              setDialogMode('edit')
-            }}
-          >
-            <Pencil className="w-4 h-4 mr-2" /> Editar
-          </Button>
-          <Button
-            className="bg-amber-600 hover:bg-amber-700"
-            onClick={() => {
-              setFieldErrors({})
-              setDialogMode('renew')
-            }}
-          >
-            <RefreshCw className="w-4 h-4 mr-2" /> Renovar
-          </Button>
-          <Button variant="destructive" onClick={handleDeleteClick}>
-            <Trash2 className="w-4 h-4 mr-2" /> Excluir
-          </Button>
+        <div className="flex flex-wrap gap-2">
+          {can('policies', 'update') && (
+            <Button
+              variant="outline"
+              onClick={() => {
+                setFieldErrors({})
+                setDialogMode('edit')
+              }}
+            >
+              <Pencil className="w-4 h-4 mr-2" /> Editar
+            </Button>
+          )}
+          {can('policies', 'update') && policy.status !== 'Cancelada' && (
+            <Button
+              variant="outline"
+              className="text-red-600 border-red-200 hover:bg-red-50 hover:text-red-700"
+              onClick={() => setCancelOpen(true)}
+            >
+              <Ban className="w-4 h-4 mr-2" /> Cancelar Apólice
+            </Button>
+          )}
+          {can('policies', 'create') && policy.status !== 'Cancelada' && (
+            <Button
+              className="bg-amber-600 hover:bg-amber-700"
+              onClick={() => {
+                setFieldErrors({})
+                setDialogMode('renew')
+              }}
+            >
+              <RefreshCw className="w-4 h-4 mr-2" /> Renovar
+            </Button>
+          )}
+          {can('policies', 'delete') && (
+            <Button variant="destructive" onClick={handleDeleteClick}>
+              <Trash2 className="w-4 h-4 mr-2" /> Excluir
+            </Button>
+          )}
         </div>
       </div>
+
+      {policy.status === 'Cancelada' && (
+        <Card className="border-red-300 bg-red-50/70 shadow-sm">
+          <CardContent className="pt-4 pb-4 flex items-start gap-3">
+            <AlertOctagon className="w-5 h-5 text-red-600 shrink-0 mt-0.5" />
+            <div className="space-y-1 text-xs">
+              <p className="font-bold text-red-900 text-sm">Esta apólice foi cancelada</p>
+              <p className="text-red-800">
+                <span className="font-semibold">Data do Cancelamento:</span>{' '}
+                {formatDateDisplay(policy.data_cancelamento) || 'Não informada'}
+              </p>
+              {policy.motivo_cancelamento && (
+                <p className="text-red-800">
+                  <span className="font-semibold">Motivo:</span> {policy.motivo_cancelamento}
+                </p>
+              )}
+            </div>
+          </CardContent>
+        </Card>
+      )}
 
       <Card className="shadow-sm">
         <CardHeader>
           <CardTitle className="text-base font-bold flex items-center justify-between">
             <span>Detalhes da Cobertura</span>
-            <Badge className={policy.status === 'Ativa' ? 'bg-emerald-500' : 'bg-amber-500'}>
+            <Badge
+              className={
+                policy.status === 'Ativa'
+                  ? 'bg-emerald-500'
+                  : policy.status === 'Renovação Pendente'
+                    ? 'bg-amber-500'
+                    : policy.status === 'Cancelada'
+                      ? 'bg-red-600'
+                      : 'bg-slate-500'
+              }
+            >
               {policy.status}
             </Badge>
           </CardTitle>

@@ -6,6 +6,7 @@ interface Props {
   expectedCommissions: number
   receivedCommissions: number
   pendingCommissions: number
+  paidRepasses?: number
   pendingRepasses: number
   paidCosts: number
   pendingCosts: number
@@ -18,6 +19,7 @@ export function FinancialSummaryCards({
   expectedCommissions,
   receivedCommissions,
   pendingCommissions,
+  paidRepasses = 0,
   pendingRepasses,
   paidCosts,
   pendingCosts,
@@ -52,6 +54,12 @@ export function FinancialSummaryCards({
     {
       title: 'OBRIGAÇÕES',
       cards: [
+        {
+          label: 'Repasses Pagos no Mês',
+          value: paidRepasses,
+          icon: CheckCircle2,
+          color: 'text-emerald-700',
+        },
         {
           label: 'Repasses Pendentes',
           value: pendingRepasses,

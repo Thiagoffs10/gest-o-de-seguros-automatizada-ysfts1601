@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router-dom'
 import {
   Database,
   Download,
+  FileSpreadsheet,
   AlertCircle,
   CheckCircle,
   Loader2,
@@ -11,6 +12,7 @@ import {
 } from 'lucide-react'
 import { useAuth } from '@/hooks/use-auth'
 import { exportBackup, type BackupData } from '@/services/backup'
+import { exportBackupToExcel } from '@/lib/backup-excel'
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
@@ -48,24 +50,31 @@ export default function Backup() {
     return () => clearInterval(timer)
   }, [])
 
-  const handleExport = async () => {
+  const handleExport = async (format: 'xlsx' | 'json' = 'xlsx') => {
     setLoading(true)
     setError(null)
     setSummary(null)
     try {
       const data: BackupData = await exportBackup()
-      const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' })
-      const url = URL.createObjectURL(blob)
-      const a = document.createElement('a')
-      a.href = url
       const now = new Date()
       const pad = (n: number) => String(n).padStart(2, '0')
       const dateStr = `${now.getFullYear()}-${pad(now.getMonth() + 1)}-${pad(now.getDate())}_${pad(now.getHours())}${pad(now.getMinutes())}`
-      a.download = `backup_${dateStr}.json`
-      document.body.appendChild(a)
-      a.click()
-      document.body.removeChild(a)
-      URL.revokeObjectURL(url)
+
+      if (format === 'xlsx') {
+        const filename = `CRED10MIX_Backup_${dateStr}.xlsx`
+        exportBackupToExcel(data, filename)
+      } else {
+        const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' })
+        const url = URL.createObjectURL(blob)
+        const a = document.createElement('a')
+        a.href = url
+        a.download = `backup_${dateStr}.json`
+        document.body.appendChild(a)
+        a.click()
+        document.body.removeChild(a)
+        URL.revokeObjectURL(url)
+      }
+
       const counts: Record<string, number> = {}
       for (const [col, records] of Object.entries(data.records)) {
         counts[col] = Array.isArray(records) ? records.length : 0
@@ -112,32 +121,48 @@ export default function Backup() {
       <Card className="shadow-sm border-blue-200 bg-blue-50/50">
         <CardContent className="pt-6">
           <div className="flex flex-col items-center text-center gap-4">
-            <FileJson className="w-16 h-16 text-blue-600" />
+            <div className="p-3 bg-white rounded-2xl shadow-sm border border-blue-100 flex items-center gap-3">
+              <FileSpreadsheet className="w-12 h-12 text-emerald-600" />
+              <FileJson className="w-12 h-12 text-blue-600" />
+            </div>
             <div>
-              <h3 className="font-semibold text-slate-900">Backup Completo do Sistema</h3>
+              <h3 className="font-semibold text-slate-900 text-lg">Backup Completo do Sistema</h3>
               <p className="text-sm text-slate-600 mt-1 max-w-md">
-                Inclui todas as coleções, registros, esquema do banco, definições de acesso, hashes
-                de senha dos usuários e URLs de arquivos anexados.
+                Exporte todos os dados estruturados em planilha <strong>Excel (.xlsx)</strong> com
+                abas organizadas, colunas formatadas para valores monetários e datas, ou em arquivo{' '}
+                <strong>JSON</strong> completo.
               </p>
             </div>
-            <Button
-              size="lg"
-              className="bg-blue-600 hover:bg-blue-700"
-              onClick={handleExport}
-              disabled={loading}
-            >
-              {loading ? (
-                <>
-                  <Loader2 className="w-5 h-5 mr-2 animate-spin" />
-                  Gerando Backup...
-                </>
-              ) : (
-                <>
-                  <Download className="w-5 h-5 mr-2" />
-                  Exportar Backup Completo
-                </>
-              )}
-            </Button>
+            <div className="flex flex-wrap items-center justify-center gap-3">
+              <Button
+                size="lg"
+                className="bg-emerald-600 hover:bg-emerald-700 font-semibold shadow-sm"
+                onClick={() => handleExport('xlsx')}
+                disabled={loading}
+              >
+                {loading ? (
+                  <>
+                    <Loader2 className="w-5 h-5 mr-2 animate-spin" />
+                    Gerando Planilha...
+                  </>
+                ) : (
+                  <>
+                    <FileSpreadsheet className="w-5 h-5 mr-2" />
+                    Exportar Planilha Excel (.xlsx)
+                  </>
+                )}
+              </Button>
+              <Button
+                size="lg"
+                variant="outline"
+                className="border-blue-300 text-blue-700 hover:bg-blue-50"
+                onClick={() => handleExport('json')}
+                disabled={loading}
+              >
+                <FileJson className="w-5 h-5 mr-2 text-blue-600" />
+                Exportar JSON Técnico
+              </Button>
+            </div>
           </div>
         </CardContent>
       </Card>

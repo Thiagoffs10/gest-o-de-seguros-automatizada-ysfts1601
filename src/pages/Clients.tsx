@@ -1,5 +1,5 @@
 import { useEffect, useState, useCallback, useMemo } from 'react'
-import { Search, UserPlus, X, Download } from 'lucide-react'
+import { Search, UserPlus, X, Download, User } from 'lucide-react'
 import { getClients, createClient, deleteClient, updateClient } from '@/services/clients'
 import { getPolicies } from '@/services/policies'
 import { Client, Policy, FilterState } from '@/types'
@@ -20,6 +20,7 @@ export default function Clients() {
   const { can } = usePermissions()
   const [clients, setClients] = useState<Client[]>([])
   const [policies, setPolicies] = useState<Policy[]>([])
+  const [nameSearch, setNameSearch] = useState('')
   const [search, setSearch] = useState('')
   const [isModalOpen, setIsModalOpen] = useState(false)
   const [editingClient, setEditingClient] = useState<Partial<Client> | null>(null)
@@ -36,17 +37,21 @@ export default function Clients() {
   const loadClients = useCallback(async () => {
     try {
       const filterStr = buildFilterString('', filters, 'created')
-      const [data, pols] = await Promise.all([getClients(search, filterStr), getPolicies()])
+      const [data, pols] = await Promise.all([
+        getClients(search, filterStr, nameSearch),
+        getPolicies(),
+      ])
       setClients(data)
       setPolicies(pols)
     } catch {
       /* intentionally ignored */
     }
     setLoading(false)
-  }, [search, filters])
+  }, [search, nameSearch, filters])
 
   useEffect(() => {
     setPage(1)
+    setLoading(true)
     const timer = setTimeout(() => loadClients(), 300)
     return () => clearTimeout(timer)
   }, [loadClients])
@@ -123,7 +128,7 @@ export default function Clients() {
     setExportLoading(true)
     try {
       const filterStr = buildFilterString('', filters, 'created')
-      const exportClients = await getClients(search, filterStr)
+      const exportClients = await getClients(search, filterStr, nameSearch)
       let allPolicies: any[] = []
       if (exportClients.length > 0) {
         const clientIds = exportClients.map((c) => c.id)
@@ -166,30 +171,54 @@ export default function Clients() {
 
       <GlobalFilters filters={filters} onFilterChange={setFilters} />
 
-      <div className="relative max-w-md">
-        <Search className="w-4 h-4 absolute left-3 top-3 text-slate-400" />
-        <Input
-          placeholder="Buscar por CPF ou CNPJ..."
-          className="pl-9 pr-9"
-          value={search}
-          onChange={(e) => setSearch(e.target.value)}
-        />
-        {search && (
-          <button
-            type="button"
-            onClick={() => setSearch('')}
-            className="absolute right-3 top-3 text-slate-400 hover:text-slate-600"
-          >
-            <X className="w-4 h-4" />
-          </button>
-        )}
+      <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 max-w-2xl">
+        <div className="relative">
+          <User className="w-4 h-4 absolute left-3 top-3 text-slate-400" />
+          <Input
+            placeholder="Pesquisar por Nome do Cliente..."
+            className="pl-9 pr-9"
+            value={nameSearch}
+            onChange={(e) => setNameSearch(e.target.value)}
+          />
+          {nameSearch && (
+            <button
+              type="button"
+              onClick={() => setNameSearch('')}
+              className="absolute right-3 top-3 text-slate-400 hover:text-slate-600"
+              aria-label="Limpar busca por nome"
+            >
+              <X className="w-4 h-4" />
+            </button>
+          )}
+        </div>
+
+        <div className="relative">
+          <Search className="w-4 h-4 absolute left-3 top-3 text-slate-400" />
+          <Input
+            placeholder="Buscar por CPF ou CNPJ..."
+            className="pl-9 pr-9"
+            value={search}
+            onChange={(e) => setSearch(e.target.value)}
+          />
+          {search && (
+            <button
+              type="button"
+              onClick={() => setSearch('')}
+              className="absolute right-3 top-3 text-slate-400 hover:text-slate-600"
+              aria-label="Limpar busca por CPF/CNPJ"
+            >
+              <X className="w-4 h-4" />
+            </button>
+          )}
+        </div>
       </div>
 
       {loading ? (
         <div className="text-center py-12 text-slate-500">Carregando informações...</div>
       ) : clients.length === 0 ? (
         <div className="text-center py-12 text-slate-500">
-          Nenhum cliente encontrado{search ? ` para "${search}"` : '.'}
+          Nenhum cliente encontrado
+          {nameSearch ? ` para "${nameSearch}"` : search ? ` para "${search}"` : '.'}
         </div>
       ) : (
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">

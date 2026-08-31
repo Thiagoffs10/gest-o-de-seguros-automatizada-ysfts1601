@@ -6,6 +6,7 @@ import {
   updateSeguradora,
   deleteSeguradora,
 } from '@/services/seguradoras'
+import { getPolicies } from '@/services/policies'
 import { Seguradora } from '@/types'
 import { Input } from '@/components/ui/input'
 import { Button } from '@/components/ui/button'
