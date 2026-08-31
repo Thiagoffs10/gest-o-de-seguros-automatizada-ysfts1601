@@ -32,14 +32,15 @@ export function computePaidRepasses(policies: Policy[], period: DatePeriod): num
     .reduce((s, p) => s + (p.valor_repasse || 0), 0)
 }
 
-export function computePendingRepasses(policies: Policy[]): number {
+export function computePendingRepasses(policies: Policy[], period?: DatePeriod): number {
   return policies
     .filter(
       (p) =>
         p.tipo_de_venda === 'Parceiro' &&
         (p.parceiro || p.expand?.parceiro) &&
         (p.valor_repasse || 0) > 0 &&
-        !p.pago_parceiro,
+        !p.pago_parceiro &&
+        (!period || isDateInPeriod(period, p.start_date)),
     )
     .reduce((s, p) => s + (p.valor_repasse || 0), 0)
 }

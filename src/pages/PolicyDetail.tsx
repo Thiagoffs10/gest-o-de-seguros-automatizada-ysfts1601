@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
-import { Plus, Pencil, RefreshCw, Trash2 } from 'lucide-react'
+import { Plus, Pencil, RefreshCw, Trash2, Ban } from 'lucide-react'
 import {
   getPolicy,
   createPolicy,
@@ -36,6 +36,7 @@ import {
 } from '@/components/ui/select'
 import { PolicyFormDialog } from '@/components/PolicyFormDialog'
 import { DeletePolicyDialog } from '@/components/DeletePolicyDialog'
+import { CancelPolicyDialog } from '@/components/CancelPolicyDialog'
 import { useToast } from '@/hooks/use-toast'
 import { useRealtime } from '@/hooks/use-realtime'
 import { extractFieldErrors, getErrorMessage, type FieldErrors } from '@/lib/pocketbase/errors'
@@ -57,6 +58,7 @@ export default function PolicyDetail() {
   const [fieldErrors, setFieldErrors] = useState<FieldErrors>({})
   const [deleteOpen, setDeleteOpen] = useState(false)
   const [deleteLoading, setDeleteLoading] = useState(false)
+  const [cancelOpen, setCancelOpen] = useState(false)
   const [relatedCount, setRelatedCount] = useState({ payments: 0, reminders: 0 })
 
   const [paymentForm, setPaymentForm] = useState({
@@ -121,6 +123,29 @@ export default function PolicyDetail() {
       setRelatedCount({ payments: 0, reminders: 0 })
     }
     setDeleteOpen(true)
+  }
+
+  const handleCancelConfirm = async (data: {
+    data_cancelamento: string
+    motivo_cancelamento: string
+  }) => {
+    if (!policy) return
+    try {
+      await updatePolicy(policy.id, {
+        status: 'Cancelada',
+        data_cancelamento: data.data_cancelamento,
+        motivo_cancelamento: data.motivo_cancelamento,
+      })
+      toast({ title: 'Apólice cancelada com sucesso!' })
+      loadPolicy()
+    } catch (err: any) {
+      toast({
+        title: 'Erro ao cancelar apólice',
+        description: getErrorMessage(err),
+        variant: 'destructive',
+      })
+      throw err
+    }
   }
 
   const handleDeleteConfirm = async () => {
@@ -366,6 +391,13 @@ export default function PolicyDetail() {
         policyNumber={policy.policy_number}
         relatedCount={relatedCount}
         loading={deleteLoading}
+      />
+
+      <CancelPolicyDialog
+        open={cancelOpen}
+        onOpenChange={setCancelOpen}
+        onConfirm={handleCancelConfirm}
+        policyNumber={policy.policy_number}
       />
 
       <Dialog open={isPayModalOpen} onOpenChange={setIsPayModalOpen}>

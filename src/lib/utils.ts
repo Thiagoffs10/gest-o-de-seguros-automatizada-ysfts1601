@@ -27,6 +27,27 @@ export function formatCurrency(value: number | string | undefined | null): strin
 }
 
 /**
+ * Formats a raw number or digits into Brazilian currency input format (e.g. "R$ 1.500,00").
+ */
+export function formatCurrencyDisplay(value: number | string | undefined | null): string {
+  if (value === undefined || value === null || value === '') return ''
+  const num = typeof value === 'number' ? value : Number(value)
+  if (isNaN(num)) return ''
+  return `R$ ${formatCurrency(num)}`
+}
+
+/**
+ * Parses a currency input string (e.g. "R$ 1.500,00" or "1500" or digits from typing) into pure numeric float.
+ * Keeps standard cent-based typing: 1500 -> 15.00, or handles typed numbers gracefully.
+ */
+export function parseCurrencyInput(value: string): number {
+  if (!value) return 0
+  const digits = value.replace(/\D/g, '')
+  if (!digits) return 0
+  return Number(digits) / 100
+}
+
+/**
  * Formats a date string into YYYY-MM-DD for native HTML date inputs.
  */
 export function formatDateForInput(dateStr?: string | null): string {

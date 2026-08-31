@@ -95,6 +95,8 @@ export interface Policy {
   forma_pagamento_repasse?: string
   data_recebimento_comissao?: string
   comissao_recebida?: boolean
+  data_cancelamento?: string
+  motivo_cancelamento?: string
   notes?: string
   created: string
   updated: string

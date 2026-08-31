@@ -99,6 +99,27 @@ export function preparePolicyPayload(data: Partial<Policy> & Record<string, any>
     delete payload.data_recebimento_comissao
   }
 
+  if ('data_cancelamento' in data) {
+    if (
+      !payload.data_cancelamento ||
+      (typeof payload.data_cancelamento === 'string' && payload.data_cancelamento.trim() === '')
+    ) {
+      payload.data_cancelamento = null
+    } else {
+      payload.data_cancelamento = formatDateForInput(payload.data_cancelamento)
+    }
+  } else {
+    delete payload.data_cancelamento
+  }
+
+  if ('motivo_cancelamento' in data) {
+    payload.motivo_cancelamento = data.motivo_cancelamento
+      ? String(data.motivo_cancelamento).trim()
+      : ''
+  } else {
+    delete payload.motivo_cancelamento
+  }
+
   if (!('pago_parceiro' in data)) {
     delete payload.pago_parceiro
   }

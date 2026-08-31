@@ -1,6 +1,6 @@
 import { useEffect, useState, useCallback } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { Search, Plus, Download, Car, Pencil, RefreshCw, Trash2, X } from 'lucide-react'
+import { Search, Plus, Download, Car, Pencil, RefreshCw, Trash2, X, Ban, User } from 'lucide-react'
 import {
   getPolicies,
   createPolicy,
@@ -28,6 +28,7 @@ import {
 } from '@/components/ui/select'
 import { PolicyFormDialog } from '@/components/PolicyFormDialog'
 import { DeletePolicyDialog } from '@/components/DeletePolicyDialog'
+import { CancelPolicyDialog } from '@/components/CancelPolicyDialog'
 import { GlobalFilters } from '@/components/GlobalFilters'
 import { buildFilterString } from '@/lib/constants'
 import { exportPoliciesToCsv } from '@/lib/export-utils'
@@ -57,9 +58,11 @@ export default function Policies() {
   const [loading, setLoading] = useState(true)
   const [dialogMode, setDialogMode] = useState<DialogMode>(null)
   const [selectedPolicy, setSelectedPolicy] = useState<Policy | null>(null)
+  const [nameSearch, setNameSearch] = useState('')
   const [fieldErrors, setFieldErrors] = useState<FieldErrors>({})
   const [deleteTarget, setDeleteTarget] = useState<Policy | null>(null)
   const [deleteLoading, setDeleteLoading] = useState(false)
+  const [cancelTarget, setCancelTarget] = useState<Policy | null>(null)
   const [relatedCount, setRelatedCount] = useState({ payments: 0, reminders: 0 })
   const [page, setPage] = useState(1)
   const PAGE_SIZE = 10
@@ -91,6 +94,17 @@ export default function Policies() {
         const clientFilter = clientIds.map((id) => `client = "${id}"`).join(' || ')
         filter = filter ? `${filter} && (${clientFilter})` : clientFilter
       }
+      if (nameSearch.trim()) {
+        const nameSanitized = nameSearch.trim().replace(/"/g, '')
+        const matchingClients = await getClients(undefined, `name ~ "${nameSanitized}"`)
+        const clientIds = matchingClients.map((c) => c.id)
+        if (clientIds.length === 0) {
+          setPolicies([])
+          return
+        }
+        const clientFilter = clientIds.map((id) => `client = "${id}"`).join(' || ')
+        filter = filter ? `${filter} && (${clientFilter})` : clientFilter
+      }
       if (placaSearch) {
         const q = `placa ~ "${placaSearch}"`
         filter = filter ? `${filter} && (${q})` : q
@@ -101,12 +115,12 @@ export default function Policies() {
       /* intentionally ignored */
     }
     setLoading(false)
-  }, [search, placaSearch, statusFilter, filters, periodStart, periodEnd])
+  }, [search, nameSearch, placaSearch, statusFilter, filters, periodStart, periodEnd])
 
   useEffect(() => {
     setPage(1)
     setLoading(true)
-  }, [search, placaSearch, statusFilter, filters, periodStart, periodEnd])
+  }, [search, nameSearch, placaSearch, statusFilter, filters, periodStart, periodEnd])
 
   useEffect(() => {
     const timer = setTimeout(() => {
@@ -158,6 +172,30 @@ export default function Policies() {
     setSelectedPolicy(policy)
     setFieldErrors({})
     setDialogMode('renew')
+  }
+
+  const handleCancelPolicy = async (data: {
+    data_cancelamento: string
+    motivo_cancelamento: string
+  }) => {
+    if (!cancelTarget) return
+    try {
+      await updatePolicy(cancelTarget.id, {
+        status: 'Cancelada',
+        data_cancelamento: data.data_cancelamento,
+        motivo_cancelamento: data.motivo_cancelamento,
+      })
+      toast({ title: 'Apólice cancelada com sucesso!' })
+      setCancelTarget(null)
+      loadData()
+    } catch (err: any) {
+      toast({
+        title: 'Erro ao cancelar apólice',
+        description: getErrorMessage(err),
+        variant: 'destructive',
+      })
+      throw err
+    }
   }
 
   const handleDeleteClick = async (policy: Policy) => {
@@ -254,11 +292,30 @@ export default function Policies() {
         showTipoSeguroFilter
       />
 
-      <div className="flex flex-col sm:flex-row gap-4">
-        <div className="relative flex-1">
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
+        <div className="relative">
+          <User className="w-4 h-4 absolute left-3 top-3 text-slate-400" />
+          <Input
+            placeholder="Pesquisar por Nome do Cliente..."
+            className="pl-9 pr-9"
+            value={nameSearch}
+            onChange={(e) => setNameSearch(e.target.value)}
+          />
+          {nameSearch && (
+            <button
+              type="button"
+              onClick={() => setNameSearch('')}
+              className="absolute right-3 top-3 text-slate-400 hover:text-slate-600"
+              aria-label="Limpar busca por nome"
+            >
+              <X className="w-4 h-4" />
+            </button>
+          )}
+        </div>
+        <div className="relative">
           <Search className="w-4 h-4 absolute left-3 top-3 text-slate-400" />
           <Input
-            placeholder="Buscar por CPF ou CNPJ do cliente..."
+            placeholder="Buscar por CPF ou CNPJ..."
             className="pl-9 pr-9"
             value={search}
             onChange={(e) => setSearch(e.target.value)}
@@ -274,7 +331,7 @@ export default function Policies() {
             </button>
           )}
         </div>
-        <div className="relative flex-1">
+        <div className="relative">
           <Car className="w-4 h-4 absolute left-3 top-3 text-slate-400" />
           <Input
             placeholder="Pesquisar por Placa..."
@@ -284,7 +341,7 @@ export default function Policies() {
           />
         </div>
         <Select value={statusFilter} onValueChange={setStatusFilter}>
-          <SelectTrigger className="w-full sm:w-[200px]">
+          <SelectTrigger className="w-full">
             <SelectValue placeholder="Filtrar por Status" />
           </SelectTrigger>
           <SelectContent>
@@ -376,11 +433,20 @@ export default function Policies() {
                 paginatedPolicies.map((p) => (
                   <tr
                     key={p.id}
-                    className="hover:bg-slate-50/80 cursor-pointer"
+                    className={`hover:bg-slate-50/80 cursor-pointer ${
+                      p.status === 'Cancelada' ? 'bg-red-50/40 text-slate-500 opacity-90' : ''
+                    }`}
                     onClick={() => navigate(`/apolices/${p.id}`)}
                   >
                     <td className="p-3.5 font-bold text-blue-600">{p.policy_code || '-'}</td>
-                    <td className="p-3.5 font-bold text-slate-900">{p.policy_number}</td>
+                    <td className="p-3.5 font-bold text-slate-900 flex items-center gap-1.5">
+                      {p.policy_number}
+                      {p.status === 'Cancelada' && (
+                        <span className="text-[10px] bg-red-100 text-red-700 px-1.5 py-0.5 rounded font-semibold">
+                          Cancelada
+                        </span>
+                      )}
+                    </td>
                     <td className="p-3.5">
                       {p.expand?.seguradora?.nome || p.insurance_company || '-'}
                     </td>
@@ -398,7 +464,9 @@ export default function Policies() {
                             ? 'bg-emerald-500'
                             : p.status === 'Renovação Pendente'
                               ? 'bg-amber-500'
-                              : 'bg-slate-500'
+                              : p.status === 'Cancelada'
+                                ? 'bg-red-600'
+                                : 'bg-slate-500'
                         }
                       >
                         {p.status}
@@ -428,7 +496,18 @@ export default function Policies() {
                             <Pencil className="w-3.5 h-3.5" />
                           </Button>
                         )}
-                        {can('policies', 'create') && (
+                        {can('policies', 'update') && p.status !== 'Cancelada' && (
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            className="text-red-500 hover:text-red-700 hover:bg-red-50"
+                            onClick={() => setCancelTarget(p)}
+                            title="Cancelar Apólice"
+                          >
+                            <Ban className="w-3.5 h-3.5" />
+                          </Button>
+                        )}
+                        {can('policies', 'create') && p.status !== 'Cancelada' && (
                           <Button
                             variant="ghost"
                             size="sm"
@@ -514,6 +593,15 @@ export default function Policies() {
         policyNumber={deleteTarget?.policy_number || ''}
         relatedCount={relatedCount}
         loading={deleteLoading}
+      />
+
+      <CancelPolicyDialog
+        open={!!cancelTarget}
+        onOpenChange={(open) => {
+          if (!open) setCancelTarget(null)
+        }}
+        onConfirm={handleCancelPolicy}
+        policyNumber={cancelTarget?.policy_number || ''}
       />
     </div>
   )

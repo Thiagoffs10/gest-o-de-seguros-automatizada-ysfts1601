@@ -17,7 +17,7 @@ import {
   SelectValue,
 } from '@/components/ui/select'
 import { Parceiro } from '@/types'
-import { maskCpf, maskCnpj } from '@/lib/document-validators'
+import { isValidCpf, isValidCnpj, maskCpf, maskCnpj } from '@/lib/document-validators'
 
 interface Props {
   open: boolean
@@ -42,6 +42,7 @@ export function PartnerFormDialog({
     email: '',
     dados_bancarios_ou_pix: '',
   })
+  const [errors, setErrors] = useState<Record<string, string>>({})
   const [loading, setLoading] = useState(false)
 
   useEffect(() => {
@@ -65,20 +66,54 @@ export function PartnerFormDialog({
         dados_bancarios_ou_pix: '',
       })
     }
+    setErrors({})
   }, [initialData, open])
 
-  const set = (key: string, val: string) => setForm((prev) => ({ ...prev, [key]: val }))
+  const set = (key: string, val: string) => {
+    setForm((prev) => ({ ...prev, [key]: val }))
+    if (errors[key]) {
+      setErrors((prev) => {
+        const next = { ...prev }
+        delete next[key]
+        return next
+      })
+    }
+  }
 
   const handleDocumentChange = (val: string) => {
     const masked = form.tipo_documento === 'CNPJ' ? maskCnpj(val) : maskCpf(val)
     set('cpf', masked)
   }
 
+  const validate = (): boolean => {
+    const errs: Record<string, string> = {}
+    if (!form.nome.trim()) errs.nome = 'Nome é obrigatório'
+    if (form.tipo_documento === 'CPF') {
+      if (!form.cpf.trim()) {
+        errs.cpf = 'CPF é obrigatório'
+      } else if (!isValidCpf(form.cpf)) {
+        errs.cpf = 'CPF inválido'
+      }
+    } else {
+      if (!form.cpf.trim()) {
+        errs.cpf = 'CNPJ é obrigatório'
+      } else if (!isValidCnpj(form.cpf)) {
+        errs.cpf = 'CNPJ inválido'
+      }
+    }
+    setErrors(errs)
+    return Object.keys(errs).length === 0
+  }
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
+    if (!validate()) return
     setLoading(true)
-    await onSubmit(form)
-    setLoading(false)
+    try {
+      await onSubmit(form)
+    } finally {
+      setLoading(false)
+    }
   }
 
   return (
@@ -120,7 +155,9 @@ export function PartnerFormDialog({
                 placeholder={
                   form.tipo_documento === 'CNPJ' ? '00.000.000/0000-00' : '000.000.000-00'
                 }
+                className={errors.cpf ? 'border-red-500' : ''}
               />
+              {errors.cpf && <p className="text-xs text-red-500 mt-0.5">{errors.cpf}</p>}
             </div>
           </div>
           <div className="grid grid-cols-2 gap-2">

@@ -22,7 +22,14 @@ import { TIPOS_DE_SEGURO, TIPOS_DE_VENDA } from '@/lib/constants'
 import { Client, Seguradora, Parceiro, Policy } from '@/types'
 import { ClientAutocomplete } from '@/components/ClientAutocomplete'
 import type { FieldErrors } from '@/lib/pocketbase/errors'
-import { formatCurrency, formatDateForInput, todayLocalDate, toLocalDate } from '@/lib/utils'
+import {
+  formatCurrency,
+  formatCurrencyDisplay,
+  parseCurrencyInput,
+  formatDateForInput,
+  todayLocalDate,
+  toLocalDate,
+} from '@/lib/utils'
 
 const DEFAULT_FORM = {
   client: '',
@@ -322,21 +329,27 @@ export function PolicyFormDialog({
 
           <div className="grid grid-cols-2 gap-2">
             <div>
-              <Label className="text-xs font-semibold">Valor Bruto (R$)</Label>
+              <Label className="text-xs font-semibold">Valor Bruto</Label>
               <Input
-                type="number"
-                step="0.01"
-                value={form.valor_bruto}
-                onChange={(e) => set('valor_bruto', Number(e.target.value))}
+                type="text"
+                value={form.valor_bruto ? formatCurrencyDisplay(form.valor_bruto) : ''}
+                placeholder="R$ 0,00"
+                onChange={(e) => {
+                  const num = parseCurrencyInput(e.target.value)
+                  set('valor_bruto', num)
+                }}
               />
             </div>
             <div>
-              <Label className="text-xs font-semibold">Valor Líquido (R$)</Label>
+              <Label className="text-xs font-semibold">Valor Líquido</Label>
               <Input
-                type="number"
-                step="0.01"
-                value={form.valor_liquido}
-                onChange={(e) => set('valor_liquido', Number(e.target.value))}
+                type="text"
+                value={form.valor_liquido ? formatCurrencyDisplay(form.valor_liquido) : ''}
+                placeholder="R$ 0,00"
+                onChange={(e) => {
+                  const num = parseCurrencyInput(e.target.value)
+                  set('valor_liquido', num)
+                }}
               />
             </div>
           </div>

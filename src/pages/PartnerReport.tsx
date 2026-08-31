@@ -1,6 +1,6 @@
 import { useEffect, useState, useCallback, useMemo } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { ArrowLeft, FileDown, X, Search } from 'lucide-react'
+import { ArrowLeft, FileDown, X, Search, DollarSign } from 'lucide-react'
 import { getPolicies } from '@/services/policies'
 import { getParceiros } from '@/services/parceiros'
 import { findClientByDocument } from '@/services/clients'
@@ -32,12 +32,18 @@ export default function PartnerReport() {
   const [parceiros, setParceiros] = useState<Parceiro[]>([])
   const [partnerSearch, setPartnerSearch] = useState('')
   const [selectedPartner, setSelectedPartner] = useState('all')
-  const [status, setStatus] = useState('all')
+  const [repasseStatus, setRepasseStatus] = useState('all') // 'all' | 'paid' | 'pending'
+  const [seguradoraStatus, setSeguradoraStatus] = useState('all') // 'all' | 'received' | 'pending'
   const [cpfCnpjSearch, setCpfCnpjSearch] = useState('')
   const [foundClient, setFoundClient] = useState<Client | null>(null)
   const [documentNotFound, setDocumentNotFound] = useState(false)
   const [dateFrom, setDateFrom] = useState('')
   const [dateTo, setDateTo] = useState('')
+
+  // Taxa de Transferência / PIX e Adiantamentos
+  const [taxaPixPercent, setTaxaPixPercent] = useState<number>(0)
+  const [adiantamentoValor, setAdiantamentoValor] = useState<number>(0)
+  const [adiantamentoDescricao, setAdiantamentoDescricao] = useState('')
 
   const loadData = useCallback(async () => {
     try {
@@ -99,28 +105,39 @@ export default function PartnerReport() {
   const reportEntries: PartnerReportEntry[] = useMemo(() => {
     let result = policies
     if (selectedPartner !== 'all') result = result.filter((p) => p.parceiro === selectedPartner)
-    if (status === 'received') result = result.filter((p) => p.comissao_recebida)
-    else if (status === 'pending') result = result.filter((p) => !p.comissao_recebida)
+
+    // Filtro por repasse pago/pendente
+    if (repasseStatus === 'paid') result = result.filter((p) => p.pago_parceiro)
+    else if (repasseStatus === 'pending') result = result.filter((p) => !p.pago_parceiro)
+
+    // Filtro por comissão seguradora recebida/pendente
+    if (seguradoraStatus === 'received') result = result.filter((p) => p.comissao_recebida)
+    else if (seguradoraStatus === 'pending') result = result.filter((p) => !p.comissao_recebida)
+
     if (dateFrom) {
       result = result.filter((p) => {
-        const ref = p.data_recebimento_comissao || ''
+        const ref = p.start_date || p.data_pagamento_parceiro || ''
         return ref && ref >= dateFrom
       })
     }
     if (dateTo) {
       result = result.filter((p) => {
-        const ref = p.data_recebimento_comissao || ''
+        const ref = p.start_date || p.data_pagamento_parceiro || ''
         return ref && ref <= dateTo
       })
     }
     if (foundClient) {
       result = result.filter((p) => p.client === foundClient.id)
     }
+
     return result.map((p) => {
       const valorLiquido = p.valor_liquido || p.premium_amount || 0
       const repassePercent = p.percentual_repasse || 0
       const valorRepasse = p.valor_repasse || (repassePercent / 100) * valorLiquido
+      const taxaVal = Math.round(((valorRepasse * (taxaPixPercent || 0)) / 100) * 100) / 100
+      const valorLiquidoRepasse = Math.round((valorRepasse - taxaVal) * 100) / 100
       const client = p.expand?.client
+
       return {
         clientName: client?.name || 'N/A',
         clientCpfCnpj: client ? formatClientDocument(client) : '',
@@ -129,19 +146,52 @@ export default function PartnerReport() {
         valorLiquido,
         repassePercent,
         valorRepasse,
-        status: p.comissao_recebida ? 'Recebida' : 'Pendente',
-        paymentDate: p.data_recebimento_comissao
+        statusRepasse: p.pago_parceiro ? 'Pago' : 'Pendente',
+        dataPagamentoRepasse: p.data_pagamento_parceiro
+          ? formatDateDisplay(p.data_pagamento_parceiro)
+          : '',
+        statusSeguradora: p.comissao_recebida ? 'Recebida' : 'Pendente',
+        dataRecebimentoComissao: p.data_recebimento_comissao
           ? formatDateDisplay(p.data_recebimento_comissao)
           : '',
+        taxaPercent: taxaPixPercent || 0,
+        taxaValor: taxaVal,
+        valorLiquidoRepasse,
       }
     })
-  }, [policies, selectedPartner, status, dateFrom, dateTo, foundClient])
+  }, [
+    policies,
+    selectedPartner,
+    repasseStatus,
+    seguradoraStatus,
+    dateFrom,
+    dateTo,
+    foundClient,
+    taxaPixPercent,
+  ])
+
+  const totalBrutoRepasse = useMemo(
+    () => reportEntries.reduce((s, e) => s + e.valorRepasse, 0),
+    [reportEntries],
+  )
+  const totalTaxaPix = useMemo(
+    () => Math.round(((totalBrutoRepasse * (taxaPixPercent || 0)) / 100) * 100) / 100,
+    [totalBrutoRepasse, taxaPixPercent],
+  )
+  const totalLiquidoAPagar = useMemo(
+    () =>
+      Math.max(
+        0,
+        Math.round((totalBrutoRepasse - totalTaxaPix - (adiantamentoValor || 0)) * 100) / 100,
+      ),
+    [totalBrutoRepasse, totalTaxaPix, adiantamentoValor],
+  )
 
   const totalPaid = reportEntries
-    .filter((e) => e.status === 'Recebida')
+    .filter((e) => e.statusRepasse === 'Pago')
     .reduce((s, e) => s + e.valorRepasse, 0)
   const totalPending = reportEntries
-    .filter((e) => e.status === 'Pendente')
+    .filter((e) => e.statusRepasse === 'Pendente')
     .reduce((s, e) => s + e.valorRepasse, 0)
 
   const handleGeneratePDF = () => {
@@ -168,6 +218,12 @@ export default function PartnerReport() {
       foundClientDocument: foundClient ? formatClientDocument(foundClient) : null,
       generatedAt: new Date(),
       entries: reportEntries,
+      totalBrutoRepasse,
+      totalTaxaPix,
+      taxaPixPercent,
+      totalAdiantamentos: adiantamentoValor || 0,
+      adiantamentosDescricao: adiantamentoDescricao || '',
+      totalLiquidoAPagar,
       totalPaid,
       totalPending,
     })
@@ -189,8 +245,8 @@ export default function PartnerReport() {
       </div>
 
       <Card className="p-4 shadow-sm space-y-4">
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-3">
-          <div>
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-6 gap-3">
+          <div className="lg:col-span-2">
             <Label className="text-xs font-semibold">Parceiro</Label>
             <Select value={selectedPartner} onValueChange={setSelectedPartner}>
               <SelectTrigger>
@@ -218,7 +274,7 @@ export default function PartnerReport() {
               <Search className="absolute left-2 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400 pointer-events-none" />
               <Input
                 className="text-xs pl-8 pr-8"
-                placeholder="CPF ou CNPJ do cliente..."
+                placeholder="CPF ou CNPJ..."
                 value={cpfCnpjSearch}
                 onChange={(e) => handleCpfCnpjChange(e.target.value)}
               />
@@ -241,8 +297,21 @@ export default function PartnerReport() {
             )}
           </div>
           <div>
-            <Label className="text-xs font-semibold">Status da Comissão</Label>
-            <Select value={status} onValueChange={setStatus}>
+            <Label className="text-xs font-semibold">Status Repasse Parceiro</Label>
+            <Select value={repasseStatus} onValueChange={setRepasseStatus}>
+              <SelectTrigger>
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">Todos</SelectItem>
+                <SelectItem value="paid">Repasse Pago</SelectItem>
+                <SelectItem value="pending">Repasse Pendente</SelectItem>
+              </SelectContent>
+            </Select>
+          </div>
+          <div>
+            <Label className="text-xs font-semibold">Status Seguradora</Label>
+            <Select value={seguradoraStatus} onValueChange={setSeguradoraStatus}>
               <SelectTrigger>
                 <SelectValue />
               </SelectTrigger>
@@ -254,17 +323,73 @@ export default function PartnerReport() {
             </Select>
           </div>
           <div>
-            <Label className="text-xs font-semibold">Data Inicial</Label>
-            <Input type="date" value={dateFrom} onChange={(e) => setDateFrom(e.target.value)} />
-          </div>
-          <div>
-            <Label className="text-xs font-semibold">Data Final</Label>
-            <Input type="date" value={dateTo} onChange={(e) => setDateTo(e.target.value)} />
+            <Label className="text-xs font-semibold">Período</Label>
+            <div className="grid grid-cols-2 gap-1">
+              <Input
+                type="date"
+                value={dateFrom}
+                onChange={(e) => setDateFrom(e.target.value)}
+                placeholder="Início"
+              />
+              <Input
+                type="date"
+                value={dateTo}
+                onChange={(e) => setDateTo(e.target.value)}
+                placeholder="Fim"
+              />
+            </div>
           </div>
         </div>
+
+        {/* Seção de Deduções: Taxa PIX e Adiantamentos */}
+        <div className="p-3 bg-slate-50 border rounded-lg space-y-3">
+          <div className="flex items-center gap-2 font-semibold text-xs text-slate-700 uppercase tracking-wider">
+            <DollarSign className="w-4 h-4 text-blue-600" />
+            Deduções Financeiras do Parceiro (Taxa PIX / Adiantamentos)
+          </div>
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+            <div>
+              <Label className="text-xs font-semibold">Taxa Transferência / PIX (%)</Label>
+              <Input
+                type="number"
+                step="0.01"
+                min="0"
+                max="100"
+                placeholder="Ex: 1.5"
+                value={taxaPixPercent || ''}
+                onChange={(e) => setTaxaPixPercent(Number(e.target.value))}
+              />
+              <p className="text-[11px] text-slate-500 mt-1">
+                Valor da taxa: <strong className="text-red-600">R$ {fmt(totalTaxaPix)}</strong>
+              </p>
+            </div>
+            <div>
+              <Label className="text-xs font-semibold">
+                Dívida / Adiantamento / Antecipação (R$)
+              </Label>
+              <Input
+                type="number"
+                step="0.01"
+                min="0"
+                placeholder="Ex: 250.00"
+                value={adiantamentoValor || ''}
+                onChange={(e) => setAdiantamentoValor(Number(e.target.value))}
+              />
+            </div>
+            <div>
+              <Label className="text-xs font-semibold">Descrição / Motivo do Adiantamento</Label>
+              <Input
+                placeholder="Ex: Adiantamento solicitado em 10/05"
+                value={adiantamentoDescricao}
+                onChange={(e) => setAdiantamentoDescricao(e.target.value)}
+              />
+            </div>
+          </div>
+        </div>
+
         <div className="flex justify-end">
           <Button className="bg-blue-600 hover:bg-blue-700" onClick={handleGeneratePDF}>
-            <FileDown className="w-4 h-4 mr-2" /> Gerar PDF
+            <FileDown className="w-4 h-4 mr-2" /> Gerar PDF do Relatório
           </Button>
         </div>
       </Card>
@@ -298,15 +423,16 @@ export default function PartnerReport() {
                     <th className="p-3.5">Tipo de Seguro</th>
                     <th className="p-3.5 text-right">Valor Líquido</th>
                     <th className="p-3.5 text-center">% Repasse</th>
-                    <th className="p-3.5 text-right">Valor do Repasse</th>
-                    <th className="p-3.5 text-center">Status</th>
-                    <th className="p-3.5 text-center">Data Pagamento</th>
+                    <th className="p-3.5 text-right">Bruto Repasse</th>
+                    <th className="p-3.5 text-center">Repasse Parceiro</th>
+                    <th className="p-3.5 text-center">Data Repasse</th>
+                    <th className="p-3.5 text-center">Seguradora</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-slate-100">
                   {reportEntries.length === 0 ? (
                     <tr>
-                      <td colSpan={9} className="text-center p-6 text-slate-500">
+                      <td colSpan={10} className="text-center p-6 text-slate-500">
                         Nenhum registro encontrado para os filtros selecionados.
                       </td>
                     </tr>
@@ -324,12 +450,25 @@ export default function PartnerReport() {
                         </td>
                         <td className="p-3.5 text-center">
                           <Badge
-                            className={e.status === 'Recebida' ? 'bg-emerald-500' : 'bg-amber-500'}
+                            className={
+                              e.statusRepasse === 'Pago' ? 'bg-emerald-500' : 'bg-amber-500'
+                            }
                           >
-                            {e.status}
+                            {e.statusRepasse === 'Pago' ? 'Pago' : 'Pendente'}
                           </Badge>
                         </td>
-                        <td className="p-3.5 text-center text-xs">{e.paymentDate || '-'}</td>
+                        <td className="p-3.5 text-center text-xs">
+                          {e.dataPagamentoRepasse || '-'}
+                        </td>
+                        <td className="p-3.5 text-center">
+                          <Badge
+                            className={
+                              e.statusSeguradora === 'Recebida' ? 'bg-emerald-500' : 'bg-amber-500'
+                            }
+                          >
+                            {e.statusSeguradora}
+                          </Badge>
+                        </td>
                       </tr>
                     ))
                   )}
@@ -338,15 +477,49 @@ export default function PartnerReport() {
             </div>
           </Card>
 
-          <div className="flex justify-end gap-4">
-            <div className="bg-emerald-50 border border-emerald-200 rounded-lg px-4 py-2 text-sm">
-              <span className="text-emerald-700 font-semibold">Total Recebido: </span>
-              <span className="font-bold text-emerald-900">R$ {fmt(totalPaid)}</span>
+          {/* Demonstrativo Financeiro do Relatório do Parceiro */}
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <div className="flex flex-wrap gap-2 items-center">
+              <div className="bg-emerald-50 border border-emerald-200 rounded-lg px-4 py-2 text-sm">
+                <span className="text-emerald-700 font-semibold">Repasses Pagos: </span>
+                <span className="font-bold text-emerald-900">R$ {fmt(totalPaid)}</span>
+              </div>
+              <div className="bg-amber-50 border border-amber-200 rounded-lg px-4 py-2 text-sm">
+                <span className="text-amber-700 font-semibold">Repasses Pendentes: </span>
+                <span className="font-bold text-amber-900">R$ {fmt(totalPending)}</span>
+              </div>
             </div>
-            <div className="bg-amber-50 border border-amber-200 rounded-lg px-4 py-2 text-sm">
-              <span className="text-amber-700 font-semibold">Total Pendente: </span>
-              <span className="font-bold text-amber-900">R$ {fmt(totalPending)}</span>
-            </div>
+
+            <Card className="p-4 bg-slate-50 border space-y-2">
+              <h4 className="font-bold text-xs uppercase tracking-wider text-slate-700">
+                Demonstrativo de Fechamento do Parceiro
+              </h4>
+              <div className="space-y-1.5 text-xs">
+                <div className="flex justify-between">
+                  <span className="text-slate-600">Valor Bruto do Repasse:</span>
+                  <span className="font-semibold text-slate-900">R$ {fmt(totalBrutoRepasse)}</span>
+                </div>
+                {(taxaPixPercent > 0 || totalTaxaPix > 0) && (
+                  <div className="flex justify-between text-red-600">
+                    <span>Taxa Transferência/PIX ({taxaPixPercent}%):</span>
+                    <span className="font-semibold">- R$ {fmt(totalTaxaPix)}</span>
+                  </div>
+                )}
+                {adiantamentoValor > 0 && (
+                  <div className="flex justify-between text-red-600">
+                    <span>
+                      Dívidas / Adiantamentos{' '}
+                      {adiantamentoDescricao ? `(${adiantamentoDescricao})` : ''}:
+                    </span>
+                    <span className="font-semibold">- R$ {fmt(adiantamentoValor)}</span>
+                  </div>
+                )}
+                <div className="border-t pt-2 mt-1 flex justify-between text-sm font-bold text-blue-700">
+                  <span>Valor Líquido a Pagar:</span>
+                  <span>R$ {fmt(totalLiquidoAPagar)}</span>
+                </div>
+              </div>
+            </Card>
           </div>
         </>
       )}
