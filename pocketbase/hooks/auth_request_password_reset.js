@@ -63,11 +63,19 @@ routerAdd('POST', '/backend/v1/auth/request-password-reset', (e) => {
   var verifiedSender =
     $secrets.get('VERIFIED_FROM_EMAIL') ||
     $secrets.get('SENDER_EMAIL') ||
-    'contato@cred10mix.com.br'
+    'noreply@cred10mix.com.br'
 
   if (apiKey) {
     try {
       var emailSubject = 'Recuperação de Senha - CRED10MIX Corretora de Seguros'
+      var mandatoryFooter =
+        '\n\n---\n' +
+        'Acesse nosso site: www.cred10mix.com.br\n' +
+        'Siga-nos no Instagram: @cred10mix\n' +
+        'Qualquer contato deve ser feito via WhatsApp: 81 98865-3534 (Thiago Souza)\n' +
+        'Link para WhatsApp: https://wa.me/5581988653534\n' +
+        'Este é um e-mail automático, por favor não responda.'
+
       var emailText =
         'Olá ' +
         (userRecord.getString('name') || 'Usuário') +
@@ -78,7 +86,8 @@ routerAdd('POST', '/backend/v1/auth/request-password-reset', (e) => {
         '\n\n' +
         'Este link é válido por 1 hora. Se você não solicitou a alteração de senha, ignore esta mensagem.\n\n' +
         'Atenciosamente,\n' +
-        'CRED10MIX Corretora de Seguros'
+        'CRED10MIX Corretora de Seguros' +
+        mandatoryFooter
 
       $http.send({
         url: 'https://api.resend.com/emails',
