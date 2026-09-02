@@ -6,15 +6,15 @@ export const getClients = async (
   filterString?: string,
   nameSearch?: string,
 ): Promise<Client[]> => {
-  let filter = ''
+  let filter = filterString || ''
   if (searchQuery && searchQuery.trim()) {
     const sanitized = searchQuery.trim().replace(/"/g, '')
     const cleanDigits = sanitized.replace(/\D/g, '')
-    if (cleanDigits && cleanDigits !== sanitized) {
-      filter = `cpf ~ "${sanitized}" || cnpj ~ "${sanitized}" || cpf ~ "${cleanDigits}" || cnpj ~ "${cleanDigits}"`
-    } else {
-      filter = `cpf ~ "${sanitized}" || cnpj ~ "${sanitized}"`
-    }
+    const docQuery =
+      cleanDigits && cleanDigits !== sanitized
+        ? `(cpf ~ "${sanitized}" || cnpj ~ "${sanitized}" || cpf ~ "${cleanDigits}" || cnpj ~ "${cleanDigits}")`
+        : `(cpf ~ "${sanitized}" || cnpj ~ "${sanitized}")`
+    filter = filter ? `${filter} && ${docQuery}` : docQuery
   }
   if (nameSearch && nameSearch.trim()) {
     const sanitizedName = nameSearch.trim().replace(/"/g, '')

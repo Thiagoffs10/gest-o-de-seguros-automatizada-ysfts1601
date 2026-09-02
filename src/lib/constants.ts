@@ -61,7 +61,17 @@ export const YEARS = ['ALL', '2027', '2026', '2025', '2024', '2023']
 
 export function buildFilterString(filters: any): string {
   const parts: string[] = []
-  if (filters?.year && filters.year !== 'ALL') {
+  if (filters?.dateFrom || filters?.dateTo) {
+    if (filters?.dateFrom && filters?.dateTo) {
+      parts.push(
+        `(start_date >= "${filters.dateFrom}" && start_date <= "${filters.dateTo} 23:59:59")`,
+      )
+    } else if (filters?.dateFrom) {
+      parts.push(`start_date >= "${filters.dateFrom}"`)
+    } else if (filters?.dateTo) {
+      parts.push(`start_date <= "${filters.dateTo} 23:59:59"`)
+    }
+  } else if (filters?.year && filters.year !== 'ALL') {
     const y = parseInt(filters.year, 10)
     if (!isNaN(y)) {
       if (filters?.month && filters.month !== 'ALL') {
@@ -90,12 +100,6 @@ export function buildFilterString(filters: any): string {
     parts.push(
       `(tipo_de_seguro = "${filters.tipoSeguro}" || coverage_type = "${filters.tipoSeguro}")`,
     )
-  }
-  if (filters?.dateFrom) {
-    parts.push(`start_date >= "${filters.dateFrom}"`)
-  }
-  if (filters?.dateTo) {
-    parts.push(`start_date <= "${filters.dateTo} 23:59:59"`)
   }
   return parts.join(' && ')
 }

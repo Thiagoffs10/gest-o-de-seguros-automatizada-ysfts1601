@@ -98,8 +98,10 @@ export default function Financial() {
 
   const period = useMemo(() => computePeriodFromFilters(filters), [filters])
 
-  const applyNonDateFilters = useCallback(
-    (p: Policy): boolean => {
+  const applyFilters = useCallback(
+    (p: Policy, checkDate = true): boolean => {
+      if (checkDate && !isDateInPeriod(period, p.start_date)) return false
+
       if (statusFilter !== 'ALL') {
         if (statusFilter === 'Vencida' || statusFilter === 'Expirada') {
           if (p.status !== 'Vencida' && p.status !== 'Expirada') return false
@@ -109,10 +111,17 @@ export default function Financial() {
       }
       if (commFilter === 'received' && !p.comissao_recebida) return false
       if (commFilter === 'pending' && p.comissao_recebida) return false
-      if (filters.partnerId && p.parceiro !== filters.partnerId) return false
-      if (filters.seguradoraId && p.seguradora !== filters.seguradoraId) return false
+      if (filters.partnerId && filters.partnerId !== 'ALL' && p.parceiro !== filters.partnerId)
+        return false
+      if (
+        filters.seguradoraId &&
+        filters.seguradoraId !== 'ALL' &&
+        p.seguradora !== filters.seguradoraId
+      )
+        return false
       if (
         filters.tipoSeguro &&
+        filters.tipoSeguro !== 'ALL' &&
         p.tipo_de_seguro !== filters.tipoSeguro &&
         p.coverage_type !== filters.tipoSeguro
       )
@@ -122,27 +131,23 @@ export default function Financial() {
       }
       return true
     },
-    [statusFilter, commFilter, filters, cpfCnpjFilter],
+    [statusFilter, commFilter, filters, cpfCnpjFilter, period],
   )
 
-  const policies = useMemo(
-    () => allPolicies.filter((p) => applyNonDateFilters(p) && isDateInPeriod(period, p.start_date)),
-    [allPolicies, applyNonDateFilters, period],
-  )
   const tablePolicies = useMemo(
-    () => allPolicies.filter((p) => applyNonDateFilters(p)),
-    [allPolicies, applyNonDateFilters],
+    () => allPolicies.filter((p) => applyFilters(p, true)),
+    [allPolicies, applyFilters],
   )
 
   const metrics = useMemo(() => {
-    const expectedCommissions = computeExpectedCommissions(allPolicies, period)
-    const receivedCommissions = computeReceivedCommissions(allPolicies, period)
+    const expectedCommissions = computeExpectedCommissions(tablePolicies, period)
+    const receivedCommissions = computeReceivedCommissions(tablePolicies, period)
     const pendingCommissions = expectedCommissions - receivedCommissions
-    const paidRepasses = computePaidRepasses(allPolicies, period)
-    const pendingRepasses = computePendingRepasses(allPolicies)
+    const paidRepasses = computePaidRepasses(tablePolicies, period)
+    const pendingRepasses = computePendingRepasses(tablePolicies)
     const paidCosts = computePaidCosts(custosFixos, period)
     const pendingCosts = computePendingCosts(custosFixos, period)
-    const expectedRepasses = computeExpectedRepasses(allPolicies, period)
+    const expectedRepasses = computeExpectedRepasses(tablePolicies, period)
     const totalCustos = computeCosts(custosFixos, period)
     const expectedProfit = computeExpectedProfit(expectedCommissions, expectedRepasses, totalCustos)
     const realProfit = computeRealProfit(receivedCommissions, paidRepasses, paidCosts)

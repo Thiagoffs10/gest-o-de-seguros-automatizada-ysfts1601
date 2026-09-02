@@ -82,6 +82,8 @@ export default function PartnerReport() {
   const [documentNotFound, setDocumentNotFound] = useState(false)
   const [dateFrom, setDateFrom] = useState('')
   const [dateTo, setDateTo] = useState('')
+  const [page, setPage] = useState(1)
+  const PAGE_SIZE = 10
 
   // Débitos do parceiro selecionado para este fechamento/pagamento
   const [debitos, setDebitos] = useState<ParceiroDebitoItem[]>([])
@@ -120,6 +122,10 @@ export default function PartnerReport() {
   useEffect(() => {
     loadData()
   }, [loadData])
+
+  useEffect(() => {
+    setPage(1)
+  }, [selectedPartner, repasseStatus, seguradoraStatus, dateFrom, dateTo, cpfCnpjSearch])
 
   // Ao trocar de parceiro: limpar campos e carregar ajustes vinculados exclusivamente ao parceiro selecionado
   useEffect(() => {
@@ -254,6 +260,12 @@ export default function PartnerReport() {
     () => reportEntries.reduce((s, e) => s + e.valorRepasse, 0),
     [reportEntries],
   )
+
+  const totalPages = Math.max(1, Math.ceil(reportEntries.length / PAGE_SIZE))
+  const paginatedEntries = useMemo(() => {
+    const start = (page - 1) * PAGE_SIZE
+    return reportEntries.slice(start, start + PAGE_SIZE)
+  }, [reportEntries, page])
 
   // Somatório dos débitos do parceiro
   const totalDebitos = useMemo(
@@ -849,14 +861,14 @@ export default function PartnerReport() {
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-slate-100">
-                  {reportEntries.length === 0 ? (
+                  {paginatedEntries.length === 0 ? (
                     <tr>
                       <td colSpan={10} className="text-center p-6 text-slate-500">
                         Nenhum registro encontrado para os filtros selecionados.
                       </td>
                     </tr>
                   ) : (
-                    reportEntries.map((e, i) => (
+                    paginatedEntries.map((e, i) => (
                       <tr key={i} className="hover:bg-slate-50/80">
                         <td className="p-3.5 font-semibold">{e.clientName}</td>
                         <td className="p-3.5 text-xs">{e.clientCpfCnpj || '-'}</td>
@@ -895,6 +907,37 @@ export default function PartnerReport() {
               </table>
             </div>
           </Card>
+
+          {totalPages > 1 && (
+            <div className="flex flex-col sm:flex-row items-center justify-between gap-2 text-sm text-slate-600">
+              <span>
+                Exibindo {reportEntries.length === 0 ? 0 : (page - 1) * PAGE_SIZE + 1} a{' '}
+                {Math.min(page * PAGE_SIZE, reportEntries.length)} de {reportEntries.length}{' '}
+                comissões
+              </span>
+              <div className="flex items-center gap-2">
+                <Button
+                  variant="outline"
+                  size="sm"
+                  disabled={page <= 1}
+                  onClick={() => setPage((p) => p - 1)}
+                >
+                  Anterior
+                </Button>
+                <span className="font-semibold px-1">
+                  Página {page} de {totalPages}
+                </span>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  disabled={page >= totalPages}
+                  onClick={() => setPage((p) => p + 1)}
+                >
+                  Próxima
+                </Button>
+              </div>
+            </div>
+          )}
 
           {/* NOVO RESUMO DO PAGAMENTO COM DESTAQUE VISUAL (Item 4 dos Requisitos) */}
           <div className="grid grid-cols-1 lg:grid-cols-12 gap-4 items-start">

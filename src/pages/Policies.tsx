@@ -79,11 +79,17 @@ export default function Policies() {
       if (periodStart && periodEnd) {
         const periodFilter = `start_date >= "${periodStart}" && start_date <= "${periodEnd} 23:59:59"`
         filter = filter ? `${filter} && (${periodFilter})` : periodFilter
+      } else if (periodStart) {
+        const periodFilter = `start_date >= "${periodStart}"`
+        filter = filter ? `${filter} && (${periodFilter})` : periodFilter
+      } else if (periodEnd) {
+        const periodFilter = `start_date <= "${periodEnd} 23:59:59"`
+        filter = filter ? `${filter} && (${periodFilter})` : periodFilter
       }
       if (statusFilter !== 'ALL') {
         if (statusFilter === 'Vencida' || statusFilter === 'Expirada') {
-          const sFilter = `status = "Vencida" || status = "Expirada"`
-          filter = filter ? `${filter} && (${sFilter})` : sFilter
+          const sFilter = `(status = "Vencida" || status = "Expirada")`
+          filter = filter ? `${filter} && ${sFilter}` : sFilter
         } else {
           filter = filter ? `${filter} && status = "${statusFilter}"` : `status = "${statusFilter}"`
         }
@@ -98,7 +104,7 @@ export default function Policies() {
           return
         }
         const clientFilter = clientIds.map((id) => `client = "${id}"`).join(' || ')
-        filter = filter ? `${filter} && (${clientFilter})` : clientFilter
+        filter = filter ? `${filter} && (${clientFilter})` : `(${clientFilter})`
       }
       if (nameSearch.trim()) {
         const nameSanitized = nameSearch.trim().replace(/"/g, '')
@@ -110,7 +116,7 @@ export default function Policies() {
           return
         }
         const clientFilter = clientIds.map((id) => `client = "${id}"`).join(' || ')
-        filter = filter ? `${filter} && (${clientFilter})` : clientFilter
+        filter = filter ? `${filter} && (${clientFilter})` : `(${clientFilter})`
       }
       if (placaSearch.trim()) {
         const sanitizedPlaca = placaSearch.trim().replace(/"/g, '')

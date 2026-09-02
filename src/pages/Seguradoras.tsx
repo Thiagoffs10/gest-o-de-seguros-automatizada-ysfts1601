@@ -36,6 +36,8 @@ export default function Seguradoras() {
   const [editing, setEditing] = useState<Partial<Seguradora> | undefined>()
   const [deleteId, setDeleteId] = useState<string | null>(null)
   const [fieldErrors, setFieldErrors] = useState<FieldErrors>({})
+  const [page, setPage] = useState(1)
+  const PAGE_SIZE = 10
 
   const loadData = useCallback(async () => {
     try {
@@ -54,12 +56,10 @@ export default function Seguradoras() {
   const filtered = seguradoras.filter((s) => {
     if (!search.trim()) return true
     const q = search.trim().toLowerCase()
-    return (
-      (s.nome && s.nome.toLowerCase().includes(q)) ||
-      (s.cnpj && s.cnpj.toLowerCase().includes(q)) ||
-      (s.cnpj && s.cnpj.replace(/\D/g, '').includes(q.replace(/\D/g, '')))
-    )
+    return s.nome && s.nome.toLowerCase().includes(q)
   })
+  const totalPages = Math.max(1, Math.ceil(filtered.length / PAGE_SIZE))
+  const paginated = filtered.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE)
 
   const handleCreate = async (formData: any) => {
     try {
@@ -150,7 +150,10 @@ export default function Seguradoras() {
           placeholder="Buscar por nome..."
           className="pl-9"
           value={search}
-          onChange={(e) => setSearch(e.target.value)}
+          onChange={(e) => {
+            setSearch(e.target.value)
+            setPage(1)
+          }}
         />
       </div>
 
@@ -165,14 +168,14 @@ export default function Seguradoras() {
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-100">
-              {filtered.length === 0 ? (
+              {paginated.length === 0 ? (
                 <tr>
                   <td colSpan={3} className="text-center p-6 text-slate-500">
                     Nenhuma seguradora encontrada.
                   </td>
                 </tr>
               ) : (
-                filtered.map((s) => (
+                paginated.map((s) => (
                   <tr key={s.id} className="hover:bg-slate-50/80 transition-colors">
                     <td className="p-3.5 font-semibold text-slate-900">{s.nome}</td>
                     <td className="p-3.5 font-bold text-blue-600">
@@ -213,6 +216,36 @@ export default function Seguradoras() {
           </table>
         </div>
       </Card>
+
+      {totalPages > 1 && (
+        <div className="flex flex-col sm:flex-row items-center justify-between gap-2 text-sm text-slate-600">
+          <span>
+            Exibindo {filtered.length === 0 ? 0 : (page - 1) * PAGE_SIZE + 1} a{' '}
+            {Math.min(page * PAGE_SIZE, filtered.length)} de {filtered.length} seguradoras
+          </span>
+          <div className="flex items-center gap-2">
+            <Button
+              variant="outline"
+              size="sm"
+              disabled={page <= 1}
+              onClick={() => setPage((p) => p - 1)}
+            >
+              Anterior
+            </Button>
+            <span className="font-semibold px-1">
+              Página {page} de {totalPages}
+            </span>
+            <Button
+              variant="outline"
+              size="sm"
+              disabled={page >= totalPages}
+              onClick={() => setPage((p) => p + 1)}
+            >
+              Próxima
+            </Button>
+          </div>
+        </div>
+      )}
 
       <SeguradoraFormDialog
         open={isModalOpen}
