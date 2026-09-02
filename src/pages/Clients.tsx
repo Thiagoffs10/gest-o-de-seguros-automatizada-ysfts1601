@@ -36,9 +36,8 @@ export default function Clients() {
 
   const loadClients = useCallback(async () => {
     try {
-      const filterStr = buildFilterString(filters)
       const [data, pols] = await Promise.all([
-        getClients(search, filterStr, nameSearch),
+        getClients(search, undefined, nameSearch),
         getPolicies(),
       ])
       setClients(data)
@@ -47,7 +46,7 @@ export default function Clients() {
       /* intentionally ignored */
     }
     setLoading(false)
-  }, [search, nameSearch, filters])
+  }, [search, nameSearch])
 
   useEffect(() => {
     setPage(1)
@@ -75,8 +74,7 @@ export default function Clients() {
 
   const exportAllClients = async () => {
     try {
-      const filterStr = buildFilterString(filters)
-      const exportClients = await getClients(search, filterStr, nameSearch)
+      const exportClients = await getClients(search, undefined, nameSearch)
       const exportPols = await getPolicies()
       const polsByClient: Record<string, Policy[]> = {}
       for (const p of exportPols) {
@@ -174,8 +172,6 @@ export default function Clients() {
           </div>
         </div>
       </div>
-
-      <GlobalFilters filters={filters} onFilterChange={setFilters} />
 
       <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 max-w-2xl">
         <div className="relative">

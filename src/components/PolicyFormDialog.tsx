@@ -554,8 +554,9 @@ export function PolicyFormDialog({
               <SelectContent>
                 <SelectItem value="Ativa">Ativa</SelectItem>
                 <SelectItem value="Renovação Pendente">Renovação Pendente</SelectItem>
+                <SelectItem value="Vencida">Vencida</SelectItem>
                 <SelectItem value="Expirada">Expirada</SelectItem>
-                <SelectItem value="Cancelada">Cancelada</SelectItem>
+                <SelectItem value="Cancelada">Cancelada</SelectItem>{' '}
               </SelectContent>
             </Select>
           </div>

@@ -77,18 +77,24 @@ export default function Policies() {
       setTotalActiveCount(activeCount)
       let filter = buildFilterString(filters)
       if (periodStart && periodEnd) {
-        const periodFilter = `start_date >= "${periodStart}" && start_date <= "${periodEnd} 23:59:59" && status = "Ativa"`
+        const periodFilter = `start_date >= "${periodStart}" && start_date <= "${periodEnd} 23:59:59"`
         filter = filter ? `${filter} && (${periodFilter})` : periodFilter
-      } else {
-        if (statusFilter !== 'ALL')
-          filter = filter ? `${filter} && status = "${statusFilter}"` : `status = "${statusFilter}"`
       }
-      if (search) {
-        const sanitized = search.replace(/"/g, '')
+      if (statusFilter !== 'ALL') {
+        if (statusFilter === 'Vencida' || statusFilter === 'Expirada') {
+          const sFilter = `status = "Vencida" || status = "Expirada"`
+          filter = filter ? `${filter} && (${sFilter})` : sFilter
+        } else {
+          filter = filter ? `${filter} && status = "${statusFilter}"` : `status = "${statusFilter}"`
+        }
+      }
+      if (search.trim()) {
+        const sanitized = search.trim().replace(/"/g, '')
         const matchingClients = await getClients(sanitized)
         const clientIds = matchingClients.map((c) => c.id)
         if (clientIds.length === 0) {
           setPolicies([])
+          setLoading(false)
           return
         }
         const clientFilter = clientIds.map((id) => `client = "${id}"`).join(' || ')
@@ -96,17 +102,19 @@ export default function Policies() {
       }
       if (nameSearch.trim()) {
         const nameSanitized = nameSearch.trim().replace(/"/g, '')
-        const matchingClients = await getClients(undefined, `name ~ "${nameSanitized}"`)
+        const matchingClients = await getClients(undefined, undefined, nameSanitized)
         const clientIds = matchingClients.map((c) => c.id)
         if (clientIds.length === 0) {
           setPolicies([])
+          setLoading(false)
           return
         }
         const clientFilter = clientIds.map((id) => `client = "${id}"`).join(' || ')
         filter = filter ? `${filter} && (${clientFilter})` : clientFilter
       }
-      if (placaSearch) {
-        const q = `placa ~ "${placaSearch}"`
+      if (placaSearch.trim()) {
+        const sanitizedPlaca = placaSearch.trim().replace(/"/g, '')
+        const q = `placa ~ "${sanitizedPlaca}"`
         filter = filter ? `${filter} && (${q})` : q
       }
       const data = await getPolicies(filter)
@@ -348,6 +356,7 @@ export default function Policies() {
             <SelectItem value="ALL">Todos os Status</SelectItem>
             <SelectItem value="Ativa">Ativa</SelectItem>
             <SelectItem value="Renovação Pendente">Renovação Pendente</SelectItem>
+            <SelectItem value="Vencida">Vencida</SelectItem>
             <SelectItem value="Expirada">Expirada</SelectItem>
             <SelectItem value="Cancelada">Cancelada</SelectItem>
           </SelectContent>
@@ -464,9 +473,11 @@ export default function Policies() {
                             ? 'bg-emerald-500'
                             : p.status === 'Renovação Pendente'
                               ? 'bg-amber-500'
-                              : p.status === 'Cancelada'
-                                ? 'bg-red-600'
-                                : 'bg-slate-500'
+                              : p.status === 'Vencida' || p.status === 'Expirada'
+                                ? 'bg-slate-500'
+                                : p.status === 'Cancelada'
+                                  ? 'bg-red-600'
+                                  : 'bg-slate-500'
                         }
                       >
                         {p.status}

@@ -100,7 +100,13 @@ export default function Financial() {
 
   const applyNonDateFilters = useCallback(
     (p: Policy): boolean => {
-      if (statusFilter !== 'ALL' && p.status !== statusFilter) return false
+      if (statusFilter !== 'ALL') {
+        if (statusFilter === 'Vencida' || statusFilter === 'Expirada') {
+          if (p.status !== 'Vencida' && p.status !== 'Expirada') return false
+        } else if (p.status !== statusFilter) {
+          return false
+        }
+      }
       if (commFilter === 'received' && !p.comissao_recebida) return false
       if (commFilter === 'pending' && p.comissao_recebida) return false
       if (filters.partnerId && p.parceiro !== filters.partnerId) return false
@@ -268,6 +274,7 @@ export default function Financial() {
               <SelectItem value="ALL">Todos os Status</SelectItem>
               <SelectItem value="Ativa">Ativa</SelectItem>
               <SelectItem value="Renovação Pendente">Renovação Pendente</SelectItem>
+              <SelectItem value="Vencida">Vencida</SelectItem>
               <SelectItem value="Expirada">Expirada</SelectItem>
               <SelectItem value="Cancelada">Cancelada</SelectItem>
             </SelectContent>

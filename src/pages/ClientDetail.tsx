@@ -316,15 +316,17 @@ export default function ClientDetail() {
                         <td className="p-2">
                           <Badge
                             className={
-                              p.status === 'Pago'
+                              p.status === 'Ativa'
                                 ? 'bg-emerald-500'
-                                : p.status === 'Atrasado'
-                                  ? 'bg-red-500'
-                                  : 'bg-amber-500'
+                                : p.status === 'Renovação Pendente'
+                                  ? 'bg-amber-500'
+                                  : p.status === 'Cancelada'
+                                    ? 'bg-red-600'
+                                    : 'bg-slate-500'
                             }
                           >
                             {p.status}
-                          </Badge>
+                          </Badge>{' '}
                         </td>
                       </tr>
                     ))}

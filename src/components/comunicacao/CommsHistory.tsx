@@ -11,36 +11,70 @@ interface Props {
 export function CommsHistory({ communications }: Props) {
   const [search, setSearch] = useState('')
 
-  const filtered = useMemo(() => {
-    if (!search.trim()) return communications
-    const raw = search.trim().toLowerCase()
-    const clean = raw.replace(/\D/g, '')
+  const [typeFilter, setTypeFilter] = useState<'ALL' | 'Email' | 'WhatsApp'>('ALL')
+  const [statusFilter, setStatusFilter] = useState<'ALL' | 'Rascunho' | 'Enviado' | 'Falhou'>('ALL')
 
+  const filtered = useMemo(() => {
     return communications.filter((cm) => {
-      const client = cm.expand?.client
-      if (client) {
-        if (client.name && client.name.toLowerCase().includes(raw)) return true
-        if (client.cpf && client.cpf.toLowerCase().includes(raw)) return true
-        if (client.cnpj && client.cnpj.toLowerCase().includes(raw)) return true
-        if (clean && client.cpf && client.cpf.replace(/\D/g, '').includes(clean)) return true
-        if (clean && client.cnpj && client.cnpj.replace(/\D/g, '').includes(clean)) return true
+      if (typeFilter !== 'ALL' && cm.type !== typeFilter) return false
+      if (statusFilter !== 'ALL' && cm.status !== statusFilter) return false
+
+      if (search.trim()) {
+        const raw = search.trim().toLowerCase()
+        const clean = raw.replace(/\D/g, '')
+        const client = cm.expand?.client
+        let matches = false
+        if (client) {
+          if (client.name && client.name.toLowerCase().includes(raw)) matches = true
+          if (client.cpf && client.cpf.toLowerCase().includes(raw)) matches = true
+          if (client.cnpj && client.cnpj.toLowerCase().includes(raw)) matches = true
+          if (clean && client.cpf && client.cpf.replace(/\D/g, '').includes(clean)) matches = true
+          if (clean && client.cnpj && client.cnpj.replace(/\D/g, '').includes(clean)) matches = true
+        }
+        if (cm.subject && cm.subject.toLowerCase().includes(raw)) matches = true
+        if (cm.recipient_email && cm.recipient_email.toLowerCase().includes(raw)) matches = true
+        if (cm.recipient_phone && cm.recipient_phone.includes(raw)) matches = true
+        if (cm.body && cm.body.toLowerCase().includes(raw)) matches = true
+        if (!matches) return false
       }
-      if (cm.subject && cm.subject.toLowerCase().includes(raw)) return true
-      if (cm.recipient_email && cm.recipient_email.toLowerCase().includes(raw)) return true
-      return false
+
+      return true
     })
-  }, [communications, search])
+  }, [communications, search, typeFilter, statusFilter])
 
   return (
     <Card className="shadow-sm overflow-hidden border mt-6">
       <CardHeader className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2">
         <CardTitle className="text-base font-bold">Histórico Unificado de Comunicações</CardTitle>
-        <Input
-          placeholder="Filtrar histórico por Cliente, CPF ou CNPJ..."
-          value={search}
-          onChange={(e) => setSearch(e.target.value)}
-          className="w-full sm:w-64 text-xs h-8 bg-white"
-        />
+        <div className="flex flex-wrap items-center gap-2">
+          <Input
+            placeholder="Filtrar por Cliente, CPF ou CNPJ..."
+            value={search}
+            onChange={(e) => setSearch(e.target.value)}
+            className="w-full sm:w-56 text-xs h-8 bg-white"
+          />
+          <select
+            aria-label="Filtrar por canal"
+            value={typeFilter}
+            onChange={(e) => setTypeFilter(e.target.value as any)}
+            className="h-8 px-2 text-xs border rounded-md bg-white text-slate-700"
+          >
+            <option value="ALL">Todos os canais</option>
+            <option value="WhatsApp">WhatsApp</option>
+            <option value="Email">E-mail</option>
+          </select>
+          <select
+            aria-label="Filtrar por status da comunicação"
+            value={statusFilter}
+            onChange={(e) => setStatusFilter(e.target.value as any)}
+            className="h-8 px-2 text-xs border rounded-md bg-white text-slate-700"
+          >
+            <option value="ALL">Todos os status</option>
+            <option value="Enviado">Enviado</option>
+            <option value="Rascunho">Rascunho</option>
+            <option value="Falhou">Falhou</option>
+          </select>
+        </div>
       </CardHeader>
       <div className="overflow-x-auto">
         <table className="w-full text-left text-xs text-slate-700">

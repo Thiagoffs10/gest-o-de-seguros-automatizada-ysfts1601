@@ -76,6 +76,11 @@ export function CampanhasTab({
       if (filters.statusFilter === 'inativos' && (clientPols.length === 0 || hasActivePolicy))
         return false
       if (filters.statusFilter === 'sem_apolice' && clientPols.length > 0) return false
+      if (
+        filters.statusFilter === 'vencidas' &&
+        !clientPols.some((p) => p.status === 'Vencida' || p.status === 'Expirada')
+      )
+        return false
 
       if (filters.eventFilter === 'aniversariantes') {
         if (!c.birth_date) return false

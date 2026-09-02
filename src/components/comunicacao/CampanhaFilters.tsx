@@ -49,6 +49,7 @@ export function CampanhaFilters({
           <SelectContent>
             <SelectItem value="todos">Todos os clientes</SelectItem>
             <SelectItem value="ativos">Com Apólice Ativa</SelectItem>
+            <SelectItem value="vencidas">Com Apólice Vencida</SelectItem>
             <SelectItem value="inativos">Inativos / Expirados</SelectItem>
             <SelectItem value="sem_apolice">Sem Apólice Cadastrada</SelectItem>
           </SelectContent>

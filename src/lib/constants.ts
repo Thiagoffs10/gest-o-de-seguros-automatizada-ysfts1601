@@ -62,7 +62,40 @@ export const YEARS = ['ALL', '2027', '2026', '2025', '2024', '2023']
 export function buildFilterString(filters: any): string {
   const parts: string[] = []
   if (filters?.year && filters.year !== 'ALL') {
-    parts.push(`created >= "${filters.year}-01-01 00:00:00"`)
+    const y = parseInt(filters.year, 10)
+    if (!isNaN(y)) {
+      if (filters?.month && filters.month !== 'ALL') {
+        const m = parseInt(filters.month, 10)
+        if (!isNaN(m)) {
+          const startDate = `${y}-${String(m).padStart(2, '0')}-01 00:00:00`
+          const nextYear = m === 12 ? y + 1 : y
+          const nextMonth = m === 12 ? 1 : m + 1
+          const endDate = `${nextYear}-${String(nextMonth).padStart(2, '0')}-01 00:00:00`
+          parts.push(`(start_date >= "${startDate}" && start_date < "${endDate}")`)
+        } else {
+          parts.push(`(start_date >= "${y}-01-01 00:00:00" && start_date <= "${y}-12-31 23:59:59")`)
+        }
+      } else {
+        parts.push(`(start_date >= "${y}-01-01 00:00:00" && start_date <= "${y}-12-31 23:59:59")`)
+      }
+    }
+  }
+  if (filters?.partnerId && filters.partnerId !== 'ALL' && filters.partnerId !== '') {
+    parts.push(`parceiro = "${filters.partnerId}"`)
+  }
+  if (filters?.seguradoraId && filters.seguradoraId !== 'ALL' && filters.seguradoraId !== '') {
+    parts.push(`seguradora = "${filters.seguradoraId}"`)
+  }
+  if (filters?.tipoSeguro && filters.tipoSeguro !== 'ALL' && filters.tipoSeguro !== '') {
+    parts.push(
+      `(tipo_de_seguro = "${filters.tipoSeguro}" || coverage_type = "${filters.tipoSeguro}")`,
+    )
+  }
+  if (filters?.dateFrom) {
+    parts.push(`start_date >= "${filters.dateFrom}"`)
+  }
+  if (filters?.dateTo) {
+    parts.push(`start_date <= "${filters.dateTo} 23:59:59"`)
   }
   return parts.join(' && ')
 }

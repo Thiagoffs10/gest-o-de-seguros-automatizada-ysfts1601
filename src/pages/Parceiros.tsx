@@ -58,9 +58,18 @@ export default function Parceiros() {
   useRealtime('parceiros', () => loadData())
 
   const filtered = parceiros.filter((p) => {
-    if (!search) return true
-    const q = search.toLowerCase()
-    return p.nome?.toLowerCase().includes(q) || p.cpf?.toLowerCase().includes(q)
+    if (!search.trim()) return true
+    const q = search.trim().toLowerCase()
+    const cleanNum = q.replace(/\D/g, '')
+    const docClean = (p.cpf || '').replace(/\D/g, '')
+
+    if (p.nome && p.nome.toLowerCase().includes(q)) return true
+    if (p.email && p.email.toLowerCase().includes(q)) return true
+    if (p.cpf && p.cpf.toLowerCase().includes(q)) return true
+    if (cleanNum && docClean && docClean.includes(cleanNum)) return true
+    if (p.telefone && p.telefone.toLowerCase().includes(q)) return true
+    if (p.partner_code && String(p.partner_code).includes(q)) return true
+    return false
   })
   const totalPages = Math.max(1, Math.ceil(filtered.length / PAGE_SIZE))
   const paginated = filtered.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE)

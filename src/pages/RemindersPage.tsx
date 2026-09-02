@@ -1,5 +1,16 @@
 import { useEffect, useState } from 'react'
-import { Plus, CheckCircle, Trash2, CheckCheck, Mail, Pencil, Loader2, Send } from 'lucide-react'
+import {
+  Plus,
+  CheckCircle,
+  Trash2,
+  CheckCheck,
+  Mail,
+  Pencil,
+  Loader2,
+  Send,
+  Search,
+  X,
+} from 'lucide-react'
 import {
   getReminders,
   createReminder,
@@ -55,6 +66,11 @@ export default function RemindersPage() {
   const [deleteTarget, setDeleteTarget] = useState<Reminder | null>(null)
   const [loading, setLoading] = useState(true)
   const [sendingEmailId, setSendingEmailId] = useState<string | null>(null)
+  const [search, setSearch] = useState('')
+  const [statusFilter, setStatusFilter] = useState<'ALL' | 'pending' | 'completed'>('ALL')
+  const [typeFilter, setTypeFilter] = useState<string>('ALL')
+  const [page, setPage] = useState(1)
+  const PAGE_SIZE = 10
 
   // Estados para edição do lembrete
   const [editingReminder, setEditingReminder] = useState<Reminder | null>(null)
@@ -254,6 +270,28 @@ export default function RemindersPage() {
     }
   }
 
+  const filteredReminders = reminders.filter((r) => {
+    if (statusFilter === 'pending' && r.sent) return false
+    if (statusFilter === 'completed' && !r.sent) return false
+    if (typeFilter !== 'ALL' && r.type !== typeFilter) return false
+    if (search.trim()) {
+      const q = search.trim().toLowerCase()
+      const clientName = r.expand?.client?.name || ''
+      const msg = r.message || ''
+      const typ = r.type || ''
+      if (
+        !clientName.toLowerCase().includes(q) &&
+        !msg.toLowerCase().includes(q) &&
+        !typ.toLowerCase().includes(q)
+      ) {
+        return false
+      }
+    }
+    return true
+  })
+
+  const totalPages = Math.max(1, Math.ceil(filteredReminders.length / PAGE_SIZE))
+  const paginatedReminders = filteredReminders.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE)
   const pendingCount = reminders.filter((r) => !r.sent).length
 
   if (loading)
@@ -286,6 +324,66 @@ export default function RemindersPage() {
         </div>
       </div>
 
+      <div className="flex flex-wrap items-center gap-3">
+        <div className="relative max-w-sm flex-1 min-w-[200px]">
+          <Search className="w-4 h-4 absolute left-3 top-3 text-slate-400" />
+          <Input
+            placeholder="Buscar por cliente ou mensagem..."
+            className="pl-9 pr-9"
+            value={search}
+            onChange={(e) => {
+              setSearch(e.target.value)
+              setPage(1)
+            }}
+          />
+          {search && (
+            <button
+              type="button"
+              onClick={() => {
+                setSearch('')
+                setPage(1)
+              }}
+              className="absolute right-3 top-3 text-slate-400 hover:text-slate-600"
+            >
+              <X className="w-4 h-4" />
+            </button>
+          )}
+        </div>
+        <Select
+          value={statusFilter}
+          onValueChange={(val: any) => {
+            setStatusFilter(val)
+            setPage(1)
+          }}
+        >
+          <SelectTrigger className="w-[160px]">
+            <SelectValue placeholder="Status" />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value="ALL">Todos os status</SelectItem>
+            <SelectItem value="pending">Pendentes</SelectItem>
+            <SelectItem value="completed">Concluídos</SelectItem>
+          </SelectContent>
+        </Select>
+        <Select
+          value={typeFilter}
+          onValueChange={(val) => {
+            setTypeFilter(val)
+            setPage(1)
+          }}
+        >
+          <SelectTrigger className="w-[160px]">
+            <SelectValue placeholder="Tipo" />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value="ALL">Todos os tipos</SelectItem>
+            <SelectItem value="Renovação">Renovação</SelectItem>
+            <SelectItem value="Aniversário">Aniversário</SelectItem>
+            <SelectItem value="Customizado">Customizado</SelectItem>
+          </SelectContent>
+        </Select>
+      </div>
+
       <Card className="shadow-sm overflow-hidden border">
         <div className="overflow-x-auto">
           <table className="w-full text-left text-sm text-slate-700">
@@ -300,14 +398,14 @@ export default function RemindersPage() {
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-100">
-              {reminders.length === 0 ? (
+              {filteredReminders.length === 0 ? (
                 <tr>
                   <td colSpan={6} className="text-center p-6 text-slate-500">
-                    Nenhum lembrete cadastrado.
+                    Nenhum lembrete encontrado.
                   </td>
                 </tr>
               ) : (
-                reminders.map((r) => (
+                paginatedReminders.map((r) => (
                   <tr key={r.id} className="hover:bg-slate-50">
                     <td className="p-3.5 font-bold text-blue-600">{r.type}</td>
                     <td className="p-3.5 font-medium">{r.expand?.client?.name || 'Geral'}</td>
@@ -384,6 +482,37 @@ export default function RemindersPage() {
           </table>
         </div>
       </Card>
+
+      {totalPages > 1 && (
+        <div className="flex flex-col sm:flex-row items-center justify-between gap-2 text-sm text-slate-600">
+          <span>
+            Exibindo {filteredReminders.length === 0 ? 0 : (page - 1) * PAGE_SIZE + 1} a{' '}
+            {Math.min(page * PAGE_SIZE, filteredReminders.length)} de {filteredReminders.length}{' '}
+            lembretes
+          </span>
+          <div className="flex items-center gap-2">
+            <Button
+              variant="outline"
+              size="sm"
+              disabled={page <= 1}
+              onClick={() => setPage((p) => p - 1)}
+            >
+              Anterior
+            </Button>
+            <span className="font-semibold px-1">
+              Página {page} de {totalPages}
+            </span>
+            <Button
+              variant="outline"
+              size="sm"
+              disabled={page >= totalPages}
+              onClick={() => setPage((p) => p + 1)}
+            >
+              Próxima
+            </Button>
+          </div>
+        </div>
+      )}
 
       {/* Modal Criar Lembrete */}
       <Dialog open={isModalOpen} onOpenChange={setIsModalOpen}>

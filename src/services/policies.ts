@@ -170,6 +170,57 @@ export function preparePolicyPayload(data: Partial<Policy> & Record<string, any>
   return payload
 }
 
+export const sortPoliciesPrioritized = (policies: Policy[]): Policy[] => {
+  const getStatusPriority = (status: string) => {
+    if (status === 'Ativa') return 1
+    if (status === 'Renovação Pendente') return 2
+    if (status === 'Vencida' || status === 'Expirada') return 3
+    if (status === 'Cancelada') return 4
+    return 5
+  }
+
+  return [...policies].sort((a, b) => {
+    const prioA = getStatusPriority(a.status)
+    const prioB = getStatusPriority(b.status)
+    if (prioA !== prioB) return prioA - prioB
+
+    // Dentro do mesmo grupo de status, ordenar cronologicamente decrescente (mais recentes / data fim mais recente primeiro)
+    const dateA = a.end_date || a.start_date || a.created || ''
+    const dateB = b.end_date || b.start_date || b.created || ''
+    if (dateA !== dateB) return dateB.localeCompare(dateA)
+
+    return (b.policy_code || 0) - (a.policy_code || 0)
+  })
+}
+
+export const syncExpiredPolicies = async (policies: Policy[]): Promise<Policy[]> => {
+  const today = todayLocalDate()
+  const toUpdate: Policy[] = []
+
+  const updatedPolicies = policies.map((p) => {
+    const end = p.end_date ? p.end_date.split('T')[0].split(' ')[0] : ''
+    if (p.status === 'Ativa' && end && end < today) {
+      toUpdate.push(p)
+      return { ...p, status: 'Vencida' as const }
+    }
+    return p
+  })
+
+  // Se houver apólices que expiraram, atualiza de forma assíncrona no backend
+  if (toUpdate.length > 0) {
+    Promise.allSettled(
+      toUpdate.map((p) =>
+        pb
+          .collection('policies')
+          .update(p.id, { status: 'Vencida' })
+          .catch(() => {}),
+      ),
+    ).catch(() => {})
+  }
+
+  return updatedPolicies
+}
+
 export const getPolicies = async (
   filterString?: string,
   searchQuery?: string,
@@ -181,11 +232,14 @@ export const getPolicies = async (
     const qName = `client.name ~ "${sanitizedName}"`
     filter = filter ? `${filter} && (${qName})` : qName
   }
-  return pb.collection('policies').getFullList<Policy>({
+  const rawList = await pb.collection('policies').getFullList<Policy>({
     expand: 'client,seguradora,parceiro',
     filter,
     sort: '-created',
   })
+
+  const syncedList = await syncExpiredPolicies(rawList)
+  return sortPoliciesPrioritized(syncedList)
 }
 export const getPolicy = async (id: string) => {
   return pb.collection('policies').getOne<Policy>(id, {
@@ -255,8 +309,9 @@ export function prepareRenewalData(policy: Policy): Partial<Policy> {
 }
 
 export const countActivePolicies = async () => {
+  const today = todayLocalDate()
   const result = await pb.collection('policies').getList(1, 1, {
-    filter: 'status = "Ativa"',
+    filter: `status = "Ativa" && end_date >= "${today}"`,
   })
   return result.totalItems
 }

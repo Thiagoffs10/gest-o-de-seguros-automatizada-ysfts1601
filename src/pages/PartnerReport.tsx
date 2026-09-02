@@ -206,13 +206,13 @@ export default function PartnerReport() {
 
     if (dateFrom) {
       result = result.filter((p) => {
-        const ref = p.start_date || p.data_pagamento_parceiro || ''
+        const ref = p.start_date ? p.start_date.split('T')[0].split(' ')[0] : ''
         return ref && ref >= dateFrom
       })
     }
     if (dateTo) {
       result = result.filter((p) => {
-        const ref = p.start_date || p.data_pagamento_parceiro || ''
+        const ref = p.start_date ? p.start_date.split('T')[0].split(' ')[0] : ''
         return ref && ref <= dateTo
       })
     }

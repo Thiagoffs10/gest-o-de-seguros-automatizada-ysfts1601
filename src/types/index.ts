@@ -83,7 +83,7 @@ export interface Policy {
   start_date: string
   end_date: string
   renewal_date?: string
-  status: 'Ativa' | 'Expirada' | 'Cancelada' | 'Renovação Pendente'
+  status: 'Ativa' | 'Vencida' | 'Expirada' | 'Cancelada' | 'Renovação Pendente'
   commission?: number
   commission_percent?: number
   iss?: number

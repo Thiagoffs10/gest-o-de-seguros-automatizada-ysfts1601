@@ -273,9 +273,11 @@ export default function PolicyDetail() {
                   ? 'bg-emerald-500'
                   : policy.status === 'Renovação Pendente'
                     ? 'bg-amber-500'
-                    : policy.status === 'Cancelada'
-                      ? 'bg-red-600'
-                      : 'bg-slate-500'
+                    : policy.status === 'Vencida' || policy.status === 'Expirada'
+                      ? 'bg-slate-500'
+                      : policy.status === 'Cancelada'
+                        ? 'bg-red-600'
+                        : 'bg-slate-500'
               }
             >
               {policy.status}

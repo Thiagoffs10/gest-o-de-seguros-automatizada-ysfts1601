@@ -52,8 +52,13 @@ export default function Seguradoras() {
   useRealtime('seguradoras', () => loadData())
 
   const filtered = seguradoras.filter((s) => {
-    if (!search) return true
-    return s.nome?.toLowerCase().includes(search.toLowerCase())
+    if (!search.trim()) return true
+    const q = search.trim().toLowerCase()
+    return (
+      (s.nome && s.nome.toLowerCase().includes(q)) ||
+      (s.cnpj && s.cnpj.toLowerCase().includes(q)) ||
+      (s.cnpj && s.cnpj.replace(/\D/g, '').includes(q.replace(/\D/g, '')))
+    )
   })
 
   const handleCreate = async (formData: any) => {

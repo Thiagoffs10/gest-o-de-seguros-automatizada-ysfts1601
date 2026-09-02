@@ -1,5 +1,5 @@
 {
-  "generatedAt": "2026-09-02T01:08:32.065Z",
+  "generatedAt": "2026-09-02T02:19:15.239Z",
   "collections": [
     {
       "name": "users",
@@ -246,7 +246,7 @@
           "type": "select",
           "required": true,
           "system": false,
-          "selectValues": ["Ativa", "Expirada", "Cancelada", "Renovação Pendente"]
+          "selectValues": ["Ativa", "Expirada", "Cancelada", "Renovação Pendente", "Vencida"]
         },
         {
           "name": "commission",

@@ -499,7 +499,15 @@ export default function Dashboard() {
                     R$ {formatCurrency(pol.valor_liquido || pol.premium_amount)}
                   </p>
                   <span
-                    className={`text-[10px] px-2 py-0.5 rounded-full font-bold ${pol.status === 'Ativa' ? 'bg-emerald-100 text-emerald-800' : 'bg-amber-100 text-amber-800'}`}
+                    className={`text-[10px] px-2 py-0.5 rounded-full font-bold ${
+                      pol.status === 'Ativa'
+                        ? 'bg-emerald-100 text-emerald-800'
+                        : pol.status === 'Renovação Pendente'
+                          ? 'bg-amber-100 text-amber-800'
+                          : pol.status === 'Cancelada'
+                            ? 'bg-rose-100 text-rose-800'
+                            : 'bg-slate-100 text-slate-800'
+                    }`}
                   >
                     {pol.status}
                   </span>
