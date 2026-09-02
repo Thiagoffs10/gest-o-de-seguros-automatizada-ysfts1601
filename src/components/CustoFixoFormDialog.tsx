@@ -19,6 +19,7 @@ import {
   SelectValue,
 } from '@/components/ui/select'
 import { CustoFixo } from '@/types'
+import { todayLocalDate, formatDateForInput } from '@/lib/utils'
 
 const CATEGORIAS = [
   'Contador',
@@ -70,12 +71,12 @@ export function CustoFixoFormDialog({
       setForm({
         descricao: initialData.descricao || '',
         valor: initialData.valor?.toString() || '',
-        data: initialData.data?.split(' ')[0] || '',
+        data: formatDateForInput(initialData.data) || '',
         categoria: initialData.categoria || 'Outros',
         tipo: initialData.tipo || 'Fixo',
         observacoes: initialData.observacoes || '',
         pago: !!initialData.pago,
-        data_pagamento: initialData.data_pagamento?.split(' ')[0] || '',
+        data_pagamento: formatDateForInput(initialData.data_pagamento) || '',
         forma_pagamento: initialData.forma_pagamento || '',
         recorrente: !!initialData.recorrente,
         frequencia_recorrencia: initialData.frequencia_recorrencia || '',
@@ -218,9 +219,7 @@ export function CustoFixoFormDialog({
                     ...p,
                     pago: isPaid,
                     data_pagamento:
-                      isPaid && !p.data_pagamento
-                        ? new Date().toISOString().split('T')[0]
-                        : p.data_pagamento,
+                      isPaid && !p.data_pagamento ? todayLocalDate() : p.data_pagamento,
                   }))
                 }}
               />

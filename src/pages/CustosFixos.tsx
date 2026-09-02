@@ -8,6 +8,7 @@ import {
 } from '@/services/custos-fixos'
 import { getPolicies } from '@/services/policies'
 import { CustoFixo, Policy, FilterState } from '@/types'
+import { formatDateDisplay } from '@/lib/utils'
 import { Button } from '@/components/ui/button'
 import { Card } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
@@ -282,7 +283,7 @@ export default function CustosFixos() {
                       </Badge>
                     </td>
                     <td className="p-3.5 font-bold">R$ {fmt(c.valor || 0)}</td>
-                    <td className="p-3.5">{new Date(c.data).toLocaleDateString('pt-BR')}</td>
+                    <td className="p-3.5">{formatDateDisplay(c.data)}</td>
                     <td className="p-3.5">
                       <Badge className={CATEGORIA_COLORS[c.categoria] || 'bg-slate-100'}>
                         {c.categoria}
@@ -299,9 +300,7 @@ export default function CustosFixos() {
                     </td>
                     <td className="p-3.5 text-xs text-slate-500">
                       {c.forma_pagamento || '-'}
-                      {c.data_pagamento
-                        ? ` (${new Date(c.data_pagamento).toLocaleDateString('pt-BR')})`
-                        : ''}
+                      {c.data_pagamento ? ` (${formatDateDisplay(c.data_pagamento)})` : ''}
                     </td>
                     <td className="p-3.5 text-slate-500 max-w-xs truncate">
                       {c.observacoes || '-'}

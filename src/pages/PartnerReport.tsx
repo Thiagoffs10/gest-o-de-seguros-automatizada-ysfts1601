@@ -59,7 +59,7 @@ import {
 } from '@/components/ui/alert-dialog'
 import { generatePartnerReportPDF, PartnerReportEntry } from '@/lib/partner-report-pdf'
 import { maskDocument, formatClientDocument } from '@/lib/document-validators'
-import { formatDateDisplay, todayLocalDate } from '@/lib/utils'
+import { formatDateDisplay, todayLocalDate, extractDateOnly } from '@/lib/utils'
 import { useToast } from '@/hooks/use-toast'
 import { useAuth } from '@/hooks/use-auth'
 
@@ -212,13 +212,13 @@ export default function PartnerReport() {
 
     if (dateFrom) {
       result = result.filter((p) => {
-        const ref = p.start_date ? p.start_date.split('T')[0].split(' ')[0] : ''
+        const ref = extractDateOnly(p.start_date)
         return ref && ref >= dateFrom
       })
     }
     if (dateTo) {
       result = result.filter((p) => {
-        const ref = p.start_date ? p.start_date.split('T')[0].split(' ')[0] : ''
+        const ref = extractDateOnly(p.start_date)
         return ref && ref <= dateTo
       })
     }

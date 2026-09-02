@@ -41,7 +41,7 @@ import { useToast } from '@/hooks/use-toast'
 import { useRealtime } from '@/hooks/use-realtime'
 import { usePermissions } from '@/hooks/use-permissions'
 import { extractFieldErrors, getErrorMessage, type FieldErrors } from '@/lib/pocketbase/errors'
-import { formatDateDisplay } from '@/lib/utils'
+import { formatDateDisplay, todayLocalDate } from '@/lib/utils'
 
 type DialogMode = 'edit' | 'renew' | null
 
@@ -66,7 +66,7 @@ export default function PolicyDetail() {
 
   const [paymentForm, setPaymentForm] = useState({
     amount: 1000,
-    due_date: new Date().toISOString().split('T')[0],
+    due_date: todayLocalDate(),
     status: 'Pendente' as const,
     payment_method: 'Boleto' as const,
   })
@@ -355,15 +355,11 @@ export default function PolicyDetail() {
           </div>
           <div>
             <p className="text-xs text-slate-500">Data Início</p>
-            <p className="font-semibold">
-              {policy.start_date ? new Date(policy.start_date).toLocaleDateString('pt-BR') : '-'}
-            </p>
+            <p className="font-semibold">{formatDateDisplay(policy.start_date)}</p>
           </div>
           <div>
             <p className="text-xs text-slate-500">Data Fim</p>
-            <p className="font-semibold">
-              {policy.end_date ? new Date(policy.end_date).toLocaleDateString('pt-BR') : '-'}
-            </p>
+            <p className="font-semibold">{formatDateDisplay(policy.end_date)}</p>
           </div>
           {policy.expand?.parceiro && (
             <div>
@@ -407,9 +403,7 @@ export default function PolicyDetail() {
                       <p className="font-bold text-slate-900">
                         R$ {p.amount?.toLocaleString('pt-BR')}
                       </p>
-                      <p className="text-slate-500">
-                        Vencimento: {new Date(p.due_date).toLocaleDateString('pt-BR')}
-                      </p>
+                      <p className="text-slate-500">Vencimento: {formatDateDisplay(p.due_date)}</p>
                     </div>
                     <div className="text-right">
                       <Badge className={p.status === 'Pago' ? 'bg-emerald-500' : 'bg-red-500'}>

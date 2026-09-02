@@ -1,5 +1,6 @@
 import logoImg from '@/assets/cred10mixlogooficialfundobranco4k-12574.jpg'
 import { Policy } from '@/types'
+import { formatDateDisplay } from '@/lib/utils'
 
 export function generatePolicyPDF(policy: Policy) {
   const win = window.open('', '_blank', 'width=1000,height=800')
@@ -11,10 +12,8 @@ export function generatePolicyPDF(policy: Policy) {
   const clientName = policy.expand?.client?.name || 'Cliente não informado'
   const seguradoraName =
     policy.expand?.seguradora?.nome || policy.insurance_company || 'Não informada'
-  const startDate = policy.start_date
-    ? new Date(policy.start_date).toLocaleDateString('pt-BR')
-    : '-'
-  const endDate = policy.end_date ? new Date(policy.end_date).toLocaleDateString('pt-BR') : '-'
+  const startDate = policy.start_date ? formatDateDisplay(policy.start_date) : '-'
+  const endDate = policy.end_date ? formatDateDisplay(policy.end_date) : '-'
 
   const html = `<!DOCTYPE html><html><head><title>Apólice ${policy.policy_number} - CRED10MIX CORRETORA DE SEGUROS</title>
 <style>

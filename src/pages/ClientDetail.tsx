@@ -9,6 +9,7 @@ import { getCommunications } from '@/services/communications'
 import { getReminders } from '@/services/reminders'
 import { formatDocumentLabel } from '@/lib/document-validators'
 import { Client, Policy, Seguradora, Payment, Communication as CommType, Reminder } from '@/types'
+import { formatDateDisplay, todayLocalDate, toLocalDate, formatDateTimeDisplay } from '@/lib/utils'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs'
@@ -52,8 +53,8 @@ export default function ClientDetail() {
     tipo_de_seguro: 'Auto',
     valor_liquido: 1000,
     commission_percent: 10,
-    start_date: new Date().toISOString().split('T')[0],
-    end_date: new Date(Date.now() + 365 * 86400000).toISOString().split('T')[0],
+    start_date: todayLocalDate(),
+    end_date: toLocalDate(new Date(Date.now() + 365 * 86400000)),
   })
 
   const loadData = useCallback(async () => {
@@ -103,8 +104,8 @@ export default function ClientDetail() {
     e.preventDefault()
     if (!id) return
     try {
-      const endDate = new Date(newPolicy.end_date)
-      const renewalDate = new Date(endDate.getTime() - 30 * 86400000).toISOString()
+      const endDate = new Date(newPolicy.end_date + 'T00:00:00')
+      const renewalDate = toLocalDate(new Date(endDate.getTime() - 30 * 86400000))
       const commission = (newPolicy.commission_percent / 100) * newPolicy.valor_liquido
       await createPolicy({
         ...newPolicy,
@@ -234,9 +235,7 @@ export default function ClientDetail() {
                   <User className="w-4 h-4 text-slate-400" />
                   <div>
                     <p className="text-xs text-slate-500">Nascimento</p>
-                    <p className="font-semibold">
-                      {new Date(client.birth_date).toLocaleDateString('pt-BR')}
-                    </p>
+                    <p className="font-semibold">{formatDateDisplay(client.birth_date)}</p>
                   </div>
                 </div>
               )}
@@ -264,8 +263,7 @@ export default function ClientDetail() {
                       </p>
                       <p className="text-xs text-slate-500">
                         Tipo: {pol.tipo_de_seguro || pol.coverage_type} | Vigência:{' '}
-                        {new Date(pol.start_date).toLocaleDateString('pt-BR')} a{' '}
-                        {new Date(pol.end_date).toLocaleDateString('pt-BR')}
+                        {formatDateDisplay(pol.start_date)} a {formatDateDisplay(pol.end_date)}
                       </p>
                     </div>
                     <div className="text-right">
@@ -309,9 +307,9 @@ export default function ClientDetail() {
                     {payments.map((p) => (
                       <tr key={p.id}>
                         <td className="p-2 font-bold">R$ {p.amount?.toLocaleString('pt-BR')}</td>
-                        <td className="p-2">{new Date(p.due_date).toLocaleDateString('pt-BR')}</td>
+                        <td className="p-2">{formatDateDisplay(p.due_date)}</td>
                         <td className="p-2">
-                          {p.paid_date ? new Date(p.paid_date).toLocaleDateString('pt-BR') : '-'}
+                          {p.paid_date ? formatDateDisplay(p.paid_date) : '-'}
                         </td>
                         <td className="p-2">
                           <Badge
@@ -359,7 +357,7 @@ export default function ClientDetail() {
                       <tr key={cm.id}>
                         <td className="p-2 font-bold">{cm.type}</td>
                         <td className="p-2 max-w-xs truncate">{cm.subject || cm.body}</td>
-                        <td className="p-2">{new Date(cm.created).toLocaleDateString('pt-BR')}</td>
+                        <td className="p-2">{formatDateTimeDisplay(cm.created)}</td>
                         <td className="p-2">
                           <Badge variant="outline">{cm.status}</Badge>
                         </td>
@@ -393,7 +391,7 @@ export default function ClientDetail() {
                     {reminders.map((r) => (
                       <tr key={r.id}>
                         <td className="p-2 font-bold text-blue-600">{r.type}</td>
-                        <td className="p-2">{new Date(r.date).toLocaleDateString('pt-BR')}</td>
+                        <td className="p-2">{formatDateDisplay(r.date)}</td>
                         <td className="p-2 max-w-xs truncate">{r.message}</td>
                         <td className="p-2">
                           <Badge className={r.sent ? 'bg-slate-400' : 'bg-amber-500'}>

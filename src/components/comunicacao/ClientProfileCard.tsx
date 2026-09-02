@@ -1,4 +1,5 @@
 import { Client, Policy } from '@/types'
+import { formatDateDisplay } from '@/lib/utils'
 import { formatClientDocument } from '@/lib/document-validators'
 import { Card, CardContent } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
@@ -70,9 +71,8 @@ export function ClientProfileCard({ client, policies, type }: Props) {
                 <strong>Apólice nº:</strong> {lastPolicy.policy_number}
               </div>
               <div>
-                <strong>Vigência:</strong>{' '}
-                {new Date(lastPolicy.start_date).toLocaleDateString('pt-BR')} a{' '}
-                {new Date(lastPolicy.end_date).toLocaleDateString('pt-BR')}
+                <strong>Vigência:</strong> {formatDateDisplay(lastPolicy.start_date)} a{' '}
+                {formatDateDisplay(lastPolicy.end_date)}
               </div>
             </div>
           </CardContent>

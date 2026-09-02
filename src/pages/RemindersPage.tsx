@@ -23,6 +23,7 @@ import {
 import { getClients } from '@/services/clients'
 import { sendSingleEmail, sendMonthlyBirthdaysEmail } from '@/services/communications'
 import { Reminder, Client } from '@/types'
+import { formatDateDisplay, formatDateForInput, todayLocalDate, extractDateOnly } from '@/lib/utils'
 import { Card } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
@@ -104,7 +105,7 @@ export default function RemindersPage() {
   const [formData, setFormData] = useState({
     type: 'Renovação' as const,
     client: '',
-    date: new Date().toISOString().split('T')[0],
+    date: todayLocalDate(),
     message: '',
   })
 
@@ -150,7 +151,7 @@ export default function RemindersPage() {
     setEditFormData({
       type: rem.type,
       client: rem.client || '',
-      date: rem.date ? rem.date.split('T')[0] : new Date().toISOString().split('T')[0],
+      date: formatDateForInput(rem.date) || todayLocalDate(),
       message: rem.message || '',
     })
   }
@@ -190,9 +191,12 @@ export default function RemindersPage() {
 
   const getTargetMonthForReminder = (rem: Reminder): number => {
     if (rem.date) {
+      const datePart = extractDateOnly(rem.date)
+      if (datePart) {
+        const rawMonth = datePart.split('-')[1]
+        if (rawMonth) return parseInt(rawMonth, 10)
+      }
       const d = new Date(rem.date)
-      const rawMonth = rem.date.split('T')[0].split('-')[1]
-      if (rawMonth) return parseInt(rawMonth, 10)
       return d.getUTCMonth() + 1
     }
     return new Date().getMonth() + 1
@@ -209,7 +213,12 @@ export default function RemindersPage() {
         bMonth = parseInt(parts[1], 10)
       }
       if (bMonth === -1 || isNaN(bMonth)) {
-        bMonth = new Date(c.birth_date).getUTCMonth() + 1
+        const bDatePart = extractDateOnly(c.birth_date)
+        if (bDatePart) {
+          bMonth = Number(bDatePart.split('-')[1])
+        } else {
+          bMonth = new Date(c.birth_date).getUTCMonth() + 1
+        }
       }
       return bMonth === month
     })
@@ -532,7 +541,7 @@ export default function RemindersPage() {
                           r.expand?.client?.name || 'Geral'
                         )}
                       </td>
-                      <td className="p-3.5">{new Date(r.date).toLocaleDateString('pt-BR')}</td>
+                      <td className="p-3.5">{formatDateDisplay(r.date)}</td>
                       <td className="p-3.5 max-w-xs truncate" title={r.message}>
                         {r.message}
                       </td>

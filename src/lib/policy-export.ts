@@ -16,11 +16,13 @@ function fmtDoc(client?: Client): string {
 
 function daysUntil(dateStr?: string): number {
   if (!dateStr) return 0
-  const d = new Date(extractDatePart(dateStr))
-  if (isNaN(d.getTime())) return 0
+  const datePart = extractDatePart(dateStr)
+  if (!datePart || !/^\d{4}-\d{2}-\d{2}$/.test(datePart)) return 0
+  const [y, m, dNum] = datePart.split('-').map(Number)
+  const targetUtc = Date.UTC(y, m - 1, dNum)
   const now = new Date()
-  now.setHours(0, 0, 0, 0)
-  const diff = Math.ceil((d.getTime() - now.getTime()) / 86400000)
+  const todayUtc = Date.UTC(now.getFullYear(), now.getMonth(), now.getDate())
+  const diff = Math.ceil((targetUtc - todayUtc) / 86400000)
   return diff > 0 ? diff : 0
 }
 

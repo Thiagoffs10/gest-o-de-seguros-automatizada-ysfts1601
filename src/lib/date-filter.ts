@@ -17,7 +17,12 @@ const MONTH_NAMES = [
 
 export function extractDatePart(dateStr?: string): string {
   if (!dateStr) return ''
-  return String(dateStr).split(/[ T]/)[0]
+  const cleaned = String(dateStr).trim()
+  const match = cleaned.match(/^(\d{4})-(\d{2})-(\d{2})/)
+  if (match) {
+    return `${match[1]}-${match[2]}-${match[3]}`
+  }
+  return cleaned.split(/[ T]/)[0]
 }
 
 export interface DatePeriod {
@@ -35,7 +40,10 @@ function computeFirstDayNextMonth(year: number, month: number): string {
 }
 
 export function formatBRDate(d: string): string {
-  return d.split('-').reverse().join('/')
+  if (!d) return '-'
+  const dateOnly = extractDatePart(d)
+  if (!dateOnly || !dateOnly.includes('-')) return d
+  return dateOnly.split('-').reverse().join('/')
 }
 
 export function computePeriod(

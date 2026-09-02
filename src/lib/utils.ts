@@ -50,12 +50,33 @@ export function parseCurrencyInput(value: string): number {
 /**
  * Formats a date string into YYYY-MM-DD for native HTML date inputs.
  */
-export function formatDateForInput(dateStr?: string | null): string {
+/**
+ * Extracts the YYYY-MM-DD portion from any date string or ISO string
+ * without suffering time-zone shifts.
+ */
+export function extractDateOnly(dateStr?: string | null): string {
   if (!dateStr) return ''
   const cleaned = String(dateStr).trim()
-  if (cleaned.length >= 10 && /^\d{4}-\d{2}-\d{2}/.test(cleaned)) {
-    return cleaned.slice(0, 10)
+  // Matches "YYYY-MM-DD..."
+  const match = cleaned.match(/^(\d{4})-(\d{2})-(\d{2})/)
+  if (match) {
+    return `${match[1]}-${match[2]}-${match[3]}`
   }
+  // Matches "DD/MM/YYYY..."
+  const brMatch = cleaned.match(/^(\d{2})\/(\d{2})\/(\d{4})/)
+  if (brMatch) {
+    return `${brMatch[3]}-${brMatch[2]}-${brMatch[1]}`
+  }
+  return ''
+}
+
+/**
+ * Formats a date string into YYYY-MM-DD for native HTML date inputs.
+ */
+export function formatDateForInput(dateStr?: string | null): string {
+  if (!dateStr) return ''
+  const direct = extractDateOnly(dateStr)
+  if (direct) return direct
   const dateObj = new Date(dateStr)
   if (isNaN(dateObj.getTime())) return ''
   return toLocalDate(dateObj)
@@ -69,9 +90,31 @@ export function todayLocalDate(): string {
   return toLocalDate(new Date())
 }
 
+/**
+ * Formats any date string (ISO UTC, YYYY-MM-DD, PocketBase datetime) to DD/MM/YYYY
+ * safely without timezone conversion regressions.
+ */
 export function formatDateDisplay(dateStr?: string | null): string {
   if (!dateStr) return '-'
+  const dateOnly = extractDateOnly(dateStr)
+  if (dateOnly && dateOnly.includes('-')) {
+    const [y, m, d] = dateOnly.split('-')
+    return `${d}/${m}/${y}`
+  }
+  // Fallback for non-standard formats
   const d = String(dateStr).split('T')[0].split(' ')[0]
-  if (!d || !d.includes('-')) return '-'
-  return d.split('-').reverse().join('/')
+  if (d && d.includes('-')) {
+    return d.split('-').reverse().join('/')
+  }
+  return '-'
+}
+
+/**
+ * Formats a timestamp (created/updated) into DD/MM/YYYY HH:mm for display.
+ */
+export function formatDateTimeDisplay(dateStr?: string | null): string {
+  if (!dateStr) return '-'
+  const dateObj = new Date(dateStr)
+  if (isNaN(dateObj.getTime())) return formatDateDisplay(dateStr)
+  return dateObj.toLocaleString('pt-BR')
 }

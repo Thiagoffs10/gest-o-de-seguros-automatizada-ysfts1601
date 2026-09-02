@@ -3,6 +3,7 @@ import { Card, CardHeader, CardTitle } from '@/components/ui/card'
 import { Input } from '@/components/ui/input'
 import { Badge } from '@/components/ui/badge'
 import { Communication } from '@/types'
+import { formatDateTimeDisplay } from '@/lib/utils'
 
 interface Props {
   communications: Communication[]
@@ -105,7 +106,7 @@ export function CommsHistory({ communications }: Props) {
                       'Campanha'}
                   </td>
                   <td className="p-3 max-w-xs truncate text-slate-600">{cm.subject || cm.body}</td>
-                  <td className="p-3">{new Date(cm.created).toLocaleString('pt-BR')}</td>
+                  <td className="p-3">{formatDateTimeDisplay(cm.created)}</td>
                   <td className="p-3">
                     <Badge
                       variant={cm.status === 'Enviado' ? 'default' : 'outline'}

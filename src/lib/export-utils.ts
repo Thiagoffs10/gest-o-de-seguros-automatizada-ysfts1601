@@ -29,11 +29,16 @@ function formatClientAddress(client: Client): string {
 
 function formatBirthDate(dateStr?: string): string {
   if (!dateStr) return ''
+  const cleaned = String(dateStr).trim()
+  const match = cleaned.match(/^(\d{4})-(\d{2})-(\d{2})/)
+  if (match) {
+    return `${match[3]}/${match[2]}/${match[1]}`
+  }
   const date = new Date(dateStr)
   if (isNaN(date.getTime())) return ''
-  const day = String(date.getDate()).padStart(2, '0')
-  const month = String(date.getMonth() + 1).padStart(2, '0')
-  const year = date.getFullYear()
+  const day = String(date.getUTCDate()).padStart(2, '0')
+  const month = String(date.getUTCMonth() + 1).padStart(2, '0')
+  const year = date.getUTCFullYear()
   return `${day}/${month}/${year}`
 }
 

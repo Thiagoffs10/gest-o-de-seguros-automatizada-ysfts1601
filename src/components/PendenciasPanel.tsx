@@ -2,6 +2,7 @@ import { useNavigate } from 'react-router-dom'
 import { AlertCircle, ArrowRight } from 'lucide-react'
 import { Card } from '@/components/ui/card'
 import { Policy } from '@/types'
+import { todayLocalDate, extractDateOnly } from '@/lib/utils'
 
 interface Props {
   policies: Policy[]
@@ -19,9 +20,9 @@ export function PendenciasPanel({ policies }: Props) {
       !p.pago_parceiro,
   ).length
 
-  const today = new Date().toISOString().split('T')[0]
+  const today = todayLocalDate()
   const renewalsToday = policies.filter(
-    (p) => p.renewal_date && p.renewal_date.split(' ')[0] === today,
+    (p) => p.renewal_date && extractDateOnly(p.renewal_date) === today,
   ).length
 
   const pendingRenewals = policies.filter((p) => p.status === 'Renovação Pendente').length

@@ -105,7 +105,9 @@ export function CampanhasTab({
         const now = new Date()
         const future = new Date(now.getTime() + days * 86400000)
         const hasMatchingExp = clientPols.some((p) => {
-          const end = new Date(p.end_date)
+          const endDateStr = p.end_date ? p.end_date.split('T')[0].split(' ')[0] : ''
+          if (!endDateStr) return false
+          const end = new Date(endDateStr + 'T00:00:00')
           return end >= now && end <= future
         })
         if (!hasMatchingExp) return false

@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router-dom'
 import { ChevronLeft, ChevronRight, RefreshCw } from 'lucide-react'
 import { getPolicies } from '@/services/policies'
 import { Policy } from '@/types'
+import { formatDateDisplay } from '@/lib/utils'
 import { Card } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
@@ -113,10 +114,7 @@ export default function Pipeline() {
                         {p.expand?.client?.name || 'Cliente'}
                       </p>
                       <p className="text-xs text-slate-400 mt-1">
-                        Renovação:{' '}
-                        {p.renewal_date
-                          ? new Date(p.renewal_date).toLocaleDateString('pt-BR')
-                          : '-'}
+                        Renovação: {p.renewal_date ? formatDateDisplay(p.renewal_date) : '-'}
                       </p>
                       <div
                         className="flex items-center justify-between mt-2 pt-2 border-t"
