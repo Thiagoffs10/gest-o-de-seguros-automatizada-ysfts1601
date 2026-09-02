@@ -55,7 +55,7 @@ export function CampanhasTab({
   const [customSubject, setCustomSubject] = useState('')
   const [customBody, setCustomBody] = useState('')
   const [fromEmail, setFromEmail] = useState(
-    import.meta.env.VITE_SENDER_EMAIL || 'contato@cred10mix.com.br',
+    import.meta.env.VITE_SENDER_EMAIL || 'noreply@cred10mix.com.br',
   )
   const [selectedClientIds, setSelectedClientIds] = useState<string[]>([])
   const [showConfirm, setShowConfirm] = useState(false)
@@ -300,11 +300,11 @@ export function CampanhasTab({
               <Input
                 value={fromEmail}
                 onChange={(e) => setFromEmail(e.target.value)}
-                placeholder="contato@cred10mix.com.br"
+                placeholder="noreply@cred10mix.com.br"
                 className="mt-1 bg-white text-sm"
               />
               <p className="text-[11px] text-slate-500 mt-1">
-                Use um e-mail com domínio verificado no Resend.
+                Padrão: noreply@cred10mix.com.br (domínio verificado no Resend).
               </p>
             </div>
 
