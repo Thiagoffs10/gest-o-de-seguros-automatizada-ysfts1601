@@ -41,9 +41,9 @@ const STEPS = [
   },
   {
     icon: Mail,
-    title: 'Adicione o segredo VERIFIED_FROM_EMAIL (opcional)',
+    title: 'Remetente padrão (noreply@cred10mix.com.br)',
     description:
-      'Para testar o envio sem verificar seu domínio, adicione outro secret: Key: VERIFIED_FROM_EMAIL — Value: onboarding@resend.dev (sender de teste do Resend). Sem este secret, o sistema usará contato@cred10mix.com.br como remetente padrão.',
+      'Com o domínio cred10mix.com.br verificado no Resend, todos os e-mails são disparados através de noreply@cred10mix.com.br. O segredo VERIFIED_FROM_EMAIL já está configurado com esse endereço oficial.',
   },
   {
     icon: Save,
@@ -138,7 +138,7 @@ export function SecretsGuideDialog({ trigger }: SecretsGuideDialogProps) {
               <Mail className="w-5 h-5 text-emerald-600 shrink-0 mt-0.5" />
               <div className="space-y-1">
                 <h4 className="font-semibold text-sm text-emerald-900">
-                  Teste sem verificar domínio
+                  Remetente Oficial Verificado
                 </h4>
                 <p className="text-xs text-emerald-800">
                   <strong>Key:</strong>{' '}
@@ -149,12 +149,13 @@ export function SecretsGuideDialog({ trigger }: SecretsGuideDialogProps) {
                 <p className="text-xs text-emerald-800">
                   <strong>Value:</strong>{' '}
                   <code className="bg-emerald-100 px-1.5 py-0.5 rounded font-mono text-emerald-900">
-                    onboarding@resend.dev
+                    noreply@cred10mix.com.br
                   </code>
                 </p>
                 <p className="text-xs text-emerald-700 pt-1">
-                  Use o sender de teste do Resend para validar o fluxo de e-mails. Os envios serão
-                  entregues apenas para o e-mail do proprietário da conta Resend.
+                  O domínio cred10mix.com.br está verificado no Resend. Todos os e-mails
+                  automáticos, lembretes e campanhas utilizam este remetente e incluem rodapé
+                  padronizado com canais de atendimento e WhatsApp.
                 </p>
               </div>
             </div>

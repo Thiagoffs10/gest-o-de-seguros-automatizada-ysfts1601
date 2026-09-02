@@ -21,7 +21,7 @@ services:
       - pb_data:/pb/pb_data
     environment:
       - RESEND_API_KEY=${RESEND_API_KEY:-}
-      - RESEND_FROM_EMAIL=${RESEND_FROM_EMAIL:-onboarding@resend.dev}
+      - RESEND_FROM_EMAIL=${RESEND_FROM_EMAIL:-noreply@cred10mix.com.br}
       - SITE_URL=${SITE_URL:-http://localhost:5173}
     restart: unless-stopped
 
