@@ -125,8 +125,9 @@ export const EMAIL_TEMPLATES: Record<string, { name: string; subject: string; bo
 export function personalizeTemplate(template: string, vars: Record<string, string>): string {
   let text = template || ''
   Object.entries(vars).forEach(([key, val]) => {
-    const re = new RegExp(`\\$\\{${key}\\}`, 'g')
-    text = text.replace(re, val)
+    const reWithDollar = new RegExp(`\\$\\{${key}\\}`, 'g')
+    const reBare = new RegExp(`\\{${key}\\}`, 'g')
+    text = text.replace(reWithDollar, val || '').replace(reBare, val || '')
   })
   return text
 }

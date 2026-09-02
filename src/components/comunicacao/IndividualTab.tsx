@@ -1,9 +1,9 @@
 import { useState, useMemo } from 'react'
 import { Send, Mail, MessageSquare, FileText, Cake, RefreshCw, Loader2 } from 'lucide-react'
-import { Client, Policy } from '@/types'
+import { Client, Policy, EmailTemplate } from '@/types'
 import { createCommunication, sendSingleEmail } from '@/services/communications'
 import { formatClientDocument } from '@/lib/document-validators'
-import { EMAIL_TEMPLATES, personalizeTemplate } from '@/lib/constants'
+import { personalizeTemplate } from '@/lib/constants'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -23,18 +23,17 @@ import { ClientProfileCard } from './ClientProfileCard'
 interface Props {
   clients: Client[]
   policies: Policy[]
+  templates?: EmailTemplate[]
   onSuccess: () => void
 }
 
-export function IndividualTab({ clients, policies, onSuccess }: Props) {
+export function IndividualTab({ clients, policies, templates = [], onSuccess }: Props) {
   const { toast } = useToast()
   const { can } = usePermissions()
   const [type, setType] = useState<'WhatsApp' | 'Email'>('WhatsApp')
   const [search, setSearch] = useState('')
   const [selectedClientId, setSelectedClientId] = useState('')
-  const [template, setTemplate] = useState<'aniversario' | 'renovacao' | 'personalizado'>(
-    'personalizado',
-  )
+  const [selectedTemplateId, setSelectedTemplateId] = useState<string>('custom')
   const [subject, setSubject] = useState('')
   const [body, setBody] = useState('')
   const [sending, setSending] = useState(false)
@@ -57,8 +56,15 @@ export function IndividualTab({ clients, policies, onSuccess }: Props) {
   const selectedClient = clients.find((c) => c.id === selectedClientId)
   const hasEmail = Boolean(selectedClient?.email && selectedClient.email.trim().length > 0)
 
-  const handleTemplateChange = (tpl: 'aniversario' | 'renovacao' | 'personalizado') => {
-    setTemplate(tpl)
+  const handleTemplateChange = (templateId: string) => {
+    setSelectedTemplateId(templateId)
+    if (templateId === 'custom') {
+      return
+    }
+
+    const t = templates.find((item) => item.id === templateId)
+    if (!t) return
+
     const lastPol = policies.find((p) => p.client === selectedClientId)
     const vars: Record<string, string> = {
       nome_cliente: selectedClient?.name || '[Nome do Cliente]',
@@ -66,15 +72,8 @@ export function IndividualTab({ clients, policies, onSuccess }: Props) {
       seguradora: lastPol?.expand?.seguradora?.nome || lastPol?.insurance_company || '[Seguradora]',
     }
 
-    if (tpl === 'aniversario') {
-      const t = EMAIL_TEMPLATES.aniversario
-      setSubject(personalizeTemplate(t.subject, vars))
-      setBody(personalizeTemplate(t.body, vars))
-    } else if (tpl === 'renovacao') {
-      const t = EMAIL_TEMPLATES.renovacao
-      setSubject(personalizeTemplate(t.subject, vars))
-      setBody(personalizeTemplate(t.body, vars))
-    }
+    setSubject(personalizeTemplate(t.subject, vars))
+    setBody(personalizeTemplate(t.body, vars))
   }
 
   const handleSend = async () => {
@@ -206,31 +205,35 @@ export function IndividualTab({ clients, policies, onSuccess }: Props) {
           )}
 
           <div>
-            <Label className="block mb-1 text-xs font-semibold">Modelo de Mensagem</Label>
-            <div className="flex gap-2">
+            <Label className="block mb-1 text-xs font-semibold">Modelo de Mensagem Salvo</Label>
+            <div className="flex flex-wrap gap-2">
+              {templates.map((tpl) => (
+                <Button
+                  key={tpl.id}
+                  type="button"
+                  variant={selectedTemplateId === tpl.id ? 'default' : 'outline'}
+                  size="sm"
+                  className={selectedTemplateId === tpl.id ? 'bg-blue-600 hover:bg-blue-700' : ''}
+                  onClick={() => handleTemplateChange(tpl.id)}
+                >
+                  {tpl.type === 'Aniversário' ? (
+                    <Cake className="w-3.5 h-3.5 mr-1" />
+                  ) : tpl.type === 'Renovação' ? (
+                    <RefreshCw className="w-3.5 h-3.5 mr-1" />
+                  ) : (
+                    <FileText className="w-3.5 h-3.5 mr-1" />
+                  )}
+                  {tpl.name}
+                </Button>
+              ))}
               <Button
                 type="button"
-                variant={template === 'renovacao' ? 'default' : 'outline'}
+                variant={selectedTemplateId === 'custom' ? 'default' : 'outline'}
                 size="sm"
-                onClick={() => handleTemplateChange('renovacao')}
+                className={selectedTemplateId === 'custom' ? 'bg-slate-800 hover:bg-slate-900' : ''}
+                onClick={() => handleTemplateChange('custom')}
               >
-                <RefreshCw className="w-3.5 h-3.5 mr-1" /> Renovação
-              </Button>
-              <Button
-                type="button"
-                variant={template === 'aniversario' ? 'default' : 'outline'}
-                size="sm"
-                onClick={() => handleTemplateChange('aniversario')}
-              >
-                <Cake className="w-3.5 h-3.5 mr-1" /> Aniversário
-              </Button>
-              <Button
-                type="button"
-                variant={template === 'personalizado' ? 'default' : 'outline'}
-                size="sm"
-                onClick={() => handleTemplateChange('personalizado')}
-              >
-                <FileText className="w-3.5 h-3.5 mr-1" /> Personalizado
+                <FileText className="w-3.5 h-3.5 mr-1" /> Personalizado / Livre
               </Button>
             </div>
           </div>

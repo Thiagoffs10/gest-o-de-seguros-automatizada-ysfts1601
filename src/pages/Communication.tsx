@@ -6,12 +6,14 @@ import { getSeguradoras } from '@/services/seguradoras'
 import { getParceiros } from '@/services/parceiros'
 import { getTiposSeguro } from '@/services/tipos-seguro'
 import { getCommunications } from '@/services/communications'
+import { getEmailTemplates } from '@/services/email-templates'
 import {
   Client,
   Policy,
   Seguradora,
   Parceiro,
   TipoSeguro,
+  EmailTemplate,
   Communication as CommType,
 } from '@/types'
 import { Button } from '@/components/ui/button'
@@ -19,6 +21,8 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { IndividualTab } from '@/components/comunicacao/IndividualTab'
 import { CampanhasTab } from '@/components/comunicacao/CampanhasTab'
 import { CommsHistory } from '@/components/comunicacao/CommsHistory'
+import { EmailTemplatesManager } from '@/components/comunicacao/EmailTemplatesManager'
+import { useRealtime } from '@/hooks/use-realtime'
 
 export default function Communication() {
   const [clients, setClients] = useState<Client[]>([])
@@ -27,16 +31,18 @@ export default function Communication() {
   const [parceiros, setParceiros] = useState<Parceiro[]>([])
   const [tiposSeguro, setTiposSeguro] = useState<TipoSeguro[]>([])
   const [comms, setComms] = useState<CommType[]>([])
+  const [templates, setTemplates] = useState<EmailTemplate[]>([])
 
   const loadData = useCallback(async () => {
     try {
-      const [cls, pols, segs, parcs, tipos, cms] = await Promise.all([
+      const [cls, pols, segs, parcs, tipos, cms, tpls] = await Promise.all([
         getClients(),
         getPolicies(),
         getSeguradoras().catch(() => []),
         getParceiros().catch(() => []),
         getTiposSeguro().catch(() => []),
         getCommunications().catch(() => []),
+        getEmailTemplates().catch(() => []),
       ])
       setClients(cls)
       setPolicies(pols)
@@ -44,6 +50,7 @@ export default function Communication() {
       setParceiros(parcs)
       setTiposSeguro(tipos)
       setComms(cms)
+      setTemplates(tpls)
     } catch {
       /* intentionally ignored */
     }
@@ -52,6 +59,8 @@ export default function Communication() {
   useEffect(() => {
     loadData()
   }, [loadData])
+
+  useRealtime('email_templates', () => loadData())
 
   const exportClientsCSV = () => {
     const headers = ['Nome,Email,Telefone,CPF,CNPJ,Aniversario\n']
@@ -82,13 +91,19 @@ export default function Communication() {
       </div>
 
       <Tabs defaultValue="individual" className="w-full">
-        <TabsList className="grid w-full max-w-md grid-cols-2">
+        <TabsList className="grid w-full max-w-lg grid-cols-3">
           <TabsTrigger value="individual">Comunicação Individual</TabsTrigger>
           <TabsTrigger value="campanhas">Campanhas</TabsTrigger>
+          <TabsTrigger value="templates">Modelos de E-mail</TabsTrigger>
         </TabsList>
 
         <TabsContent value="individual" className="mt-4">
-          <IndividualTab clients={clients} policies={policies} onSuccess={loadData} />
+          <IndividualTab
+            clients={clients}
+            policies={policies}
+            templates={templates}
+            onSuccess={loadData}
+          />
         </TabsContent>
 
         <TabsContent value="campanhas" className="mt-4">
@@ -98,8 +113,13 @@ export default function Communication() {
             seguradoras={seguradoras}
             parceiros={parceiros}
             tiposSeguro={tiposSeguro}
+            templates={templates}
             onSuccess={loadData}
           />
+        </TabsContent>
+
+        <TabsContent value="templates" className="mt-4">
+          <EmailTemplatesManager templates={templates} onTemplatesChange={loadData} />
         </TabsContent>
       </Tabs>
 

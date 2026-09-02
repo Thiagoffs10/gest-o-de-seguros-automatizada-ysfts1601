@@ -171,6 +171,18 @@ export interface CustoFixo {
   updated: string
 }
 
+export interface EmailTemplate {
+  id: string
+  name: string
+  key?: string
+  subject: string
+  body: string
+  type: 'Aniversário' | 'Renovação' | 'Comercial' | 'Personalizado'
+  is_system?: boolean
+  created: string
+  updated: string
+}
+
 export interface Conciliacao {
   id: string
   mes: number

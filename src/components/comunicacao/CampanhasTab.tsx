@@ -1,8 +1,8 @@
 import { useState, useMemo, useEffect } from 'react'
 import { Send, Loader2, Mail, CheckCircle2, XCircle, AlertTriangle } from 'lucide-react'
-import { Client, Policy, Seguradora, Parceiro, TipoSeguro } from '@/types'
+import { Client, Policy, Seguradora, Parceiro, TipoSeguro, EmailTemplate } from '@/types'
 import { sendMassEmail } from '@/services/communications'
-import { EMAIL_TEMPLATES, personalizeTemplate } from '@/lib/constants'
+import { personalizeTemplate } from '@/lib/constants'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -25,6 +25,7 @@ interface Props {
   seguradoras: Seguradora[]
   parceiros: Parceiro[]
   tiposSeguro: TipoSeguro[]
+  templates?: EmailTemplate[]
   onSuccess: () => void
 }
 
@@ -34,6 +35,7 @@ export function CampanhasTab({
   seguradoras,
   parceiros,
   tiposSeguro,
+  templates = [],
   onSuccess,
 }: Props) {
   const { toast } = useToast()
@@ -49,9 +51,7 @@ export function CampanhasTab({
     estado: '',
   })
 
-  const [template, setTemplate] = useState<'aniversario' | 'renovacao' | 'personalizado'>(
-    'aniversario',
-  )
+  const [selectedTemplateId, setSelectedTemplateId] = useState<string>('custom')
   const [customSubject, setCustomSubject] = useState('')
   const [customBody, setCustomBody] = useState('')
   const [fromEmail, setFromEmail] = useState(
@@ -85,7 +85,16 @@ export function CampanhasTab({
       if (filters.eventFilter === 'aniversariantes') {
         if (!c.birth_date) return false
         const currentMonth = new Date().getMonth() + 1
-        if (new Date(c.birth_date).getMonth() + 1 !== currentMonth) return false
+        let bMonth = -1
+        const rawDateOnly = c.birth_date.split('T')[0].split(' ')[0]
+        const parts = rawDateOnly.split('-')
+        if (parts.length >= 2) {
+          bMonth = parseInt(parts[1], 10)
+        }
+        if (bMonth === -1 || isNaN(bMonth)) {
+          bMonth = new Date(c.birth_date).getUTCMonth() + 1
+        }
+        if (bMonth !== currentMonth) return false
       } else if (['renovacao_30', 'renovacao_15', 'renovacao_7'].includes(filters.eventFilter)) {
         const days =
           filters.eventFilter === 'renovacao_7'
@@ -158,6 +167,31 @@ export function CampanhasTab({
     )
   }
 
+  // Auto-selecionar o primeiro template do banco se existir e ainda for custom
+  useEffect(() => {
+    if (selectedTemplateId === 'custom' && templates.length > 0) {
+      const defaultTpl = templates.find((t) => t.key === 'aniversario') || templates[0]
+      if (defaultTpl) {
+        setSelectedTemplateId(defaultTpl.id)
+        setCustomSubject(defaultTpl.subject)
+        setCustomBody(defaultTpl.body)
+      }
+    }
+  }, [templates, selectedTemplateId])
+
+  const handleSelectTemplate = (id: string) => {
+    setSelectedTemplateId(id)
+    if (id === 'custom') {
+      // keep or clear
+    } else {
+      const found = templates.find((t) => t.id === id)
+      if (found) {
+        setCustomSubject(found.subject)
+        setCustomBody(found.body)
+      }
+    }
+  }
+
   const getPersonalizedData = (client: Client) => {
     const clientPolicy = policies.find((p) => p.client === client.id)
     const vars: Record<string, string> = {
@@ -165,16 +199,9 @@ export function CampanhasTab({
       numero_apolice: clientPolicy?.policy_number || '',
       seguradora: clientPolicy?.expand?.seguradora?.nome || clientPolicy?.insurance_company || '',
     }
-    if (template === 'personalizado') {
-      return {
-        subject: personalizeTemplate(customSubject, vars),
-        body: personalizeTemplate(customBody, vars),
-      }
-    }
-    const tpl = EMAIL_TEMPLATES[template]
     return {
-      subject: personalizeTemplate(tpl.subject, vars),
-      body: personalizeTemplate(tpl.body, vars),
+      subject: personalizeTemplate(customSubject, vars),
+      body: personalizeTemplate(customBody, vars),
     }
   }
 
@@ -204,8 +231,7 @@ export function CampanhasTab({
     }
   }
 
-  const displaySubject =
-    template === 'personalizado' ? customSubject : EMAIL_TEMPLATES[template]?.subject || ''
+  const displaySubject = customSubject || 'Mensagem CRED10MIX'
 
   return (
     <div className="space-y-6">
@@ -232,61 +258,73 @@ export function CampanhasTab({
             <CardTitle className="text-base font-bold">2. Escolha o Modelo</CardTitle>
           </CardHeader>
           <CardContent className="space-y-3">
-            {[
-              {
-                id: 'aniversario' as const,
-                label: EMAIL_TEMPLATES.aniversario.name,
-                desc: EMAIL_TEMPLATES.aniversario.subject,
-              },
-              {
-                id: 'renovacao' as const,
-                label: EMAIL_TEMPLATES.renovacao.name,
-                desc: EMAIL_TEMPLATES.renovacao.subject,
-              },
-              {
-                id: 'personalizado' as const,
-                label: 'Modelo Personalizado',
-                desc: 'Crie assunto e mensagem customizados',
-              },
-            ].map((t) => (
+            <div className="space-y-2 max-h-56 overflow-y-auto pr-1">
+              {templates.map((t) => (
+                <button
+                  key={t.id}
+                  type="button"
+                  onClick={() => handleSelectTemplate(t.id)}
+                  className={`w-full text-left p-2.5 rounded-lg border-2 transition-colors ${
+                    selectedTemplateId === t.id
+                      ? 'border-blue-500 bg-blue-50'
+                      : 'border-slate-200 hover:border-slate-300'
+                  }`}
+                >
+                  <div className="flex items-center justify-between">
+                    <span className="font-semibold text-xs text-slate-900">{t.name}</span>
+                    <span className="text-[10px] px-1.5 py-0.5 rounded bg-slate-100 text-slate-600 font-medium">
+                      {t.type || 'Geral'}
+                    </span>
+                  </div>
+                  <p className="text-[11px] text-slate-500 truncate mt-0.5">{t.subject}</p>
+                </button>
+              ))}
+
               <button
-                key={t.id}
                 type="button"
-                onClick={() => setTemplate(t.id)}
-                className={`w-full text-left p-3 rounded-lg border-2 transition-colors ${
-                  template === t.id
+                onClick={() => handleSelectTemplate('custom')}
+                className={`w-full text-left p-2.5 rounded-lg border-2 transition-colors ${
+                  selectedTemplateId === 'custom'
                     ? 'border-blue-500 bg-blue-50'
                     : 'border-slate-200 hover:border-slate-300'
                 }`}
               >
-                <div className="font-semibold text-sm">{t.label}</div>
-                <p className="text-xs text-slate-500 truncate">{t.desc}</p>
+                <div className="font-semibold text-xs text-slate-900">
+                  ✏️ Escrever Mensagem Manual
+                </div>
+                <p className="text-[11px] text-slate-500 truncate mt-0.5">
+                  Digitar assunto e corpo livremente
+                </p>
               </button>
-            ))}
+            </div>
 
-            {template === 'personalizado' && (
-              <div className="p-3 bg-slate-50 rounded-lg border space-y-3 mt-2">
-                <div>
-                  <Label className="text-xs font-semibold">Assunto *</Label>
-                  <Input
-                    value={customSubject}
-                    onChange={(e) => setCustomSubject(e.target.value)}
-                    placeholder="Assunto da campanha"
-                    className="mt-1 bg-white text-xs"
-                  />
-                </div>
-                <div>
-                  <Label className="text-xs font-semibold">Mensagem *</Label>
-                  <Textarea
-                    value={customBody}
-                    onChange={(e) => setCustomBody(e.target.value)}
-                    rows={4}
-                    placeholder="Conteúdo da mensagem..."
-                    className="mt-1 bg-white text-xs"
-                  />
-                </div>
+            <div className="p-3 bg-slate-50 rounded-lg border space-y-2.5 mt-2">
+              <div>
+                <Label className="text-xs font-semibold">Assunto do E-mail *</Label>
+                <Input
+                  value={customSubject}
+                  onChange={(e) => setCustomSubject(e.target.value)}
+                  placeholder="Assunto da campanha"
+                  className="mt-1 bg-white text-xs"
+                />
               </div>
-            )}
+              <div>
+                <Label className="text-xs font-semibold">Corpo da Mensagem *</Label>
+                <Textarea
+                  value={customBody}
+                  onChange={(e) => setCustomBody(e.target.value)}
+                  rows={4}
+                  placeholder="Conteúdo da mensagem..."
+                  className="mt-1 bg-white text-xs"
+                />
+                <p className="text-[10px] text-slate-500 mt-1">
+                  Tags suportadas:{' '}
+                  <code className="bg-slate-200 px-1 rounded">{'{nome_cliente}'}</code>,{' '}
+                  <code className="bg-slate-200 px-1 rounded">{'{numero_apolice}'}</code>,{' '}
+                  <code className="bg-slate-200 px-1 rounded">{'{seguradora}'}</code>
+                </p>
+              </div>
+            </div>
           </CardContent>
         </Card>
 

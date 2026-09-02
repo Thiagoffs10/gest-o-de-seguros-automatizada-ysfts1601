@@ -202,12 +202,16 @@ export default function RemindersPage() {
     const month = getTargetMonthForReminder(rem)
     return clients.filter((c) => {
       if (!c.birth_date) return false
+      let bMonth = -1
       const rawDateOnly = c.birth_date.split('T')[0].split(' ')[0]
       const parts = rawDateOnly.split('-')
       if (parts.length >= 2) {
-        return parseInt(parts[1], 10) === month
+        bMonth = parseInt(parts[1], 10)
       }
-      return new Date(c.birth_date).getUTCMonth() + 1 === month
+      if (bMonth === -1 || isNaN(bMonth)) {
+        bMonth = new Date(c.birth_date).getUTCMonth() + 1
+      }
+      return bMonth === month
     })
   }
 
