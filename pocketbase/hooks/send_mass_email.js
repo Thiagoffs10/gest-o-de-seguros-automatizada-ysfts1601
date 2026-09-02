@@ -4,7 +4,11 @@ routerAdd(
   (e) => {
     const body = e.requestInfo().body || {}
     const recipients = body.recipients || []
-    var verifiedEmailSecret = $secrets.get('VERIFIED_FROM_EMAIL') || $secrets.get('SENDER_EMAIL')
+    var verifiedEmailSecret =
+      $secrets.get('VERIFIED_FROM_EMAIL') ||
+      $os.getenv('VERIFIED_FROM_EMAIL') ||
+      $secrets.get('SENDER_EMAIL') ||
+      $os.getenv('SENDER_EMAIL')
     var defaultSender = verifiedEmailSecret || 'noreply@cred10mix.com.br'
     const fromEmail = body.from || defaultSender
 
@@ -16,7 +20,7 @@ routerAdd(
       'Link para WhatsApp: https://wa.me/5581988653534\n' +
       'Este é um e-mail automático, por favor não responda.'
 
-    var apiKey = $secrets.get('RESEND_API_KEY')
+    var apiKey = $secrets.get('RESEND_API_KEY') || $os.getenv('RESEND_API_KEY')
     if (!apiKey) {
       return e.json(503, {
         error: 'Servico de e-mail nao configurado. Configure a chave RESEND_API_KEY.',

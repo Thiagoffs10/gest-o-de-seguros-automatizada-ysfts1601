@@ -12,7 +12,11 @@ routerAdd(
       return e.badRequestError('Destinatário não informado.')
     }
 
-    var verifiedEmailSecret = $secrets.get('VERIFIED_FROM_EMAIL') || $secrets.get('SENDER_EMAIL')
+    var verifiedEmailSecret =
+      $secrets.get('VERIFIED_FROM_EMAIL') ||
+      $os.getenv('VERIFIED_FROM_EMAIL') ||
+      $secrets.get('SENDER_EMAIL') ||
+      $os.getenv('SENDER_EMAIL')
     var defaultSender = verifiedEmailSecret || 'noreply@cred10mix.com.br'
     const fromEmail = body.from || defaultSender
 
@@ -26,7 +30,7 @@ routerAdd(
 
     var finalEmailBody = (emailBody || '') + mandatoryFooter
 
-    var apiKey = $secrets.get('RESEND_API_KEY')
+    var apiKey = $secrets.get('RESEND_API_KEY') || $os.getenv('RESEND_API_KEY')
     if (!apiKey) {
       return e.json(503, {
         success: false,
@@ -55,12 +59,24 @@ routerAdd(
         timeout: 30,
       })
 
+      $app
+        .logger()
+        .info(
+          'Resend API response',
+          'status',
+          res.statusCode,
+          'body',
+          JSON.stringify(res.json || res.raw),
+        )
+
       if (res.statusCode >= 200 && res.statusCode < 300) {
         emailOk = true
       } else {
         errMsg = 'HTTP ' + res.statusCode
         if (res.json && res.json.message) {
           errMsg = res.json.message
+        } else if (res.raw) {
+          errMsg = String(res.raw)
         }
       }
     } catch (err) {
@@ -93,6 +109,8 @@ routerAdd(
         success: true,
         status: 'Enviado',
         message: 'E-mail enviado com sucesso.',
+        resend_id: res && res.json && res.json.id ? res.json.id : '',
+        resend_response: res ? res.json : null,
       })
     } else {
       $app.logger().error('single email send failed', 'to', to, 'error', errMsg)
@@ -100,6 +118,7 @@ routerAdd(
         success: false,
         status: 'Falhou',
         message: errMsg || 'Falha ao enviar e-mail.',
+        resend_response: res ? res.json : null,
       })
     }
   },
