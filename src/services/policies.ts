@@ -45,6 +45,15 @@ export function preparePolicyPayload(data: Partial<Policy> & Record<string, any>
     valor_repasse: Math.round(rawRepasse * 100) / 100,
   }
 
+  if ('forma_pagamento' in data) {
+    payload.forma_pagamento = data.forma_pagamento ? String(data.forma_pagamento).trim() : ''
+  }
+  if ('parcelas' in data) {
+    const rawP = (data as Record<string, any>).parcelas
+    const pNum = rawP != null && rawP !== '' ? Math.round(Number(rawP)) : null
+    payload.parcelas = pNum && pNum > 0 ? pNum : null
+  }
+
   if ('placa' in data) payload.placa = data.placa ? String(data.placa).trim() : ''
   if ('chassi' in data) payload.chassi = data.chassi ? String(data.chassi).trim() : ''
   if ('modelo_veiculo' in data)

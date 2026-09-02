@@ -330,6 +330,14 @@ export default function PolicyDetail() {
             </p>
           </div>
           <div>
+            <p className="text-xs text-slate-500">Forma de Pagamento</p>
+            <p className="font-semibold">{policy.forma_pagamento || '-'}</p>
+          </div>
+          <div>
+            <p className="text-xs text-slate-500">Parcelamento</p>
+            <p className="font-semibold">{policy.parcelas ? `${policy.parcelas}x` : '-'}</p>
+          </div>
+          <div>
             <p className="text-xs text-slate-500">Comissão (%)</p>
             <p className="font-semibold">{policy.commission_percent || 0}%</p>
           </div>

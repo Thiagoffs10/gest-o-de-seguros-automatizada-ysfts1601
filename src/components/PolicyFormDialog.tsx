@@ -41,6 +41,8 @@ const DEFAULT_FORM = {
   modelo_veiculo: '',
   valor_bruto: 0,
   valor_liquido: 0,
+  forma_pagamento: '',
+  parcelas: '',
   commission_percent: 0,
   commission: 0,
   iss: 0,
@@ -133,6 +135,8 @@ export function PolicyFormDialog({
         modelo_veiculo: initialData.modelo_veiculo || '',
         valor_bruto: vBruto,
         valor_liquido: vLiquido,
+        forma_pagamento: initialData.forma_pagamento || '',
+        parcelas: initialData.parcelas != null ? initialData.parcelas : '',
         commission_percent: commPercent,
         commission: commVal,
         iss: issVal,
@@ -349,6 +353,39 @@ export function PolicyFormDialog({
                 onChange={(e) => {
                   const num = parseCurrencyInput(e.target.value)
                   set('valor_liquido', num)
+                }}
+              />
+            </div>
+          </div>
+
+          <div className="grid grid-cols-2 gap-2">
+            <div>
+              <Label className="text-xs font-semibold">Forma de pagamento</Label>
+              <Select
+                value={form.forma_pagamento || ''}
+                onValueChange={(v) => set('forma_pagamento', v)}
+              >
+                <SelectTrigger>
+                  <SelectValue placeholder="Selecione" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="Crédito">Crédito</SelectItem>
+                  <SelectItem value="Débito em conta">Débito em conta</SelectItem>
+                  <SelectItem value="Boleto">Boleto</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+            <div>
+              <Label className="text-xs font-semibold">Em quantas vezes</Label>
+              <Input
+                type="number"
+                min="1"
+                step="1"
+                placeholder="Ex: 1, 6, 10, 12"
+                value={form.parcelas ?? ''}
+                onChange={(e) => {
+                  const val = e.target.value === '' ? '' : parseInt(e.target.value, 10)
+                  set('parcelas', isNaN(val as number) ? '' : val)
                 }}
               />
             </div>

@@ -93,7 +93,8 @@ const FIELD_LABELS: Record<string, string> = {
   data: 'Data',
   data_pagamento: 'Data Pagamento',
   pago: 'Pago?',
-  forma_pagamento: 'Forma Pagamento',
+  forma_pagamento: 'Forma de Pagamento',
+  parcelas: 'Em quantas vezes (Parcelas)',
   recorrente: 'Recorrente?',
   frequencia_recorrencia: 'Frequência',
   ativo: 'Ativo?',
@@ -188,7 +189,8 @@ export function exportBackupToExcel(data: BackupData, filename: string): void {
       else if (PERCENT_FIELDS.has(fn)) type = 'percent'
       else if (DATE_FIELDS.has(fn))
         type = 'text' // Usamos formatação visual de data
-      else if (fn.endsWith('_code') || fn === 'mes' || fn === 'ano') type = 'number'
+      else if (fn.endsWith('_code') || fn === 'mes' || fn === 'ano' || fn === 'parcelas')
+        type = 'number'
 
       return {
         header: FIELD_LABELS[fn] || fn,

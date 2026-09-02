@@ -1,5 +1,5 @@
 {
-  "generatedAt": "2026-08-31T17:34:41.135Z",
+  "generatedAt": "2026-09-02T00:49:36.805Z",
   "collections": [
     {
       "name": "users",
@@ -424,6 +424,19 @@
         {
           "name": "motivo_cancelamento",
           "type": "text",
+          "required": false,
+          "system": false
+        },
+        {
+          "name": "forma_pagamento",
+          "type": "select",
+          "required": false,
+          "system": false,
+          "selectValues": ["Crédito", "Débito em conta", "Boleto"]
+        },
+        {
+          "name": "parcelas",
+          "type": "number",
           "required": false,
           "system": false
         }

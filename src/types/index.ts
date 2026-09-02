@@ -75,6 +75,8 @@ export interface Policy {
   premium_amount: number
   valor_bruto?: number
   valor_liquido?: number
+  forma_pagamento?: 'Crédito' | 'Débito em conta' | 'Boleto' | string
+  parcelas?: number
   placa?: string
   chassi?: string
   modelo_veiculo?: string
