@@ -1,6 +1,7 @@
 import { downloadMultiSheetXlsx, ExcelSheet, ExcelColumn } from '@/lib/excel-export'
 import { BackupData } from '@/services/backup'
 import { formatDateDisplay } from '@/lib/utils'
+import { maskDocument, formatClientDocument } from '@/lib/document-validators'
 
 const COLLECTION_TITLES: Record<string, string> = {
   users: 'Usuários',
@@ -14,10 +15,14 @@ const COLLECTION_TITLES: Record<string, string> = {
   custos_fixos: 'Custos Fixos',
   tipos_seguro: 'Tipos de Seguro',
   conciliacoes: 'Conciliações',
+  parceiro_pagamentos: 'Pagamentos Parceiros',
+  parceiro_debitos: 'Débitos Parceiros',
 }
 
 const FIELD_LABELS: Record<string, string> = {
   id: 'ID',
+  client_name: 'Nome do Cliente',
+  client_cpf: 'CPF / CNPJ do Cliente',
   name: 'Nome',
   nome: 'Nome',
   email: 'E-mail',
@@ -42,9 +47,9 @@ const FIELD_LABELS: Record<string, string> = {
   coverage_type: 'Ramo / Cobertura',
   tipo_de_seguro: 'Tipo de Seguro',
   insurance_company: 'Seguradora (Texto)',
-  seguradora: 'ID Seguradora',
-  client: 'ID Cliente',
-  parceiro: 'ID Parceiro',
+  seguradora: 'Seguradora',
+  client: 'Cliente',
+  parceiro: 'Parceiro',
   premium_amount: 'Prêmio / Líquido',
   valor_bruto: 'Valor Bruto (R$)',
   valor_liquido: 'Valor Líquido (R$)',
@@ -104,6 +109,15 @@ const FIELD_LABELS: Record<string, string> = {
   usuario_fechamento: 'Usuário Fechamento',
   resumo: 'Resumo',
   pendencias: 'Pendências',
+  total_comissoes: 'Total Comissões (R$)',
+  total_debitos: 'Total Débitos (R$)',
+  taxa_pix: 'Taxa PIX (R$)',
+  policies_ids: 'IDs das Apólices',
+  detalhes_debitos: 'Detalhes dos Débitos',
+  usuario_nome: 'Nome do Usuário',
+  usuario_id: 'Usuário',
+  pagamento: 'ID Pagamento',
+  previous_policy: 'Apólice Anterior',
   created: 'Criado em',
   updated: 'Atualizado em',
 }
@@ -141,7 +155,67 @@ const DATE_FIELDS = new Set([
 export function exportBackupToExcel(data: BackupData, filename: string): void {
   const sheets: ExcelSheet[] = []
 
-  // 1. Aba Resumo
+  // 1. Mapeamento auxiliar de entidades para substituir IDs técnicos por Nomes/Valores legíveis
+  const clientsMap = new Map<string, { name: string; cpf: string }>()
+  const seguradorasMap = new Map<string, string>()
+  const parceirosMap = new Map<string, string>()
+  const usersMap = new Map<string, string>()
+  const policiesMap = new Map<string, { number: string; clientId: string }>()
+
+  const rawClients = data.records['clients'] || []
+  for (const c of rawClients) {
+    if (c.id && typeof c.id === 'string') {
+      const doc =
+        formatClientDocument({
+          tipo_pessoa: c.tipo_pessoa ? String(c.tipo_pessoa) : undefined,
+          cpf: c.cpf ? String(c.cpf) : undefined,
+          cnpj: c.cnpj ? String(c.cnpj) : undefined,
+        }) || (c.cpf ? maskDocument(String(c.cpf)) : c.cnpj ? maskDocument(String(c.cnpj)) : '')
+
+      clientsMap.set(c.id, {
+        name: (c.name ? String(c.name) : c.nome ? String(c.nome) : '') || 'Cliente sem nome',
+        cpf: doc || '—',
+      })
+    }
+  }
+  const rawSeguradoras = data.records['seguradoras'] || []
+  for (const s of rawSeguradoras) {
+    if (s.id && typeof s.id === 'string') {
+      seguradorasMap.set(
+        s.id,
+        (s.nome ? String(s.nome) : '') || (s.name ? String(s.name) : '') || s.id,
+      )
+    }
+  }
+
+  const rawParceiros = data.records['parceiros'] || []
+  for (const p of rawParceiros) {
+    if (p.id && typeof p.id === 'string') {
+      parceirosMap.set(
+        p.id,
+        (p.nome ? String(p.nome) : '') || (p.name ? String(p.name) : '') || p.id,
+      )
+    }
+  }
+
+  const rawUsers = data.records['users'] || []
+  for (const u of rawUsers) {
+    if (u.id && typeof u.id === 'string') {
+      usersMap.set(u.id, (u.name ? String(u.name) : '') || (u.email ? String(u.email) : '') || u.id)
+    }
+  }
+
+  const rawPolicies = data.records['policies'] || []
+  for (const pol of rawPolicies) {
+    if (pol.id && typeof pol.id === 'string') {
+      policiesMap.set(pol.id, {
+        number: pol.policy_number ? String(pol.policy_number) : pol.id,
+        clientId: pol.client ? String(pol.client) : '',
+      })
+    }
+  }
+
+  // 2. Aba Resumo
   const summaryColumns: ExcelColumn[] = [
     { header: 'Módulo / Tabela', type: 'text' },
     { header: 'Identificador Interno', type: 'text' },
@@ -160,25 +234,54 @@ export function exportBackupToExcel(data: BackupData, filename: string): void {
     rows: summaryRows,
   })
 
-  // 2. Abas individuais por coleção
+  // 3. Abas individuais por coleção
   for (const colName of colNames) {
     const records = data.records[colName] || []
     const schema = data.schema[colName]
 
     // Definir ordem de colunas a partir do schema + campos comuns
-    const fieldNames: string[] = ['id']
+    const rawFieldNames: string[] = []
     if (schema?.fields) {
       for (const f of schema.fields) {
-        if (f.name && !fieldNames.includes(f.name) && f.name !== 'id') {
-          fieldNames.push(f.name)
+        if (
+          f.name &&
+          !rawFieldNames.includes(f.name) &&
+          f.name !== 'passwordHash' &&
+          f.name !== 'tokenKey'
+        ) {
+          rawFieldNames.push(f.name)
         }
       }
     }
-    // Adicionar outros campos que apareçam nos registros
     for (const r of records) {
       for (const k of Object.keys(r)) {
-        if (!fieldNames.includes(k) && k !== 'passwordHash' && k !== 'tokenKey') {
-          fieldNames.push(k)
+        if (!rawFieldNames.includes(k) && k !== 'passwordHash' && k !== 'tokenKey') {
+          rawFieldNames.push(k)
+        }
+      }
+    }
+
+    // Regra OBRIGATÓRIA: Em toda linha de informações, garantir a exibição clara de Nome e CPF/CNPJ do Cliente
+    const fieldNames: string[] = []
+
+    if (colName === 'clients') {
+      // Para clients, colocar nome e cpf logo no início
+      if (rawFieldNames.includes('name')) fieldNames.push('name')
+      else if (rawFieldNames.includes('nome')) fieldNames.push('nome')
+      if (rawFieldNames.includes('cpf')) fieldNames.push('cpf')
+      if (rawFieldNames.includes('cnpj')) fieldNames.push('cnpj')
+
+      for (const fn of rawFieldNames) {
+        if (!fieldNames.includes(fn)) fieldNames.push(fn)
+      }
+    } else {
+      // Inserir colunas virtuais 'client_name' e 'client_cpf' nas primeiras posições de todas as coleções
+      fieldNames.push('client_name')
+      fieldNames.push('client_cpf')
+
+      for (const fn of rawFieldNames) {
+        if (!fieldNames.includes(fn)) {
+          fieldNames.push(fn)
         }
       }
     }
@@ -188,7 +291,7 @@ export function exportBackupToExcel(data: BackupData, filename: string): void {
       if (CURRENCY_FIELDS.has(fn)) type = 'currency'
       else if (PERCENT_FIELDS.has(fn)) type = 'percent'
       else if (DATE_FIELDS.has(fn))
-        type = 'text' // Usamos formatação visual de data
+        type = 'text' // Usamos formatação visual DD/MM/YYYY
       else if (fn.endsWith('_code') || fn === 'mes' || fn === 'ano' || fn === 'parcelas')
         type = 'number'
 
@@ -199,9 +302,59 @@ export function exportBackupToExcel(data: BackupData, filename: string): void {
     })
 
     const rows = records.map((rec) => {
+      // Resolver cliente para a linha atual
+      let lineClientId = ''
+      if (colName === 'clients') {
+        lineClientId = String(rec.id || '')
+      } else if (rec.client && typeof rec.client === 'string') {
+        lineClientId = rec.client
+      } else if (rec.policy && typeof rec.policy === 'string') {
+        const polInfo = policiesMap.get(rec.policy)
+        if (polInfo?.clientId) lineClientId = polInfo.clientId
+      }
+
+      const clientInfo = lineClientId ? clientsMap.get(lineClientId) : undefined
+
       return fieldNames.map((fn) => {
+        // Colunas virtuais do cliente
+        if (fn === 'client_name') {
+          return clientInfo?.name || '—'
+        }
+        if (fn === 'client_cpf') {
+          return clientInfo?.cpf || '—'
+        }
+
         const val = rec[fn]
+
+        // Substituição inteligente de relações/IDs técnicos
+        if (fn === 'client' && typeof val === 'string' && val.trim()) {
+          const c = clientsMap.get(val)
+          return c ? `${c.name} (${c.cpf || 'Sem doc'})` : val
+        }
+        if (fn === 'policy' && typeof val === 'string' && val.trim()) {
+          const p = policiesMap.get(val)
+          return p ? `Apólice Nº ${p.number}` : val
+        }
+        if (fn === 'seguradora' && typeof val === 'string' && val.trim()) {
+          return seguradorasMap.get(val) || val
+        }
+        if (fn === 'parceiro' && typeof val === 'string' && val.trim()) {
+          return parceirosMap.get(val) || val
+        }
+        if ((fn === 'usuario_id' || fn === 'user') && typeof val === 'string' && val.trim()) {
+          return usersMap.get(val) || val
+        }
+        if (fn === 'previous_policy' && typeof val === 'string' && val.trim()) {
+          const p = policiesMap.get(val)
+          return p ? `Apólice Nº ${p.number}` : val
+        }
+
         if (val === null || val === undefined || val === '') return ''
+
+        // Formatação de CPF / CNPJ na tabela de clientes
+        if ((fn === 'cpf' || fn === 'cnpj') && typeof val === 'string' && val.trim()) {
+          return maskDocument(val)
+        }
 
         // Arquivo
         if (typeof val === 'object' && val !== null && 'filename' in val) {

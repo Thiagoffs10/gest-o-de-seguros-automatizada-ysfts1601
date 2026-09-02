@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react'
-import { Plus, CheckCircle, Trash2, CheckCheck } from 'lucide-react'
+import { Plus, CheckCircle, Trash2, CheckCheck, Mail, Pencil, Loader2, Send } from 'lucide-react'
 import {
   getReminders,
   createReminder,
@@ -8,6 +8,7 @@ import {
   completeAllPendingReminders,
 } from '@/services/reminders'
 import { getClients } from '@/services/clients'
+import { sendSingleEmail } from '@/services/communications'
 import { Reminder, Client } from '@/types'
 import { Card } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
@@ -53,6 +54,23 @@ export default function RemindersPage() {
   const [completingAll, setCompletingAll] = useState(false)
   const [deleteTarget, setDeleteTarget] = useState<Reminder | null>(null)
   const [loading, setLoading] = useState(true)
+  const [sendingEmailId, setSendingEmailId] = useState<string | null>(null)
+
+  // Estados para edição do lembrete
+  const [editingReminder, setEditingReminder] = useState<Reminder | null>(null)
+  const [editFormData, setEditFormData] = useState({
+    type: 'Renovação' as 'Renovação' | 'Aniversário' | 'Customizado',
+    client: '',
+    date: '',
+    message: '',
+  })
+  const [savingEdit, setSavingEdit] = useState(false)
+
+  // Estados para envio rápido com confirmação/edição de assunto
+  const [emailModalReminder, setEmailModalReminder] = useState<Reminder | null>(null)
+  const [emailSubject, setEmailSubject] = useState('')
+  const [emailBody, setEmailBody] = useState('')
+
   const [formData, setFormData] = useState({
     type: 'Renovação' as const,
     client: '',
@@ -94,6 +112,112 @@ export default function RemindersPage() {
       loadData()
     } catch {
       /* intentionally ignored */
+    }
+  }
+
+  const handleOpenEdit = (rem: Reminder) => {
+    setEditingReminder(rem)
+    setEditFormData({
+      type: rem.type,
+      client: rem.client || '',
+      date: rem.date ? rem.date.split('T')[0] : new Date().toISOString().split('T')[0],
+      message: rem.message || '',
+    })
+  }
+
+  const handleSaveEdit = async (e: React.FormEvent) => {
+    e.preventDefault()
+    if (!editingReminder) return
+    setSavingEdit(true)
+    try {
+      await updateReminder(editingReminder.id, {
+        type: editFormData.type,
+        client: editFormData.client || undefined,
+        date: editFormData.date,
+        message: editFormData.message,
+      })
+      toast({ title: 'Lembrete atualizado com sucesso!' })
+      setEditingReminder(null)
+      loadData()
+    } catch (err: any) {
+      toast({
+        title: 'Erro ao atualizar lembrete',
+        description: err.message,
+        variant: 'destructive',
+      })
+    } finally {
+      setSavingEdit(false)
+    }
+  }
+
+  const handleOpenEmailModal = (rem: Reminder) => {
+    const client = rem.expand?.client || clients.find((c) => c.id === rem.client)
+    if (!client) {
+      toast({
+        title: 'Cliente não vinculado',
+        description: 'Vincule um cliente a este lembrete antes de enviar e-mail.',
+        variant: 'destructive',
+      })
+      return
+    }
+    if (!client.email || !client.email.trim()) {
+      toast({
+        title: 'Cliente sem e-mail',
+        description: `O cliente ${client.name} não possui e-mail cadastrado.`,
+        variant: 'destructive',
+      })
+      return
+    }
+
+    const defaultSubject =
+      rem.type === 'Renovação'
+        ? `Aviso de Renovação de Seguro - CRED10MIX`
+        : rem.type === 'Aniversário'
+          ? `Feliz Aniversário! - CRED10MIX`
+          : `Lembrete Importante - CRED10MIX`
+
+    setEmailModalReminder(rem)
+    setEmailSubject(defaultSubject)
+    setEmailBody(rem.message || '')
+  }
+
+  const handleConfirmSendEmail = async () => {
+    if (!emailModalReminder) return
+    const rem = emailModalReminder
+    const client = rem.expand?.client || clients.find((c) => c.id === rem.client)
+    if (!client || !client.email) return
+
+    setSendingEmailId(rem.id)
+    try {
+      const res = await sendSingleEmail({
+        to: client.email,
+        client_id: client.id,
+        subject: emailSubject || 'Lembrete CRED10MIX',
+        body: emailBody || rem.message || '',
+      })
+
+      if (res.success) {
+        toast({
+          title: 'E-mail enviado com sucesso!',
+          description: `Enviado para ${client.email}`,
+        })
+        setEmailModalReminder(null)
+        loadData()
+      } else {
+        toast({
+          title: 'Falha no envio de e-mail',
+          description: res.message || 'Verifique a configuração do serviço de e-mail.',
+          variant: 'destructive',
+        })
+      }
+    } catch (err: any) {
+      toast({
+        title: 'Erro ao enviar e-mail',
+        description: err?.message || 'Erro inesperado.',
+        variant: 'destructive',
+      })
+    } finally {
+      setSendingEmailId(null)
     }
   }
 
@@ -196,6 +320,40 @@ export default function RemindersPage() {
                     </td>
                     <td className="p-3.5 text-right">
                       <div className="flex items-center justify-end gap-1">
+                        {/* Botão Enviar E-mail */}
+                        {can('communications', 'create') && (
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            className="text-blue-600 hover:text-blue-700 hover:bg-blue-50"
+                            title="Enviar e-mail para o cliente vinculado"
+                            onClick={() => handleOpenEmailModal(r)}
+                            disabled={sendingEmailId === r.id}
+                          >
+                            {sendingEmailId === r.id ? (
+                              <Loader2 className="w-4 h-4 mr-1 animate-spin" />
+                            ) : (
+                              <Mail className="w-4 h-4 mr-1" />
+                            )}
+                            <span className="hidden md:inline">Enviar e-mail</span>
+                          </Button>
+                        )}
+
+                        {/* Botão Editar */}
+                        {can('reminders', 'update') && (
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            className="text-slate-600 hover:text-slate-900 hover:bg-slate-100"
+                            title="Editar mensagem ou dados do lembrete"
+                            onClick={() => handleOpenEdit(r)}
+                          >
+                            <Pencil className="w-4 h-4 mr-1" />
+                            <span className="hidden md:inline">Editar</span>
+                          </Button>
+                        )}
+
+                        {/* Botão Concluir / Reabrir */}
                         {can('reminders', 'update') && (
                           <Button variant="ghost" size="sm" onClick={() => handleToggleSent(r)}>
                             <CheckCircle
@@ -204,11 +362,14 @@ export default function RemindersPage() {
                             {r.sent ? 'Reabrir' : 'Concluir'}
                           </Button>
                         )}
+
+                        {/* Botão Excluir */}
                         {can('reminders', 'delete') && (
                           <Button
                             variant="ghost"
                             size="sm"
-                            className="text-red-600"
+                            className="text-red-600 hover:bg-red-50"
+                            title="Excluir lembrete"
                             onClick={() => setDeleteTarget(r)}
                           >
                             <Trash2 className="w-4 h-4" />
@@ -224,6 +385,7 @@ export default function RemindersPage() {
         </div>
       </Card>
 
+      {/* Modal Criar Lembrete */}
       <Dialog open={isModalOpen} onOpenChange={setIsModalOpen}>
         <DialogContent>
           <DialogHeader>
@@ -288,6 +450,169 @@ export default function RemindersPage() {
               </Button>
             </DialogFooter>
           </form>
+        </DialogContent>
+      </Dialog>
+
+      {/* Modal Editar Lembrete */}
+      <Dialog open={!!editingReminder} onOpenChange={(open) => !open && setEditingReminder(null)}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Editar Lembrete</DialogTitle>
+          </DialogHeader>
+          <form onSubmit={handleSaveEdit} className="space-y-3 pt-2">
+            <div>
+              <Label>Tipo</Label>
+              <Select
+                value={editFormData.type}
+                onValueChange={(val: any) => setEditFormData({ ...editFormData, type: val })}
+              >
+                <SelectTrigger>
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="Renovação">Renovação</SelectItem>
+                  <SelectItem value="Aniversário">Aniversário</SelectItem>
+                  <SelectItem value="Customizado">Customizado</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+            <div>
+              <Label>Cliente Vinculado (opcional)</Label>
+              <Select
+                value={editFormData.client}
+                onValueChange={(val) =>
+                  setEditFormData({ ...editFormData, client: val === '_none' ? '' : val })
+                }
+              >
+                <SelectTrigger>
+                  <SelectValue placeholder="Nenhum (Lembrete Geral)" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="_none">Nenhum (Lembrete Geral)</SelectItem>
+                  {clients.map((c) => (
+                    <SelectItem key={c.id} value={c.id}>
+                      {c.name}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+            <div>
+              <Label>Data do Lembrete</Label>
+              <Input
+                type="date"
+                value={editFormData.date}
+                onChange={(e) => setEditFormData({ ...editFormData, date: e.target.value })}
+              />
+            </div>
+            <div>
+              <Label>Mensagem / Observação</Label>
+              <Textarea
+                rows={4}
+                value={editFormData.message}
+                onChange={(e) => setEditFormData({ ...editFormData, message: e.target.value })}
+              />
+            </div>
+            <DialogFooter>
+              <Button
+                type="button"
+                variant="outline"
+                disabled={savingEdit}
+                onClick={() => setEditingReminder(null)}
+              >
+                Cancelar
+              </Button>
+              <Button type="submit" className="bg-blue-600" disabled={savingEdit}>
+                {savingEdit ? (
+                  <>
+                    <Loader2 className="w-4 h-4 mr-2 animate-spin" /> Salvando...
+                  </>
+                ) : (
+                  'Salvar Alterações'
+                )}
+              </Button>
+            </DialogFooter>
+          </form>
+        </DialogContent>
+      </Dialog>
+
+      {/* Modal Enviar E-mail do Lembrete */}
+      <Dialog
+        open={!!emailModalReminder}
+        onOpenChange={(open) => !open && setEmailModalReminder(null)}
+      >
+        <DialogContent className="max-w-lg">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <Mail className="w-5 h-5 text-blue-600" />
+              Enviar E-mail do Lembrete
+            </DialogTitle>
+          </DialogHeader>
+          <div className="space-y-3 pt-2">
+            <div className="bg-slate-50 p-3 rounded-lg border text-xs space-y-1">
+              <p>
+                <strong>Destinatário:</strong>{' '}
+                {emailModalReminder?.expand?.client?.name ||
+                  clients.find((c) => c.id === emailModalReminder?.client)?.name ||
+                  'Cliente'}
+              </p>
+              <p className="text-slate-600">
+                <strong>E-mail:</strong>{' '}
+                {emailModalReminder?.expand?.client?.email ||
+                  clients.find((c) => c.id === emailModalReminder?.client)?.email ||
+                  '—'}
+              </p>
+            </div>
+
+            <div>
+              <Label className="text-xs font-semibold">Assunto do E-mail</Label>
+              <Input
+                value={emailSubject}
+                onChange={(e) => setEmailSubject(e.target.value)}
+                placeholder="Assunto da mensagem..."
+                className="mt-1 text-xs"
+              />
+            </div>
+
+            <div>
+              <Label className="text-xs font-semibold">Mensagem (Corpo do E-mail)</Label>
+              <Textarea
+                rows={5}
+                value={emailBody}
+                onChange={(e) => setEmailBody(e.target.value)}
+                placeholder="Corpo do e-mail..."
+                className="mt-1 text-xs"
+              />
+            </div>
+          </div>
+          <DialogFooter>
+            <Button
+              type="button"
+              variant="outline"
+              disabled={!!sendingEmailId}
+              onClick={() => setEmailModalReminder(null)}
+            >
+              Cancelar
+            </Button>
+            <Button
+              type="button"
+              className="bg-blue-600 hover:bg-blue-700"
+              disabled={!!sendingEmailId}
+              onClick={handleConfirmSendEmail}
+            >
+              {sendingEmailId ? (
+                <>
+                  <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                  Enviando...
+                </>
+              ) : (
+                <>
+                  <Send className="w-4 h-4 mr-2" />
+                  Enviar E-mail Agora
+                </>
+              )}
+            </Button>
+          </DialogFooter>
         </DialogContent>
       </Dialog>
 
