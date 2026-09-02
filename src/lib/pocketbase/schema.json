@@ -1,5 +1,5 @@
 {
-  "generatedAt": "2026-09-02T18:47:26.412Z",
+  "generatedAt": "2026-09-02T19:09:22.891Z",
   "collections": [
     {
       "name": "users",
@@ -1240,6 +1240,71 @@
         "CREATE INDEX idx_parceiro_debitos_parceiro ON parceiro_debitos (parceiro)",
         "CREATE INDEX idx_parceiro_debitos_status ON parceiro_debitos (status)"
       ]
+    },
+    {
+      "name": "email_templates",
+      "type": "base",
+      "apiRules": {
+        "list": "@request.auth.id != ''",
+        "view": "@request.auth.id != ''",
+        "create": "@request.auth.id != ''",
+        "update": "@request.auth.id != ''",
+        "delete": "@request.auth.id != ''"
+      },
+      "fields": [
+        {
+          "name": "name",
+          "type": "text",
+          "required": true,
+          "system": false
+        },
+        {
+          "name": "key",
+          "type": "text",
+          "required": false,
+          "system": false
+        },
+        {
+          "name": "subject",
+          "type": "text",
+          "required": true,
+          "system": false
+        },
+        {
+          "name": "body",
+          "type": "text",
+          "required": true,
+          "system": false
+        },
+        {
+          "name": "type",
+          "type": "select",
+          "required": false,
+          "system": false,
+          "selectValues": ["Aniversário", "Renovação", "Comercial", "Personalizado"]
+        },
+        {
+          "name": "is_system",
+          "type": "bool",
+          "required": false,
+          "system": false
+        },
+        {
+          "name": "created",
+          "type": "autodate",
+          "required": false,
+          "system": false,
+          "autodateTriggers": ["onCreate"]
+        },
+        {
+          "name": "updated",
+          "type": "autodate",
+          "required": false,
+          "system": false,
+          "autodateTriggers": ["onCreate", "onUpdate"]
+        }
+      ],
+      "indexes": ["CREATE UNIQUE INDEX idx_email_templates_name ON email_templates (name)"]
     }
   ]
 }
