@@ -55,7 +55,7 @@ export function CampanhasTab({
   const [customSubject, setCustomSubject] = useState('')
   const [customBody, setCustomBody] = useState('')
   const [fromEmail, setFromEmail] = useState(
-    import.meta.env.VITE_SENDER_EMAIL || 'noreply@cred10mix.com.br',
+    import.meta.env.VITE_SENDER_EMAIL || 'CRED10MIX <noreply@cred10mix.com.br>',
   )
   const [selectedClientIds, setSelectedClientIds] = useState<string[]>([])
   const [showConfirm, setShowConfirm] = useState(false)
@@ -296,15 +296,15 @@ export function CampanhasTab({
           </CardHeader>
           <CardContent className="space-y-4">
             <div>
-              <Label className="text-xs font-semibold text-slate-700">E-mail do Remetente</Label>
+              <Label className="text-xs font-semibold text-slate-700">Remetente</Label>
               <Input
                 value={fromEmail}
                 onChange={(e) => setFromEmail(e.target.value)}
-                placeholder="noreply@cred10mix.com.br"
+                placeholder="CRED10MIX <noreply@cred10mix.com.br>"
                 className="mt-1 bg-white text-sm"
               />
               <p className="text-[11px] text-slate-500 mt-1">
-                Padrão: noreply@cred10mix.com.br (domínio verificado no Resend).
+                Padrão oficial com alta entregabilidade: CRED10MIX &lt;noreply@cred10mix.com.br&gt;.
               </p>
             </div>
 

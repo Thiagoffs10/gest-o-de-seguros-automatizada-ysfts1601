@@ -41,9 +41,9 @@ const STEPS = [
   },
   {
     icon: Mail,
-    title: 'Remetente padrão (noreply@cred10mix.com.br)',
+    title: 'Remetente padrão (CRED10MIX <noreply@cred10mix.com.br>)',
     description:
-      'Com o domínio cred10mix.com.br verificado no Resend, todos os e-mails são disparados através de noreply@cred10mix.com.br. O segredo VERIFIED_FROM_EMAIL já está configurado com esse endereço oficial.',
+      'Com o domínio cred10mix.com.br verificado no Resend, todos os e-mails são disparados através do remetente amigável oficial CRED10MIX <noreply@cred10mix.com.br> para máxima entregabilidade.',
   },
   {
     icon: Save,

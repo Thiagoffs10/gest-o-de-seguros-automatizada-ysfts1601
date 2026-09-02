@@ -60,33 +60,33 @@ routerAdd('POST', '/backend/v1/auth/request-password-reset', (e) => {
   }
 
   var apiKey = $secrets.get('RESEND_API_KEY')
-  var verifiedSender =
+  var rawSender =
     $secrets.get('VERIFIED_FROM_EMAIL') ||
     $secrets.get('SENDER_EMAIL') ||
     'noreply@cred10mix.com.br'
+  var verifiedSender = 'CRED10MIX <' + rawSender.replace(/<|>/g, '').trim() + '>'
 
   if (apiKey) {
     try {
-      var emailSubject = 'Recuperação de Senha - CRED10MIX Corretora de Seguros'
+      var emailSubject = 'Redefinição de senha de acesso à CRED10MIX'
       var mandatoryFooter =
         '\n\n---\n' +
         'Acesse nosso site: www.cred10mix.com.br\n' +
         'Siga-nos no Instagram: @cred10mix\n' +
-        'Qualquer contato deve ser feito via WhatsApp: 81 98865-3534 (Thiago Souza)\n' +
-        'Link para WhatsApp: https://wa.me/5581988653534\n' +
-        'Este é um e-mail automático, por favor não responda.'
+        'Qualquer contato deve ser feito via WhatsApp: 81 98865-3534 (Thiago Souza) - https://wa.me/5581988653534\n' +
+        'Este é um e-mail automático e não monitorado. Por favor, realize todo contato via WhatsApp.'
 
       var emailText =
-        'Olá ' +
-        (userRecord.getString('name') || 'Usuário') +
-        ',\n\n' +
-        'Recebemos uma solicitação para redefinir a senha da sua conta no sistema CRED10MIX Corretora de Seguros.\n\n' +
-        'Para criar uma nova senha, clique no link abaixo ou copie e cole no seu navegador:\n' +
+        'Olá, ' +
+        (userRecord.getString('name') || 'usuário') +
+        '!\n\n' +
+        'Recebemos sua solicitação para criar uma nova senha de acesso à CRED10MIX Corretora de Seguros.\n\n' +
+        'Acesse o link seguro a seguir para definir sua nova senha:\n' +
         resetLink +
         '\n\n' +
-        'Este link é válido por 1 hora. Se você não solicitou a alteração de senha, ignore esta mensagem.\n\n' +
+        'Por segurança, o link expira em 1 hora. Caso não tenha solicitado, pode desconsiderar esta mensagem.\n\n' +
         'Atenciosamente,\n' +
-        'CRED10MIX Corretora de Seguros' +
+        'Equipe CRED10MIX' +
         mandatoryFooter
 
       $http.send({

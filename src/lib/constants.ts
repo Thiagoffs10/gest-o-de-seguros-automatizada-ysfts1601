@@ -107,13 +107,13 @@ export function buildFilterString(filters: any): string {
 export const EMAIL_TEMPLATES: Record<string, { name: string; subject: string; body: string }> = {
   aniversario: {
     name: 'Feliz Aniversário',
-    subject: 'Parabéns pelo seu dia, ${nome_cliente}!',
-    body: 'Olá ${nome_cliente},\n\nDesejamos a você um feliz aniversário! Muita saúde, paz e realizações.\n\nAgradecemos a confiança em nossos serviços.\n\nAtenciosamente,\nCRED10MIX Seguros',
+    subject: 'Feliz aniversário, ${nome_cliente}! 🎉',
+    body: 'Olá, ${nome_cliente}!\n\nDesejamos a você um feliz aniversário com muita saúde, paz e conquistas!\n\nAgradecemos pela parceria e por confiar na CRED10MIX para cuidar da sua proteção.\n\nAtenciosamente,\nEquipe CRED10MIX',
   },
   renovacao: {
     name: 'Lembrete de Renovação',
-    subject: 'Sua apólice nº ${numero_apolice} está próxima do vencimento',
-    body: 'Olá ${nome_cliente},\n\nLembramos que a sua apólice nº ${numero_apolice} vencerá em breve.\n\nEntre em contato conosco para renovar com as melhores condições.\n\nAtenciosamente,\nCRED10MIX Seguros',
+    subject: 'Sua apólice nº ${numero_apolice} vence em breve',
+    body: 'Olá, ${nome_cliente}!\n\nLembramos que a sua apólice nº ${numero_apolice} está próxima da data de renovação.\n\nFale conosco para garantir a continuidade da sua proteção com as melhores condições.\n\nAtenciosamente,\nEquipe CRED10MIX',
   },
   personalizado: {
     name: 'Modelo Personalizado',

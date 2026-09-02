@@ -51,3 +51,26 @@ export const sendMassEmail = async (recipients: MassEmailRecipient[], from?: str
     headers: { 'Content-Type': 'application/json' },
   })
 }
+
+export interface MonthlyBirthdaysSendResult {
+  success: boolean
+  sent: number
+  failed: number
+  skipped_no_email: number
+  total: number
+  message: string
+}
+
+export const sendMonthlyBirthdaysEmail = async (data: {
+  month?: number
+  reminder_id?: string
+  subject?: string
+  body?: string
+  from?: string
+}): Promise<MonthlyBirthdaysSendResult> => {
+  return pb.send('/backend/v1/send-monthly-birthdays', {
+    method: 'POST',
+    body: JSON.stringify(data),
+    headers: { 'Content-Type': 'application/json' },
+  })
+}

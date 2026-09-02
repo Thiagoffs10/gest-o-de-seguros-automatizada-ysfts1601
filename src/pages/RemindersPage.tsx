@@ -10,6 +10,8 @@ import {
   Send,
   Search,
   X,
+  Cake,
+  Users,
 } from 'lucide-react'
 import {
   getReminders,
@@ -19,7 +21,7 @@ import {
   completeAllPendingReminders,
 } from '@/services/reminders'
 import { getClients } from '@/services/clients'
-import { sendSingleEmail } from '@/services/communications'
+import { sendSingleEmail, sendMonthlyBirthdaysEmail } from '@/services/communications'
 import { Reminder, Client } from '@/types'
 import { Card } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
@@ -86,6 +88,18 @@ export default function RemindersPage() {
   const [emailModalReminder, setEmailModalReminder] = useState<Reminder | null>(null)
   const [emailSubject, setEmailSubject] = useState('')
   const [emailBody, setEmailBody] = useState('')
+
+  // Estados para envio do lembrete agrupado de aniversariantes do mês
+  const [groupBirthdayModalReminder, setGroupBirthdayModalReminder] = useState<Reminder | null>(
+    null,
+  )
+  const [groupBirthdaySubject, setGroupBirthdaySubject] = useState(
+    'Feliz aniversário, {nome_cliente}! 🎉',
+  )
+  const [groupBirthdayBody, setGroupBirthdayBody] = useState(
+    'Olá, {nome_cliente}!\n\nDesejamos a você um feliz aniversário com muita saúde, paz e conquistas!\n\nAgradecemos pela parceria e por confiar na CRED10MIX para cuidar da sua proteção.\n\nAtenciosamente,\nEquipe CRED10MIX',
+  )
+  const [sendingGroupBirthdays, setSendingGroupBirthdays] = useState(false)
 
   const [formData, setFormData] = useState({
     type: 'Renovação' as const,
@@ -166,7 +180,47 @@ export default function RemindersPage() {
     }
   }
 
+  const isGroupBirthdayReminder = (rem: Reminder) => {
+    return (
+      rem.type === 'Aniversário' &&
+      (!rem.client || rem.client.trim() === '') &&
+      (rem.message?.includes('Aniversariantes de') || !rem.client)
+    )
+  }
+
+  const getTargetMonthForReminder = (rem: Reminder): number => {
+    if (rem.date) {
+      const d = new Date(rem.date)
+      const rawMonth = rem.date.split('T')[0].split('-')[1]
+      if (rawMonth) return parseInt(rawMonth, 10)
+      return d.getUTCMonth() + 1
+    }
+    return new Date().getMonth() + 1
+  }
+
+  const getMonthClientsForReminder = (rem: Reminder): Client[] => {
+    const month = getTargetMonthForReminder(rem)
+    return clients.filter((c) => {
+      if (!c.birth_date) return false
+      const rawDateOnly = c.birth_date.split('T')[0].split(' ')[0]
+      const parts = rawDateOnly.split('-')
+      if (parts.length >= 2) {
+        return parseInt(parts[1], 10) === month
+      }
+      return new Date(c.birth_date).getUTCMonth() + 1 === month
+    })
+  }
+
   const handleOpenEmailModal = (rem: Reminder) => {
+    if (isGroupBirthdayReminder(rem)) {
+      setGroupBirthdayModalReminder(rem)
+      setGroupBirthdaySubject('Feliz aniversário, {nome_cliente}! 🎉')
+      setGroupBirthdayBody(
+        'Olá, {nome_cliente}!\n\nDesejamos a você um feliz aniversário com muita saúde, paz e conquistas!\n\nAgradecemos pela parceria e por confiar na CRED10MIX para cuidar da sua proteção.\n\nAtenciosamente,\nEquipe CRED10MIX',
+      )
+      return
+    }
+
     const client = rem.expand?.client || clients.find((c) => c.id === rem.client)
     if (!client) {
       toast({
@@ -185,16 +239,58 @@ export default function RemindersPage() {
       return
     }
 
+    const clientFirstName = (client.name || '').trim().split(' ')[0] || ''
     const defaultSubject =
       rem.type === 'Renovação'
-        ? `Aviso de Renovação de Seguro - CRED10MIX`
+        ? `Sua apólice vence em breve`
         : rem.type === 'Aniversário'
-          ? `Feliz Aniversário! - CRED10MIX`
-          : `Lembrete Importante - CRED10MIX`
+          ? clientFirstName
+            ? `Feliz aniversário, ${clientFirstName}! 🎉`
+            : `Feliz aniversário! 🎉`
+          : `Lembrete importante CRED10MIX`
 
     setEmailModalReminder(rem)
     setEmailSubject(defaultSubject)
     setEmailBody(rem.message || '')
+  }
+
+  const handleConfirmSendMonthlyBirthdays = async () => {
+    if (!groupBirthdayModalReminder) return
+    const rem = groupBirthdayModalReminder
+    const month = getTargetMonthForReminder(rem)
+
+    setSendingGroupBirthdays(true)
+    try {
+      const res = await sendMonthlyBirthdaysEmail({
+        month,
+        reminder_id: rem.id,
+        subject: groupBirthdaySubject,
+        body: groupBirthdayBody,
+      })
+
+      if (res.success) {
+        toast({
+          title: 'E-mails de aniversário enviados!',
+          description: res.message,
+        })
+        setGroupBirthdayModalReminder(null)
+        loadData()
+      } else {
+        toast({
+          title: 'Falha no disparo',
+          description: res.message || 'Erro ao enviar e-mails de aniversário.',
+          variant: 'destructive',
+        })
+      }
+    } catch (err: any) {
+      toast({
+        title: 'Erro no envio',
+        description: err?.message || 'Erro inesperado.',
+        variant: 'destructive',
+      })
+    } finally {
+      setSendingGroupBirthdays(false)
+    }
   }
 
   const handleConfirmSendEmail = async () => {
@@ -405,79 +501,115 @@ export default function RemindersPage() {
                   </td>
                 </tr>
               ) : (
-                paginatedReminders.map((r) => (
-                  <tr key={r.id} className="hover:bg-slate-50">
-                    <td className="p-3.5 font-bold text-blue-600">{r.type}</td>
-                    <td className="p-3.5 font-medium">{r.expand?.client?.name || 'Geral'}</td>
-                    <td className="p-3.5">{new Date(r.date).toLocaleDateString('pt-BR')}</td>
-                    <td className="p-3.5 max-w-xs truncate">{r.message}</td>
-                    <td className="p-3.5">
-                      <Badge className={r.sent ? 'bg-slate-400' : 'bg-amber-500'}>
-                        {r.sent ? 'Concluído' : 'Pendente'}
-                      </Badge>
-                    </td>
-                    <td className="p-3.5 text-right">
-                      <div className="flex items-center justify-end gap-1">
-                        {/* Botão Enviar E-mail */}
-                        {can('communications', 'create') && (
-                          <Button
-                            variant="ghost"
-                            size="sm"
-                            className="text-blue-600 hover:text-blue-700 hover:bg-blue-50"
-                            title="Enviar e-mail para o cliente vinculado"
-                            onClick={() => handleOpenEmailModal(r)}
-                            disabled={sendingEmailId === r.id}
-                          >
-                            {sendingEmailId === r.id ? (
-                              <Loader2 className="w-4 h-4 mr-1 animate-spin" />
-                            ) : (
-                              <Mail className="w-4 h-4 mr-1" />
-                            )}
-                            <span className="hidden md:inline">Enviar e-mail</span>
-                          </Button>
-                        )}
+                paginatedReminders.map((r) => {
+                  const isGroupBirthday = isGroupBirthdayReminder(r)
+                  const monthClientsCount = isGroupBirthday
+                    ? getMonthClientsForReminder(r).length
+                    : 0
 
-                        {/* Botão Editar */}
-                        {can('reminders', 'update') && (
-                          <Button
-                            variant="ghost"
-                            size="sm"
-                            className="text-slate-600 hover:text-slate-900 hover:bg-slate-100"
-                            title="Editar mensagem ou dados do lembrete"
-                            onClick={() => handleOpenEdit(r)}
-                          >
-                            <Pencil className="w-4 h-4 mr-1" />
-                            <span className="hidden md:inline">Editar</span>
-                          </Button>
+                  return (
+                    <tr
+                      key={r.id}
+                      className={`hover:bg-slate-50 ${isGroupBirthday ? 'bg-amber-50/30' : ''}`}
+                    >
+                      <td className="p-3.5 font-bold text-blue-600">
+                        <div className="flex items-center gap-1.5">
+                          {isGroupBirthday && <Cake className="w-4 h-4 text-amber-500 shrink-0" />}
+                          <span>{r.type}</span>
+                        </div>
+                      </td>
+                      <td className="p-3.5 font-medium">
+                        {isGroupBirthday ? (
+                          <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-semibold bg-amber-100 text-amber-900 border border-amber-200">
+                            <Users className="w-3 h-3 text-amber-700" />
+                            Todos do Mês ({monthClientsCount})
+                          </span>
+                        ) : (
+                          r.expand?.client?.name || 'Geral'
                         )}
+                      </td>
+                      <td className="p-3.5">{new Date(r.date).toLocaleDateString('pt-BR')}</td>
+                      <td className="p-3.5 max-w-xs truncate" title={r.message}>
+                        {r.message}
+                      </td>
+                      <td className="p-3.5">
+                        <Badge className={r.sent ? 'bg-slate-400' : 'bg-amber-500'}>
+                          {r.sent ? 'Concluído' : 'Pendente'}
+                        </Badge>
+                      </td>
+                      <td className="p-3.5 text-right">
+                        <div className="flex items-center justify-end gap-1">
+                          {/* Botão Enviar E-mail (Individual ou Todos do Mês com 1 clique) */}
+                          {can('communications', 'create') && (
+                            <Button
+                              variant={isGroupBirthday && !r.sent ? 'default' : 'ghost'}
+                              size="sm"
+                              className={
+                                isGroupBirthday && !r.sent
+                                  ? 'bg-amber-600 hover:bg-amber-700 text-white shadow-sm font-semibold'
+                                  : 'text-blue-600 hover:text-blue-700 hover:bg-blue-50'
+                              }
+                              title={
+                                isGroupBirthday
+                                  ? 'Enviar e-mail de parabéns para todos os aniversariantes do mês'
+                                  : 'Enviar e-mail para o cliente vinculado'
+                              }
+                              onClick={() => handleOpenEmailModal(r)}
+                              disabled={sendingEmailId === r.id}
+                            >
+                              {sendingEmailId === r.id ? (
+                                <Loader2 className="w-4 h-4 mr-1 animate-spin" />
+                              ) : isGroupBirthday ? (
+                                <Cake className="w-4 h-4 mr-1" />
+                              ) : (
+                                <Mail className="w-4 h-4 mr-1" />
+                              )}
+                              <span>{isGroupBirthday ? 'Enviar para Todos' : 'Enviar e-mail'}</span>
+                            </Button>
+                          )}
 
-                        {/* Botão Concluir / Reabrir */}
-                        {can('reminders', 'update') && (
-                          <Button variant="ghost" size="sm" onClick={() => handleToggleSent(r)}>
-                            <CheckCircle
-                              className={`w-4 h-4 mr-1 ${r.sent ? 'text-slate-400' : 'text-emerald-600'}`}
-                            />
-                            {r.sent ? 'Reabrir' : 'Concluir'}
-                          </Button>
-                        )}
+                          {/* Botão Editar */}
+                          {can('reminders', 'update') && (
+                            <Button
+                              variant="ghost"
+                              size="sm"
+                              className="text-slate-600 hover:text-slate-900 hover:bg-slate-100"
+                              title="Editar mensagem ou dados do lembrete"
+                              onClick={() => handleOpenEdit(r)}
+                            >
+                              <Pencil className="w-4 h-4 mr-1" />
+                              <span className="hidden md:inline">Editar</span>
+                            </Button>
+                          )}
 
-                        {/* Botão Excluir */}
-                        {can('reminders', 'delete') && (
-                          <Button
-                            variant="ghost"
-                            size="sm"
-                            className="text-red-600 hover:bg-red-50"
-                            title="Excluir lembrete"
-                            onClick={() => setDeleteTarget(r)}
-                          >
-                            <Trash2 className="w-4 h-4" />
-                          </Button>
-                        )}
-                      </div>
-                    </td>
-                  </tr>
-                ))
-              )}
+                          {/* Botão Concluir / Reabrir */}
+                          {can('reminders', 'update') && (
+                            <Button variant="ghost" size="sm" onClick={() => handleToggleSent(r)}>
+                              <CheckCircle
+                                className={`w-4 h-4 mr-1 ${r.sent ? 'text-slate-400' : 'text-emerald-600'}`}
+                              />
+                              {r.sent ? 'Reabrir' : 'Concluir'}
+                            </Button>
+                          )}
+
+                          {/* Botão Excluir */}
+                          {can('reminders', 'delete') && (
+                            <Button
+                              variant="ghost"
+                              size="sm"
+                              className="text-red-600 hover:bg-red-50"
+                              title="Excluir lembrete"
+                              onClick={() => setDeleteTarget(r)}
+                            >
+                              <Trash2 className="w-4 h-4" />
+                            </Button>
+                          )}
+                        </div>
+                      </td>
+                    </tr>
+                  )
+                })
+              )}{' '}
             </tbody>
           </table>
         </div>
@@ -738,6 +870,132 @@ export default function RemindersPage() {
                 <>
                   <Send className="w-4 h-4 mr-2" />
                   Enviar E-mail Agora
+                </>
+              )}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Modal Enviar E-mail Único para Todos os Aniversariantes do Mês */}
+      <Dialog
+        open={!!groupBirthdayModalReminder}
+        onOpenChange={(open) => !open && setGroupBirthdayModalReminder(null)}
+      >
+        <DialogContent className="max-w-xl">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2 text-slate-900">
+              <Cake className="w-5 h-5 text-amber-500" />
+              Enviar Parabéns para Aniversariantes do Mês
+            </DialogTitle>
+          </DialogHeader>
+
+          {groupBirthdayModalReminder &&
+            (() => {
+              const monthClients = getMonthClientsForReminder(groupBirthdayModalReminder)
+              const withEmailCount = monthClients.filter((c) => c.email && c.email.trim()).length
+              const withoutEmailCount = monthClients.length - withEmailCount
+
+              return (
+                <div className="space-y-4 pt-1">
+                  <div className="p-3 bg-amber-50 rounded-lg border border-amber-200 text-xs text-amber-900 space-y-1">
+                    <p className="font-bold text-sm text-amber-950">
+                      Prévia do Envio Agrupado ({monthClients.length} cliente
+                      {monthClients.length !== 1 ? 's' : ''})
+                    </p>
+                    <p>
+                      • <strong>{withEmailCount}</strong> cliente(s) com e-mail cadastrado receberão
+                      a mensagem personalizada.
+                    </p>
+                    {withoutEmailCount > 0 && (
+                      <p className="text-amber-700">
+                        • <strong>{withoutEmailCount}</strong> cliente(s) não possuem e-mail e serão
+                        ignorados com segurança.
+                      </p>
+                    )}
+                    <p className="text-[11px] text-amber-800 pt-1 border-t border-amber-200/60 mt-1">
+                      Remetente oficial: <strong>CRED10MIX &lt;noreply@cred10mix.com.br&gt;</strong>{' '}
+                      (com rodapé oficial e link do WhatsApp).
+                    </p>
+                  </div>
+
+                  <div className="max-h-36 overflow-y-auto border rounded p-2 bg-slate-50 text-xs space-y-1">
+                    <p className="font-semibold text-slate-700 mb-1">Lista de Aniversariantes:</p>
+                    {monthClients.map((c) => (
+                      <div
+                        key={c.id}
+                        className="flex items-center justify-between py-0.5 border-b border-slate-200/60 last:border-0"
+                      >
+                        <span className="font-medium truncate max-w-[240px]">{c.name}</span>
+                        <span
+                          className={
+                            c.email
+                              ? 'text-slate-600 text-[11px]'
+                              : 'text-amber-600 text-[11px] font-semibold'
+                          }
+                        >
+                          {c.email || 'Sem e-mail'}
+                        </span>
+                      </div>
+                    ))}
+                  </div>
+
+                  <div>
+                    <Label className="text-xs font-semibold">Assunto do E-mail</Label>
+                    <Input
+                      value={groupBirthdaySubject}
+                      onChange={(e) => setGroupBirthdaySubject(e.target.value)}
+                      placeholder="Feliz aniversário, {nome_cliente}! 🎉"
+                      className="mt-1 text-xs"
+                    />
+                    <p className="text-[10px] text-slate-500 mt-0.5">
+                      Variável disponível:{' '}
+                      <code className="bg-slate-100 px-1 rounded">{'{nome_cliente}'}</code>
+                    </p>
+                  </div>
+
+                  <div>
+                    <Label className="text-xs font-semibold">Mensagem (Corpo do E-mail)</Label>
+                    <Textarea
+                      rows={4}
+                      value={groupBirthdayBody}
+                      onChange={(e) => setGroupBirthdayBody(e.target.value)}
+                      placeholder="Corpo do e-mail..."
+                      className="mt-1 text-xs"
+                    />
+                    <p className="text-[10px] text-slate-500 mt-0.5">
+                      O rodapé oficial CRED10MIX com o link direto do WhatsApp é anexado
+                      automaticamente.
+                    </p>
+                  </div>
+                </div>
+              )
+            })()}
+
+          <DialogFooter>
+            <Button
+              type="button"
+              variant="outline"
+              disabled={sendingGroupBirthdays}
+              onClick={() => setGroupBirthdayModalReminder(null)}
+            >
+              Cancelar
+            </Button>
+            <Button
+              type="button"
+              className="bg-amber-600 hover:bg-amber-700 text-white font-bold"
+              disabled={sendingGroupBirthdays}
+              onClick={handleConfirmSendMonthlyBirthdays}
+            >
+              {sendingGroupBirthdays ? (
+                <>
+                  <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                  Disparando para Todos...
+                </>
+              ) : (
+                <>
+                  <Send className="w-4 h-4 mr-2" />
+                  Confirmar e Enviar para Todos
                 </>
               )}
             </Button>

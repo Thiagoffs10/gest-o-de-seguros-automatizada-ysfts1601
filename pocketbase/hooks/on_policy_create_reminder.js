@@ -38,14 +38,14 @@ onRecordAfterCreateSuccess((e) => {
         const comm = new Record(commsCol)
         comm.set('type', 'Email')
         comm.set('client', clientId)
-        comm.set('subject', 'Aviso de Renovação - Apólice ' + policyNumber)
+        comm.set('subject', 'Sua apólice nº ' + policyNumber + ' vence em breve')
         comm.set(
           'body',
-          'Olá ' +
-            clientName +
-            ',\n\nSua apólice ' +
+          'Olá, ' +
+            (clientName || 'cliente') +
+            '!\n\nLembramos que a sua apólice de seguro nº ' +
             policyNumber +
-            ' está próxima do vencimento. Entre em contato conosco para garantir a renovação do seu plano sem interrupção de cobertura.\n\nAtenciosamente,\nEquipe CRED10MIX',
+            ' está próxima da data de renovação.\n\nEstamos à disposição para apresentar as melhores condições e manter sua proteção em dia.\n\nAtenciosamente,\nEquipe CRED10MIX',
         )
         comm.set('recipient_email', clientEmail)
         comm.set('status', 'Rascunho')

@@ -2,79 +2,95 @@ cronAdd('birthday_reminders', '0 8 * * *', () => {
   try {
     const clients = $app.findRecordsByFilter('clients', "birth_date != ''", 'created', 0, 0)
     const now = new Date()
+    const currentMonthIndex = now.getMonth() // 0-11
+    const currentYear = now.getFullYear()
 
-    for (const client of clients) {
-      const birthDateStr = client.getString('birth_date')
+    const monthNames = [
+      'Janeiro',
+      'Fevereiro',
+      'Março',
+      'Abril',
+      'Maio',
+      'Junho',
+      'Julho',
+      'Agosto',
+      'Setembro',
+      'Outubro',
+      'Novembro',
+      'Dezembro',
+    ]
+
+    const monthName = monthNames[currentMonthIndex]
+    const monthNumStr = String(currentMonthIndex + 1).padStart(2, '0')
+    const firstDayOfMonthStr = currentYear + '-' + monthNumStr + '-01'
+
+    var monthClients = []
+    for (var i = 0; i < clients.length; i++) {
+      var client = clients[i]
+      var birthDateStr = client.getString('birth_date')
       if (!birthDateStr) continue
 
-      var birthDate = new Date(birthDateStr)
-      var thisYearBirthday = new Date(now.getFullYear(), birthDate.getMonth(), birthDate.getDate())
-
-      if (thisYearBirthday < now) {
-        thisYearBirthday = new Date(
-          now.getFullYear() + 1,
-          birthDate.getMonth(),
-          birthDate.getDate(),
-        )
+      var bMonth = -1
+      var rawDateOnly = birthDateStr.split('T')[0].split(' ')[0]
+      var parts = rawDateOnly.split('-')
+      if (parts.length >= 2) {
+        bMonth = parseInt(parts[1], 10) - 1
+      }
+      if (bMonth === -1) {
+        var bd = new Date(birthDateStr)
+        bMonth = bd.getUTCMonth()
       }
 
-      var diffMs = thisYearBirthday.getTime() - now.getTime()
-      var diffDays = Math.ceil(diffMs / (1000 * 60 * 60 * 24))
-      if (diffDays > 7 || diffDays < 0) continue
-
-      var birthdayDateStr =
-        thisYearBirthday.getFullYear() +
-        '-' +
-        String(thisYearBirthday.getMonth() + 1).padStart(2, '0') +
-        '-' +
-        String(thisYearBirthday.getDate()).padStart(2, '0')
-
-      try {
-        $app.findFirstRecordByFilter(
-          'reminders',
-          'type = "Aniversário" && client = "' +
-            client.id +
-            '" && date = "' +
-            birthdayDateStr +
-            '"',
-        )
-        continue
-      } catch (_) {}
-
-      try {
-        var clientName = client.getString('name') || ''
-        var clientEmail = client.getString('email') || ''
-
-        var remindersCol = $app.findCollectionByNameOrId('reminders')
-        var reminder = new Record(remindersCol)
-        reminder.set('type', 'Aniversário')
-        reminder.set('client', client.id)
-        reminder.set('date', birthdayDateStr)
-        reminder.set('message', 'Feliz aniversário, ' + clientName + '!')
-        reminder.set('sent', false)
-        $app.save(reminder)
-
-        var commsCol = $app.findCollectionByNameOrId('communications')
-        var comm = new Record(commsCol)
-        comm.set('type', 'Email')
-        comm.set('client', client.id)
-        comm.set('subject', 'Feliz Aniversário, ' + clientName + '!')
-        comm.set(
-          'body',
-          'Olá ' +
-            clientName +
-            ',\n\nDesejamos a você um dia repleto de alegrias, saúde e muito sucesso! Conte sempre com nossa equipe para proteger você e sua família.\n\nAtenciosamente,\nEquipe CRED10MIX',
-        )
-        comm.set('recipient_email', clientEmail)
-        comm.set('status', 'Rascunho')
-        $app.save(comm)
-      } catch (err) {
-        $app
-          .logger()
-          .error('birthday reminder creation failed', 'client', client.id, 'error', String(err))
+      if (bMonth === currentMonthIndex) {
+        monthClients.push(client)
       }
     }
+
+    if (monthClients.length === 0) {
+      return
+    }
+
+    var reminderMessage =
+      'Aniversariantes de ' +
+      monthName +
+      '/' +
+      currentYear +
+      ' (' +
+      monthClients.length +
+      ' cliente' +
+      (monthClients.length > 1 ? 's' : '') +
+      ')'
+
+    // Procurar se já existe o lembrete agrupado do mês
+    var existingGroupReminder = null
+    try {
+      existingGroupReminder = $app.findFirstRecordByFilter(
+        'reminders',
+        'type = "Aniversário" && client = "" && message ~ "Aniversariantes de ' +
+          monthName +
+          '/' +
+          currentYear +
+          '"',
+      )
+    } catch (_) {
+      existingGroupReminder = null
+    }
+
+    var remindersCol = $app.findCollectionByNameOrId('reminders')
+    if (existingGroupReminder) {
+      existingGroupReminder.set('message', reminderMessage)
+      $app.save(existingGroupReminder)
+    } else {
+      var newReminder = new Record(remindersCol)
+      newReminder.set('type', 'Aniversário')
+      newReminder.set('client', '')
+      newReminder.set('policy', '')
+      newReminder.set('date', firstDayOfMonthStr)
+      newReminder.set('message', reminderMessage)
+      newReminder.set('sent', false)
+      $app.save(newReminder)
+    }
   } catch (err) {
-    $app.logger().error('birthday reminders cron failed', 'error', String(err))
+    $app.logger().error('birthday reminders monthly cron failed', 'error', String(err))
   }
 })
