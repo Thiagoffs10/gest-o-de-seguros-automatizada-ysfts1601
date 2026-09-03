@@ -12,6 +12,7 @@ import {
 import { getPolicies, updatePolicyFinancial } from '@/services/policies'
 import { getCustosFixos, updateCustoFixo } from '@/services/custos-fixos'
 import { getConciliacao, createConciliacao, deleteConciliacao } from '@/services/conciliacoes'
+import { getErrorMessage } from '@/lib/pocketbase/errors'
 import { Policy, CustoFixo, Conciliacao } from '@/types'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
@@ -364,21 +365,51 @@ export default function ConciliacaoMensal() {
     }
     setActionLoading(true)
     try {
-      const resumo = JSON.stringify(m)
+      // Resumo numérico consolidado (sem objetos grandes como arrays de apólices)
+      const resumoObj = {
+        totalApolices: m.totalApolices,
+        expectedComm: m.expectedComm,
+        receivedComm: m.receivedComm,
+        pendingComm: m.pendingComm,
+        paidRepasses: m.paidRepasses,
+        pendingRepasses: m.pendingRepasses,
+        paidCustos: m.paidCustos,
+        pendingCustos: m.pendingCustos,
+        lucroPrevisto: m.lucroPrevisto,
+        lucroReal: m.lucroReal,
+      }
+      const resumo = JSON.stringify(resumoObj)
+      const pendencias = JSON.stringify(m.pendencias)
+
       const conc = await createConciliacao({
-        mes,
-        ano,
+        mes: Number(mes),
+        ano: Number(ano),
         data_fechamento: new Date().toISOString(),
-        usuario_fechamento: user?.name || user?.email || 'Unknown',
-        usuario_id: user?.id,
+        usuario_fechamento: user?.name || user?.email || 'Corretor',
+        usuario_id: user?.id || undefined,
         resumo,
-        pendencias: JSON.stringify(m.pendencias),
+        pendencias,
+        observacoes: '',
       })
       setConciliacao(conc)
       handleDownloadPDF()
-      toast({ title: 'Mês fechado com sucesso!' })
+      toast({
+        title: 'Mês fechado com sucesso!',
+        description: 'O fechamento mensal foi gravado com sucesso.',
+      })
     } catch (err: any) {
-      toast({ title: 'Erro ao fechar mês', description: err.message, variant: 'destructive' })
+      const errorMsg = getErrorMessage(err)
+      const friendlyMsg =
+        errorMsg &&
+        !errorMsg.includes('Failed to create record') &&
+        !errorMsg.includes('An unexpected error occurred')
+          ? errorMsg
+          : 'Não foi possível fechar o mês. Tente novamente.'
+      toast({
+        title: 'Erro ao fechar mês',
+        description: friendlyMsg,
+        variant: 'destructive',
+      })
     } finally {
       setActionLoading(false)
     }
@@ -391,9 +422,17 @@ export default function ConciliacaoMensal() {
     try {
       await deleteConciliacao(conciliacao.id)
       setConciliacao(null)
-      toast({ title: 'Mês reaberto!' })
+      toast({
+        title: 'Mês reaberto!',
+        description: 'O mês foi reaberto com sucesso para alterações.',
+      })
     } catch (err: any) {
-      toast({ title: 'Erro ao reabrir', description: err.message, variant: 'destructive' })
+      const errorMsg = getErrorMessage(err)
+      toast({
+        title: 'Erro ao reabrir mês',
+        description: errorMsg || 'Não foi possível reabrir o mês. Tente novamente.',
+        variant: 'destructive',
+      })
     } finally {
       setActionLoading(false)
     }
