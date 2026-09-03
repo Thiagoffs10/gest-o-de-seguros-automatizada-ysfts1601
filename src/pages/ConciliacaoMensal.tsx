@@ -1,12 +1,21 @@
 import { useState, useEffect, useMemo, useCallback } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { ChevronLeft, ChevronRight, Lock, Unlock, FileText } from 'lucide-react'
-import { getPolicies } from '@/services/policies'
-import { getCustosFixos } from '@/services/custos-fixos'
+import {
+  ChevronLeft,
+  ChevronRight,
+  Lock,
+  Unlock,
+  FileText,
+  ChevronRight as ChevronIcon,
+  Eye,
+} from 'lucide-react'
+import { getPolicies, updatePolicyFinancial } from '@/services/policies'
+import { getCustosFixos, updateCustoFixo } from '@/services/custos-fixos'
 import { getConciliacao, createConciliacao, deleteConciliacao } from '@/services/conciliacoes'
 import { Policy, CustoFixo, Conciliacao } from '@/types'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
+import { ConciliacaoDetailModal, ConciliacaoDetailType } from '@/components/ConciliacaoDetailModal'
 import {
   Select,
   SelectContent,
@@ -51,7 +60,7 @@ const fmt = (v: number) =>
 
 export default function ConciliacaoMensal() {
   const { toast } = useToast()
-  const { isAdmin } = usePermissions()
+  const { isAdmin, can } = usePermissions()
   const { user } = useAuth()
   const [step, setStep] = useState(1)
   const [mes, setMes] = useState(new Date().getMonth() + 1)
@@ -61,6 +70,7 @@ export default function ConciliacaoMensal() {
   const [conciliacao, setConciliacao] = useState<Conciliacao | null>(null)
   const [loading, setLoading] = useState(true)
   const [actionLoading, setActionLoading] = useState(false)
+  const [detailModalType, setDetailModalType] = useState<ConciliacaoDetailType | null>(null)
 
   const period = useMemo(() => computePeriod(String(mes), String(ano)), [mes, ano])
 
@@ -132,6 +142,132 @@ export default function ConciliacaoMensal() {
   }, [policies, custos, period])
 
   const isClosed = !!conciliacao
+
+  const canEditFinancial = can('policies', 'update') && !isClosed
+
+  // Fast actions to mark received / paid from the modal
+  const handleMarkCommissionReceived = async (policyId: string) => {
+    try {
+      const today = new Date().toISOString().split('T')[0]
+      await updatePolicyFinancial(policyId, {
+        comissao_recebida: true,
+        data_recebimento_comissao: today,
+      })
+      toast({
+        title: 'Comissão baixada com sucesso!',
+        description: 'Comissão registrada como recebida hoje.',
+      })
+      await loadData()
+    } catch (err: any) {
+      toast({ title: 'Erro ao baixar comissão', description: err.message, variant: 'destructive' })
+      throw err
+    }
+  }
+
+  const handleMarkRepassePaid = async (policyId: string) => {
+    try {
+      const today = new Date().toISOString().split('T')[0]
+      await updatePolicyFinancial(policyId, {
+        pago_parceiro: true,
+        data_pagamento_parceiro: today,
+      })
+      toast({
+        title: 'Repasse baixado com sucesso!',
+        description: 'Repasse registrado como pago hoje.',
+      })
+      await loadData()
+    } catch (err: any) {
+      toast({ title: 'Erro ao baixar repasse', description: err.message, variant: 'destructive' })
+      throw err
+    }
+  }
+
+  const handleMarkCustoPaid = async (custoId: string) => {
+    try {
+      const today = new Date().toISOString().split('T')[0]
+      await updateCustoFixo(custoId, {
+        pago: true,
+        data_pagamento: today,
+      })
+      toast({
+        title: 'Custo baixado com sucesso!',
+        description: 'Custo registrado como pago hoje.',
+      })
+      await loadData()
+    } catch (err: any) {
+      toast({ title: 'Erro ao baixar custo', description: err.message, variant: 'destructive' })
+      throw err
+    }
+  }
+
+  // Segmented subsets of policies and custos according to the active detailModalType
+  const modalData = useMemo(() => {
+    if (!detailModalType) return { policies: [], custos: [] }
+
+    switch (detailModalType) {
+      case 'producao':
+      case 'comissoes-previstas':
+        return {
+          policies: policies.filter((p) => isDateInPeriod(period, p.start_date)),
+          custos: [],
+        }
+      case 'comissoes-recebidas':
+        return {
+          policies: policies.filter(
+            (p) =>
+              p.comissao_recebida === true &&
+              Boolean(p.data_recebimento_comissao) &&
+              isDateInPeriod(period, p.data_recebimento_comissao),
+          ),
+          custos: [],
+        }
+      case 'comissoes-pendentes':
+        // Apólices iniciadas no período ainda sem comissão recebida
+        return {
+          policies: policies.filter(
+            (p) => isDateInPeriod(period, p.start_date) && !p.comissao_recebida,
+          ),
+          custos: [],
+        }
+      case 'repasses-pagos':
+        return {
+          policies: policies.filter(
+            (p) =>
+              p.tipo_de_venda === 'Parceiro' &&
+              (p.parceiro || p.expand?.parceiro) &&
+              (p.valor_repasse || 0) > 0 &&
+              p.pago_parceiro &&
+              Boolean(p.data_pagamento_parceiro) &&
+              isDateInPeriod(period, p.data_pagamento_parceiro),
+          ),
+          custos: [],
+        }
+      case 'repasses-pendentes':
+        // Repasses pendentes de apólices do período ou gerais pendentes
+        return {
+          policies: policies.filter(
+            (p) =>
+              p.tipo_de_venda === 'Parceiro' &&
+              (p.parceiro || p.expand?.parceiro) &&
+              (p.valor_repasse || 0) > 0 &&
+              !p.pago_parceiro,
+          ),
+          custos: [],
+        }
+      case 'custos-pagos':
+        return {
+          policies: [],
+          custos: custos.filter((c) => c.pago === true && isDateInPeriod(period, c.data)),
+        }
+      case 'custos-pendentes':
+        return {
+          policies: [],
+          custos: custos.filter((c) => c.pago !== true && isDateInPeriod(period, c.data)),
+        }
+      default:
+        return { policies: [], custos: [] }
+    }
+  }, [detailModalType, policies, custos, period])
 
   const handleClose = async () => {
     if (m.pendencias.length > 0) {
@@ -207,48 +343,128 @@ export default function ConciliacaoMensal() {
   const steps = [
     {
       title: 'Produção',
+      hint: 'Clique nas linhas para visualizar as apólices do mês',
       content: (
         <>
-          <Row label="Total de Apólices" value={String(m.totalApolices)} />
-          <Row label="Comissão Prevista" value={`R$ ${fmt(m.expectedComm)}`} />
+          <Row
+            label="Total de Apólices"
+            value={String(m.totalApolices)}
+            clickable
+            onClick={() => setDetailModalType('producao')}
+          />
+          <Row
+            label="Comissão Prevista"
+            value={`R$ ${fmt(m.expectedComm)}`}
+            clickable
+            onClick={() => setDetailModalType('comissoes-previstas')}
+          />
         </>
       ),
     },
     {
       title: 'Comissões',
+      hint: 'Clique em qualquer linha para ver o detalhamento completo e baixar pendências',
       content: (
         <>
-          <Row label="Previstas" value={`R$ ${fmt(m.expectedComm)}`} />
-          <Row label="Recebidas" value={`R$ ${fmt(m.receivedComm)}`} green />
-          <Row label="Pendentes" value={`R$ ${fmt(m.pendingComm)}`} amber />
+          <Row
+            label="Previstas"
+            value={`R$ ${fmt(m.expectedComm)}`}
+            clickable
+            onClick={() => setDetailModalType('comissoes-previstas')}
+          />
+          <Row
+            label="Recebidas"
+            value={`R$ ${fmt(m.receivedComm)}`}
+            green
+            clickable
+            onClick={() => setDetailModalType('comissoes-recebidas')}
+          />
+          <Row
+            label="Pendentes"
+            value={`R$ ${fmt(m.pendingComm)}`}
+            amber
+            highlight={m.pendingComm > 0}
+            clickable
+            badgeText={
+              policies.filter((p) => isDateInPeriod(period, p.start_date) && !p.comissao_recebida)
+                .length > 0
+                ? `${policies.filter((p) => isDateInPeriod(period, p.start_date) && !p.comissao_recebida).length} apólice(s)`
+                : undefined
+            }
+            onClick={() => setDetailModalType('comissoes-pendentes')}
+          />
         </>
       ),
     },
     {
       title: 'Repasses',
+      hint: 'Clique nas linhas para detalhar os repasses a parceiros',
       content: (
         <>
-          <Row label="Pagos" value={`R$ ${fmt(m.paidRepasses)}`} green />
-          <Row label="Pendentes" value={`R$ ${fmt(m.pendingRepasses)}`} amber />
+          <Row
+            label="Pagos"
+            value={`R$ ${fmt(m.paidRepasses)}`}
+            green
+            clickable
+            onClick={() => setDetailModalType('repasses-pagos')}
+          />
+          <Row
+            label="Pendentes"
+            value={`R$ ${fmt(m.pendingRepasses)}`}
+            amber
+            clickable
+            onClick={() => setDetailModalType('repasses-pendentes')}
+          />
         </>
       ),
     },
     {
       title: 'Custos',
+      hint: 'Clique nas linhas para ver as despesas e baixá-las',
       content: (
         <>
-          <Row label="Pagos" value={`R$ ${fmt(m.paidCustos)}`} green />
-          <Row label="Pendentes" value={`R$ ${fmt(m.pendingCustos)}`} amber />
+          <Row
+            label="Pagos"
+            value={`R$ ${fmt(m.paidCustos)}`}
+            green
+            clickable
+            onClick={() => setDetailModalType('custos-pagos')}
+          />
+          <Row
+            label="Pendentes"
+            value={`R$ ${fmt(m.pendingCustos)}`}
+            amber
+            clickable
+            onClick={() => setDetailModalType('custos-pendentes')}
+          />
         </>
       ),
     },
     {
       title: 'Resultado',
+      hint: 'Demonstrativo consolidado de fechamento',
       content: (
         <>
-          <Row label="Receita (Comissões Recebidas)" value={`R$ ${fmt(m.receivedComm)}`} />
-          <Row label="(-) Repasses Pagos" value={`R$ ${fmt(m.paidRepasses)}`} red />
-          <Row label="(-) Custos Pagos" value={`R$ ${fmt(m.paidCustos)}`} red />
+          <Row
+            label="Receita (Comissões Recebidas)"
+            value={`R$ ${fmt(m.receivedComm)}`}
+            clickable
+            onClick={() => setDetailModalType('comissoes-recebidas')}
+          />
+          <Row
+            label="(-) Repasses Pagos"
+            value={`R$ ${fmt(m.paidRepasses)}`}
+            red
+            clickable
+            onClick={() => setDetailModalType('repasses-pagos')}
+          />
+          <Row
+            label="(-) Custos Pagos"
+            value={`R$ ${fmt(m.paidCustos)}`}
+            red
+            clickable
+            onClick={() => setDetailModalType('custos-pagos')}
+          />
           <Row label="= Lucro Real" value={`R$ ${fmt(m.lucroReal)}`} blue bold />
           <div className="mt-3 pt-3 border-t">
             <Row label="Lucro Previsto" value={`R$ ${fmt(m.lucroPrevisto)}`} bold />
@@ -345,8 +561,23 @@ export default function ConciliacaoMensal() {
       </div>
 
       <Card className="shadow-sm">
-        <CardHeader>
-          <CardTitle className="text-base font-bold">{steps[step - 1].title}</CardTitle>
+        <CardHeader className="flex flex-row items-center justify-between pb-3">
+          <div>
+            <CardTitle className="text-base font-bold">{steps[step - 1].title}</CardTitle>
+            {steps[step - 1].hint && (
+              <p className="text-xs text-slate-500 mt-0.5">{steps[step - 1].hint}</p>
+            )}
+          </div>
+          {step === 2 && (
+            <Button
+              variant="outline"
+              size="sm"
+              className="text-xs h-8 border-amber-300 text-amber-800 bg-amber-50 hover:bg-amber-100"
+              onClick={() => setDetailModalType('comissoes-pendentes')}
+            >
+              <Eye className="w-3.5 h-3.5 mr-1" /> Ver Pendências
+            </Button>
+          )}
         </CardHeader>
         <CardContent className="space-y-1">{steps[step - 1].content}</CardContent>
       </Card>
@@ -354,10 +585,41 @@ export default function ConciliacaoMensal() {
       {m.pendencias.length > 0 && !isClosed && (
         <div className="p-3 bg-amber-50 border border-amber-200 rounded-lg">
           <p className="text-sm font-semibold text-amber-800 mb-1">Pendências detectadas:</p>
-          <ul className="list-disc list-inside text-sm text-amber-700">
-            {m.pendencias.map((p, i) => (
-              <li key={i}>{p}</li>
-            ))}
+          <ul className="list-disc list-inside text-sm text-amber-700 space-y-1">
+            {m.pendencias.map((p, i) => {
+              const isComm = p.includes('comissão')
+              const isRep = p.includes('repasse')
+              const isCusto = p.includes('custo')
+              return (
+                <li key={i} className="flex items-center justify-between">
+                  <span>{p}</span>
+                  {isComm && (
+                    <button
+                      onClick={() => setDetailModalType('comissoes-pendentes')}
+                      className="text-xs font-semibold text-amber-900 underline ml-2 hover:text-amber-950"
+                    >
+                      Ver detalhes
+                    </button>
+                  )}
+                  {isRep && (
+                    <button
+                      onClick={() => setDetailModalType('repasses-pendentes')}
+                      className="text-xs font-semibold text-amber-900 underline ml-2 hover:text-amber-950"
+                    >
+                      Ver detalhes
+                    </button>
+                  )}
+                  {isCusto && (
+                    <button
+                      onClick={() => setDetailModalType('custos-pendentes')}
+                      className="text-xs font-semibold text-amber-900 underline ml-2 hover:text-amber-950"
+                    >
+                      Ver detalhes
+                    </button>
+                  )}
+                </li>
+              )
+            })}
           </ul>
         </div>
       )}
@@ -410,6 +672,19 @@ export default function ConciliacaoMensal() {
           </Button>
         )}
       </div>
+      {/* Modal de Detalhamento Interativo */}
+      <ConciliacaoDetailModal
+        open={!!detailModalType}
+        onOpenChange={(isOpen) => !isOpen && setDetailModalType(null)}
+        type={detailModalType}
+        periodLabel={period.label}
+        policies={modalData.policies}
+        custos={modalData.custos}
+        canEdit={canEditFinancial}
+        onMarkCommissionReceived={handleMarkCommissionReceived}
+        onMarkRepassePaid={handleMarkRepassePaid}
+        onMarkCustoPaid={handleMarkCustoPaid}
+      />
     </div>
   )
 }
@@ -422,6 +697,10 @@ function Row({
   red,
   blue,
   bold,
+  clickable,
+  onClick,
+  highlight,
+  badgeText,
 }: {
   label: string
   value: string
@@ -430,15 +709,59 @@ function Row({
   red?: boolean
   blue?: boolean
   bold?: boolean
+  clickable?: boolean
+  onClick?: () => void
+  highlight?: boolean
+  badgeText?: string
 }) {
-  return (
-    <div className="flex justify-between items-center py-2 border-b border-slate-100 last:border-0">
-      <span className="text-sm text-slate-600">{label}</span>
-      <span
-        className={`text-sm ${bold ? 'font-bold' : 'font-semibold'} ${green ? 'text-emerald-700' : amber ? 'text-amber-700' : red ? 'text-red-700' : blue ? 'text-blue-700' : 'text-slate-900'}`}
-      >
-        {value}
-      </span>
+  const content = (
+    <div
+      onClick={clickable ? onClick : undefined}
+      className={`flex justify-between items-center py-2.5 px-2 rounded-md border-b border-slate-100 last:border-0 transition-colors ${
+        clickable ? 'cursor-pointer hover:bg-slate-50 group' : ''
+      } ${highlight ? 'bg-amber-50/60 border-amber-200' : ''}`}
+    >
+      <div className="flex items-center gap-2">
+        <span
+          className={`text-sm ${
+            clickable ? 'text-slate-700 group-hover:text-blue-700 font-medium' : 'text-slate-600'
+          }`}
+        >
+          {label}
+        </span>
+        {badgeText && (
+          <span className="text-[11px] font-medium px-2 py-0.5 rounded-full bg-amber-100 text-amber-800">
+            {badgeText}
+          </span>
+        )}
+        {clickable && (
+          <span className="text-[11px] text-slate-400 opacity-0 group-hover:opacity-100 transition-opacity">
+            (ver detalhes)
+          </span>
+        )}
+      </div>
+      <div className="flex items-center gap-2">
+        <span
+          className={`text-sm ${bold ? 'font-bold' : 'font-semibold'} ${
+            green
+              ? 'text-emerald-700'
+              : amber
+                ? 'text-amber-700'
+                : red
+                  ? 'text-red-700'
+                  : blue
+                    ? 'text-blue-700'
+                    : 'text-slate-900'
+          }`}
+        >
+          {value}
+        </span>
+        {clickable && (
+          <ChevronIcon className="w-4 h-4 text-slate-400 group-hover:text-blue-600 transition-transform group-hover:translate-x-0.5" />
+        )}
+      </div>
     </div>
   )
+
+  return content
 }
