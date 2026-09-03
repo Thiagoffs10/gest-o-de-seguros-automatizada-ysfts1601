@@ -51,7 +51,62 @@ routerAdd(
 
       var emailOk = false
       var errMsg = ''
-      var finalRecipientBody = (r.body || '') + mandatoryFooter
+      var userText = r.body || ''
+      var finalRecipientBody = userText + mandatoryFooter
+
+      // Suporte a anexo/imagem (global no body ou por destinatário)
+      var rawAttachment = r.attachment || body.attachment || null
+      var resendPayload = {
+        from: fromEmail,
+        to: [r.to],
+        subject: r.subject || '',
+        text: finalRecipientBody,
+      }
+
+      if (rawAttachment && rawAttachment.content) {
+        var attFilename = rawAttachment.filename || 'imagem-marketing.png'
+        var attContentType = rawAttachment.content_type || 'image/png'
+        var cid = 'marketing-image'
+
+        resendPayload.attachments = [
+          {
+            content: rawAttachment.content,
+            filename: attFilename,
+            content_id: cid,
+            content_type: attContentType,
+          },
+        ]
+
+        // Construir versão HTML profissional com a imagem embutida via CID
+        var escapedText = userText
+          .replace(/&/g, '&amp;')
+          .replace(/</g, '&lt;')
+          .replace(/>/g, '&gt;')
+          .replace(/\n/g, '<br/>')
+
+        var htmlBody =
+          '<div style="font-family: Arial, sans-serif; font-size: 14px; color: #333; line-height: 1.6; max-width: 600px; margin: 0 auto;">' +
+          '<div style="margin-bottom: 20px;">' +
+          escapedText +
+          '</div>' +
+          '<div style="text-align: center; margin: 25px 0;">' +
+          '<img src="cid:' +
+          cid +
+          '" alt="' +
+          attFilename +
+          '" style="max-width: 100%; height: auto; border-radius: 8px; box-shadow: 0 2px 8px rgba(0,0,0,0.08); display: inline-block;" />' +
+          '</div>' +
+          '<div style="margin-top: 30px; padding-top: 20px; border-top: 1px solid #e2e8f0; font-size: 12px; color: #64748b; line-height: 1.5;">' +
+          '<p style="margin: 4px 0;"><strong>CRED10MIX Seguros</strong></p>' +
+          '<p style="margin: 4px 0;">Acesse nosso site: <a href="https://www.cred10mix.com.br" target="_blank" style="color: #2563eb; text-decoration: none;">www.cred10mix.com.br</a></p>' +
+          '<p style="margin: 4px 0;">Siga-nos no Instagram: <a href="https://instagram.com/cred10mix" target="_blank" style="color: #2563eb; text-decoration: none;">@cred10mix</a></p>' +
+          '<p style="margin: 4px 0;">Qualquer contato deve ser feito via WhatsApp: <a href="https://wa.me/5581988653534" target="_blank" style="color: #2563eb; text-decoration: none;">81 98865-3534 (Thiago Souza)</a></p>' +
+          '<p style="margin: 10px 0 0 0; font-size: 11px; color: #94a3b8; font-style: italic;">Este é um e-mail automático e não monitorado. Por favor, realize todo contato via WhatsApp.</p>' +
+          '</div>' +
+          '</div>'
+
+        resendPayload.html = htmlBody
+      }
 
       try {
         var res = $http.send({
@@ -61,12 +116,7 @@ routerAdd(
             Authorization: 'Bearer ' + apiKey,
             'Content-Type': 'application/json',
           },
-          body: JSON.stringify({
-            from: fromEmail,
-            to: [r.to],
-            subject: r.subject || '',
-            text: finalRecipientBody,
-          }),
+          body: JSON.stringify(resendPayload),
           timeout: 30,
         })
 

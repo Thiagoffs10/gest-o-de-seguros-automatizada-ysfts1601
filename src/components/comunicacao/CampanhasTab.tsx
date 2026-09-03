@@ -1,8 +1,9 @@
 import { useState, useMemo, useEffect } from 'react'
-import { Send, Loader2, Mail, CheckCircle2, XCircle, AlertTriangle } from 'lucide-react'
+import { Send, Loader2, Mail, CheckCircle2, XCircle, AlertTriangle, Eye } from 'lucide-react'
 import { Client, Policy, Seguradora, Parceiro, TipoSeguro, EmailTemplate } from '@/types'
 import { sendMassEmail } from '@/services/communications'
 import { personalizeTemplate } from '@/lib/constants'
+import { ImageUploadField, AttachedImage } from './ImageUploadField'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -54,6 +55,7 @@ export function CampanhasTab({
   const [selectedTemplateId, setSelectedTemplateId] = useState<string>('custom')
   const [customSubject, setCustomSubject] = useState('')
   const [customBody, setCustomBody] = useState('')
+  const [attachedImage, setAttachedImage] = useState<AttachedImage | null>(null)
   const [fromEmail, setFromEmail] = useState(
     import.meta.env.VITE_SENDER_EMAIL || 'CRED10MIX <noreply@cred10mix.com.br>',
   )
@@ -217,8 +219,16 @@ export function CampanhasTab({
       return { to: c.email!, client_id: c.id, subject, body }
     })
 
+    const attachmentPayload = attachedImage
+      ? {
+          filename: attachedImage.filename,
+          content: attachedImage.content,
+          content_type: attachedImage.content_type,
+        }
+      : undefined
+
     try {
-      const res = await sendMassEmail(recipients, fromEmail)
+      const res = await sendMassEmail(recipients, fromEmail, attachmentPayload)
       setResults(res)
       if (res.failed > 0) {
         toast({ title: `${res.sent} enviados, ${res.failed} falharam`, variant: 'destructive' })
@@ -325,6 +335,16 @@ export function CampanhasTab({
                   <code className="bg-slate-200 px-1 rounded">{'{numero_apolice}'}</code>,{' '}
                   <code className="bg-slate-200 px-1 rounded">{'{seguradora}'}</code>
                 </p>
+              </div>
+
+              <div className="pt-2 border-t border-slate-200">
+                <ImageUploadField
+                  image={attachedImage}
+                  onChange={setAttachedImage}
+                  disabled={sending}
+                  label="Anexar Imagem para E-mail Marketing"
+                  helperText="Formatos JPG, PNG ou WEBP (máx. 5MB). A imagem será embutida no corpo do e-mail junto ao texto e rodapé."
+                />
               </div>
             </div>
           </CardContent>
@@ -458,6 +478,16 @@ export function CampanhasTab({
             <p className="text-xs text-slate-500">
               Remetente: <em>{fromEmail}</em>
             </p>
+            {attachedImage && (
+              <div className="flex items-center gap-2 p-2 bg-blue-50 border border-blue-200 rounded text-xs text-blue-800">
+                <Eye className="w-4 h-4 shrink-0 text-blue-600" />
+                <span>
+                  Imagem anexada: <strong>{attachedImage.filename}</strong> (
+                  {(attachedImage.sizeInBytes / 1024).toFixed(0)} KB) — será enviada inline para
+                  todos os destinatários.
+                </span>
+              </div>
+            )}
           </div>
           <DialogFooter>
             <Button variant="outline" onClick={() => setShowConfirm(false)}>

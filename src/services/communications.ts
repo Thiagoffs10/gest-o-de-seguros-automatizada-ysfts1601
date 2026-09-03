@@ -17,17 +17,25 @@ export const updateCommunication = async (id: string, data: Partial<Communicatio
   return pb.collection('communications').update<Communication>(id, data)
 }
 
+export interface EmailAttachmentPayload {
+  filename: string
+  content: string // Base64 encoded string (sem prefixo data:image/...;base64,)
+  content_type: string
+}
+
 export interface MassEmailRecipient {
   to: string
   client_id: string
   subject: string
   body: string
+  attachment?: EmailAttachmentPayload
 }
 
 export interface SingleEmailResult {
   success: boolean
   status: string
   message: string
+  resend_id?: string
 }
 
 export const sendSingleEmail = async (data: {
@@ -36,6 +44,7 @@ export const sendSingleEmail = async (data: {
   subject: string
   body: string
   from?: string
+  attachment?: EmailAttachmentPayload
 }): Promise<SingleEmailResult> => {
   return pb.send('/backend/v1/send-single-email', {
     method: 'POST',
@@ -44,10 +53,14 @@ export const sendSingleEmail = async (data: {
   })
 }
 
-export const sendMassEmail = async (recipients: MassEmailRecipient[], from?: string) => {
+export const sendMassEmail = async (
+  recipients: MassEmailRecipient[],
+  from?: string,
+  attachment?: EmailAttachmentPayload,
+) => {
   return pb.send('/backend/v1/send-mass-email', {
     method: 'POST',
-    body: JSON.stringify({ recipients, from }),
+    body: JSON.stringify({ recipients, from, attachment }),
     headers: { 'Content-Type': 'application/json' },
   })
 }

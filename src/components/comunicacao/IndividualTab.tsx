@@ -4,6 +4,7 @@ import { Client, Policy, EmailTemplate } from '@/types'
 import { createCommunication, sendSingleEmail } from '@/services/communications'
 import { formatClientDocument } from '@/lib/document-validators'
 import { personalizeTemplate } from '@/lib/constants'
+import { ImageUploadField, AttachedImage } from './ImageUploadField'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -36,6 +37,7 @@ export function IndividualTab({ clients, policies, templates = [], onSuccess }: 
   const [selectedTemplateId, setSelectedTemplateId] = useState<string>('custom')
   const [subject, setSubject] = useState('')
   const [body, setBody] = useState('')
+  const [attachedImage, setAttachedImage] = useState<AttachedImage | null>(null)
   const [sending, setSending] = useState(false)
 
   const filteredClients = useMemo(() => {
@@ -95,11 +97,20 @@ export function IndividualTab({ clients, policies, templates = [], onSuccess }: 
     if (type === 'Email') {
       setSending(true)
       try {
+        const attachmentPayload = attachedImage
+          ? {
+              filename: attachedImage.filename,
+              content: attachedImage.content,
+              content_type: attachedImage.content_type,
+            }
+          : undefined
+
         const res = await sendSingleEmail({
           to: selectedClient.email!,
           client_id: selectedClientId,
           subject,
           body,
+          attachment: attachmentPayload,
         })
         if (res.success) {
           toast({ title: 'E-mail enviado com sucesso!' })
@@ -266,6 +277,18 @@ export function IndividualTab({ clients, policies, templates = [], onSuccess }: 
               <code className="bg-slate-200 px-1 rounded">{'{seguradora}'}</code>
             </p>
           </div>
+
+          {type === 'Email' && (
+            <div className="pt-2 border-t border-slate-200">
+              <ImageUploadField
+                image={attachedImage}
+                onChange={setAttachedImage}
+                disabled={sending}
+                label="Anexar Imagem ao E-mail"
+                helperText="JPG, PNG ou WEBP (máx. 5MB). A imagem será enviada embutida no corpo do e-mail junto ao rodapé oficial."
+              />
+            </div>
+          )}
 
           <Button
             type="button"
