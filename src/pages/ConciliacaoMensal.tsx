@@ -101,33 +101,62 @@ export default function ConciliacaoMensal() {
   const m = useMemo(() => {
     const periodPolicies = policies.filter((p) => isDateInPeriod(period, p.start_date))
     const expectedComm = computeExpectedCommissions(policies, period)
-    const receivedComm = computeReceivedCommissions(policies, period)
-    const pendingComm = expectedComm - receivedComm
-    const paidRepasses = computePaidRepasses(policies, period)
-    const pendingRepasses = computePendingRepasses(policies)
+    // Comissões recebidas correspondentes às apólices do período selecionado
+    const receivedComm = periodPolicies
+      .filter((p) => p.comissao_recebida === true)
+      .reduce((s, p) => s + calcNetCommission(p), 0)
+    // Pendentes do mês selecionado: apenas comissões do mês ainda não recebidas
+    const pendingComm = periodPolicies
+      .filter((p) => !p.comissao_recebida)
+      .reduce((s, p) => s + calcNetCommission(p), 0)
+
+    // Repasses do período selecionado
+    const paidRepasses = periodPolicies
+      .filter(
+        (p) =>
+          p.tipo_de_venda === 'Parceiro' &&
+          (p.parceiro || p.expand?.parceiro) &&
+          (p.valor_repasse || 0) > 0 &&
+          p.pago_parceiro,
+      )
+      .reduce((s, p) => s + (p.valor_repasse || 0), 0)
+
+    const pendingRepasses = periodPolicies
+      .filter(
+        (p) =>
+          p.tipo_de_venda === 'Parceiro' &&
+          (p.parceiro || p.expand?.parceiro) &&
+          (p.valor_repasse || 0) > 0 &&
+          !p.pago_parceiro,
+      )
+      .reduce((s, p) => s + (p.valor_repasse || 0), 0)
+
     const paidCustos = computePaidCosts(custos, period)
     const pendingCustos = computePendingCosts(custos, period)
     const totalCustos = computeCosts(custos, period)
     const expectedRepasses = computeExpectedRepasses(policies, period)
     const lucroPrevisto = expectedComm - expectedRepasses - totalCustos
     const lucroReal = receivedComm - paidRepasses - paidCustos
+
     const pendencias: string[] = []
-    const pendComm = periodPolicies.filter((p) => !p.comissao_recebida).length
-    if (pendComm > 0) pendencias.push(`${pendComm} comissão(ões) pendente(s)`)
-    const pendRep = policies.filter(
+    const pendCommCount = periodPolicies.filter((p) => !p.comissao_recebida).length
+    if (pendCommCount > 0) pendencias.push(`${pendCommCount} comissão(ões) pendente(s)`)
+    const pendRepCount = periodPolicies.filter(
       (p) =>
         p.tipo_de_venda === 'Parceiro' &&
         (p.parceiro || p.expand?.parceiro) &&
         (p.valor_repasse || 0) > 0 &&
         !p.pago_parceiro,
     ).length
-    if (pendRep > 0) pendencias.push(`${pendRep} repasse(s) pendente(s)`)
+    if (pendRepCount > 0) pendencias.push(`${pendRepCount} repasse(s) pendente(s)`)
     if (pendingCustos > 0)
       pendencias.push(
         `${custos.filter((c) => c.pago !== true && isDateInPeriod(period, c.data)).length} custo(s) pendente(s)`,
       )
+
     return {
       totalApolices: periodPolicies.length,
+      periodPolicies,
       expectedComm,
       receivedComm,
       pendingComm,
@@ -202,30 +231,31 @@ export default function ConciliacaoMensal() {
 
   // Segmented subsets of policies and custos according to the active detailModalType
   const modalData = useMemo(() => {
-    if (!detailModalType) return { policies: [], custos: [] }
+    if (!detailModalType) return { policies: [], otherPeriodPolicies: [], custos: [] }
 
     switch (detailModalType) {
       case 'producao':
       case 'comissoes-previstas':
         return {
           policies: policies.filter((p) => isDateInPeriod(period, p.start_date)),
+          otherPeriodPolicies: [],
           custos: [],
         }
       case 'comissoes-recebidas':
         return {
           policies: policies.filter(
-            (p) =>
-              p.comissao_recebida === true &&
-              Boolean(p.data_recebimento_comissao) &&
-              isDateInPeriod(period, p.data_recebimento_comissao),
+            (p) => isDateInPeriod(period, p.start_date) && p.comissao_recebida === true,
           ),
+          otherPeriodPolicies: [],
           custos: [],
         }
       case 'comissoes-pendentes':
-        // Apólices iniciadas no período ainda sem comissão recebida
         return {
           policies: policies.filter(
             (p) => isDateInPeriod(period, p.start_date) && !p.comissao_recebida,
+          ),
+          otherPeriodPolicies: policies.filter(
+            (p) => !isDateInPeriod(period, p.start_date) && !p.comissao_recebida,
           ),
           custos: [],
         }
@@ -233,20 +263,28 @@ export default function ConciliacaoMensal() {
         return {
           policies: policies.filter(
             (p) =>
+              isDateInPeriod(period, p.start_date) &&
               p.tipo_de_venda === 'Parceiro' &&
               (p.parceiro || p.expand?.parceiro) &&
               (p.valor_repasse || 0) > 0 &&
-              p.pago_parceiro &&
-              Boolean(p.data_pagamento_parceiro) &&
-              isDateInPeriod(period, p.data_pagamento_parceiro),
+              p.pago_parceiro,
           ),
+          otherPeriodPolicies: [],
           custos: [],
         }
       case 'repasses-pendentes':
-        // Repasses pendentes de apólices do período ou gerais pendentes
         return {
           policies: policies.filter(
             (p) =>
+              isDateInPeriod(period, p.start_date) &&
+              p.tipo_de_venda === 'Parceiro' &&
+              (p.parceiro || p.expand?.parceiro) &&
+              (p.valor_repasse || 0) > 0 &&
+              !p.pago_parceiro,
+          ),
+          otherPeriodPolicies: policies.filter(
+            (p) =>
+              !isDateInPeriod(period, p.start_date) &&
               p.tipo_de_venda === 'Parceiro' &&
               (p.parceiro || p.expand?.parceiro) &&
               (p.valor_repasse || 0) > 0 &&
@@ -257,17 +295,56 @@ export default function ConciliacaoMensal() {
       case 'custos-pagos':
         return {
           policies: [],
+          otherPeriodPolicies: [],
           custos: custos.filter((c) => c.pago === true && isDateInPeriod(period, c.data)),
         }
       case 'custos-pendentes':
         return {
           policies: [],
+          otherPeriodPolicies: [],
           custos: custos.filter((c) => c.pago !== true && isDateInPeriod(period, c.data)),
         }
       default:
-        return { policies: [], custos: [] }
+        return { policies: [], otherPeriodPolicies: [], custos: [] }
     }
   }, [detailModalType, policies, custos, period])
+
+  const handleDownloadPDF = () => {
+    const reportPolicies = m.periodPolicies.map((p) => {
+      const net = calcNetCommission(p)
+      return {
+        clienteNome: p.expand?.client?.name || 'Cliente não informado',
+        seguradoraNome: p.expand?.seguradora?.nome || p.insurance_company || '-',
+        parceiroNome: p.expand?.parceiro?.nome,
+        tipoSeguro: p.tipo_de_seguro || p.coverage_type || '-',
+        numeroApolice: p.policy_number || '-',
+        valorLiquido: p.valor_liquido || p.premium_amount || 0,
+        comissaoPrevista: net,
+        comissaoRecebida: p.comissao_recebida ? net : 0,
+        statusComissao: (p.comissao_recebida ? 'Recebida' : 'Pendente') as 'Recebida' | 'Pendente',
+        dataRecebimento: p.data_recebimento_comissao,
+      }
+    })
+
+    generateConciliacaoPDF({
+      mes,
+      ano,
+      totalApolices: m.totalApolices,
+      comissaoPrevista: m.expectedComm,
+      comissaoRecebida: m.receivedComm,
+      comissaoPendente: m.pendingComm,
+      repassesPagos: m.paidRepasses,
+      repassesPendentes: m.pendingRepasses,
+      custosPagos: m.paidCustos,
+      custosPendentes: m.pendingCustos,
+      lucroPrevisto: m.lucroPrevisto,
+      lucroReal: m.lucroReal,
+      pendencias: m.pendencias,
+      dataFechamento: conciliacao?.data_fechamento,
+      usuarioFechamento: conciliacao?.usuario_fechamento,
+      policies: reportPolicies,
+    })
+  }
 
   const handleClose = async () => {
     if (m.pendencias.length > 0) {
@@ -298,23 +375,7 @@ export default function ConciliacaoMensal() {
         pendencias: JSON.stringify(m.pendencias),
       })
       setConciliacao(conc)
-      generateConciliacaoPDF({
-        mes,
-        ano,
-        totalApolices: m.totalApolices,
-        comissaoPrevista: m.expectedComm,
-        comissaoRecebida: m.receivedComm,
-        comissaoPendente: m.pendingComm,
-        repassesPagos: m.paidRepasses,
-        repassesPendentes: m.pendingRepasses,
-        custosPagos: m.paidCustos,
-        custosPendentes: m.pendingCustos,
-        lucroPrevisto: m.lucroPrevisto,
-        lucroReal: m.lucroReal,
-        pendencias: m.pendencias,
-        dataFechamento: conc.data_fechamento || new Date().toISOString(),
-        usuarioFechamento: conc.usuario_fechamento || '',
-      })
+      handleDownloadPDF()
       toast({ title: 'Mês fechado com sucesso!' })
     } catch (err: any) {
       toast({ title: 'Erro ao fechar mês', description: err.message, variant: 'destructive' })
@@ -481,7 +542,18 @@ export default function ConciliacaoMensal() {
           <h1 className="text-2xl font-bold text-slate-900">Conciliação Mensal</h1>
           <p className="text-slate-500 text-sm">Assistente de fechamento mensal.</p>
         </div>
-        <div className="flex items-center gap-2">
+        <div className="flex flex-wrap items-center gap-2">
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={handleDownloadPDF}
+            className="h-9 gap-1.5 text-xs border-slate-300 hover:bg-slate-50"
+            title="Baixar relatório em PDF do fechamento deste mês"
+          >
+            <FileText className="w-4 h-4 text-blue-600" />
+            <span>Baixar Relatório (PDF)</span>
+          </Button>
+
           <Select
             value={String(mes)}
             onValueChange={(v) => {
@@ -639,28 +711,10 @@ export default function ConciliacaoMensal() {
         ) : isClosed ? (
           <Button
             variant="outline"
-            onClick={() =>
-              conciliacao &&
-              generateConciliacaoPDF({
-                mes,
-                ano,
-                totalApolices: m.totalApolices,
-                comissaoPrevista: m.expectedComm,
-                comissaoRecebida: m.receivedComm,
-                comissaoPendente: m.pendingComm,
-                repassesPagos: m.paidRepasses,
-                repassesPendentes: m.pendingRepasses,
-                custosPagos: m.paidCustos,
-                custosPendentes: m.pendingCustos,
-                lucroPrevisto: m.lucroPrevisto,
-                lucroReal: m.lucroReal,
-                pendencias: m.pendencias,
-                dataFechamento: conciliacao.data_fechamento || new Date().toISOString(),
-                usuarioFechamento: conciliacao.usuario_fechamento || '',
-              })
-            }
+            onClick={handleDownloadPDF}
+            className="border-blue-300 text-blue-700 hover:bg-blue-50"
           >
-            <FileText className="w-4 h-4 mr-1" /> Gerar PDF
+            <FileText className="w-4 h-4 mr-1" /> Baixar Relatório (PDF)
           </Button>
         ) : (
           <Button
@@ -679,6 +733,7 @@ export default function ConciliacaoMensal() {
         type={detailModalType}
         periodLabel={period.label}
         policies={modalData.policies}
+        otherPeriodPolicies={modalData.otherPeriodPolicies}
         custos={modalData.custos}
         canEdit={canEditFinancial}
         onMarkCommissionReceived={handleMarkCommissionReceived}

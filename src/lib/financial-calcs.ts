@@ -45,6 +45,12 @@ export function computePendingRepasses(policies: Policy[], period?: DatePeriod):
     .reduce((s, p) => s + (p.valor_repasse || 0), 0)
 }
 
+export function computePendingCommissionsInPeriod(policies: Policy[], period: DatePeriod): number {
+  return policies
+    .filter((p) => isDateInPeriod(period, p.start_date) && !p.comissao_recebida)
+    .reduce((s, p) => s + calcNetCommission(p), 0)
+}
+
 export function computeCosts(custos: CustoFixo[], period: DatePeriod): number {
   return custos
     .filter((c) => isDateInPeriod(period, c.data))
