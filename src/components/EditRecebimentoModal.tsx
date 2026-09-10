@@ -9,32 +9,35 @@ import {
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Button } from '@/components/ui/button'
-import { Policy, Seguradora } from '@/types'
-import { todayLocalDate } from '@/lib/utils'
-import { createComissaoRecebimento } from '@/services/comissao-recebimentos'
+import { AlertTriangle, AlertCircle } from 'lucide-react'
+import { ComissaoRecebimento } from '@/types'
+import { formatDateForInput } from '@/lib/utils'
+import { updateComissaoRecebimento } from '@/services/comissao-recebimentos'
 import { useToast } from '@/hooks/use-toast'
 import { getErrorMessage } from '@/lib/pocketbase/errors'
-import { AlertTriangle } from 'lucide-react'
+import { useAuth } from '@/hooks/use-auth'
 
-interface Props {
+interface EditRecebimentoModalProps {
   open: boolean
   onOpenChange: (open: boolean) => void
-  policy: Policy | null
-  seguradoras: Seguradora[]
-  alreadyReceived: number
+  recebimento: ComissaoRecebimento | null
+  comissaoPrevista: number
+  totalOutrosRecebimentosBrutos: number
   onSuccess: () => void
 }
 
-export function RegistrarRecebimentoModal({
+export function EditRecebimentoModal({
   open,
   onOpenChange,
-  policy,
-  seguradoras,
-  alreadyReceived,
+  recebimento,
+  comissaoPrevista,
+  totalOutrosRecebimentosBrutos,
   onSuccess,
-}: Props) {
+}: EditRecebimentoModalProps) {
   const { toast } = useToast()
-  const [dataRecebimento, setDataRecebimento] = useState(todayLocalDate())
+  const { user } = useAuth()
+
+  const [dataRecebimento, setDataRecebimento] = useState('')
   const [valorBruto, setValorBruto] = useState<number | ''>('')
   const [aliquotaImposto, setAliquotaImposto] = useState<number>(0)
   const [descontosImpostos, setDescontosImpostos] = useState<number>(0)
@@ -44,60 +47,37 @@ export function RegistrarRecebimentoModal({
   const [observacao, setObservacao] = useState('')
   const [isSubmitting, setIsSubmitting] = useState(false)
 
-  // Identificar a alíquota da seguradora vinculada à apólice
-  const policySeguradora = policy
-    ? policy.expand?.seguradora ||
-      seguradoras.find((s) => s.id === policy.seguradora || s.nome === policy.insurance_company)
-    : undefined
+  const isLegado = recebimento?.origem === 'Legado'
 
-  // Previsão total da comissão
-  const comissaoPrevista = policy
-    ? policy.commission != null
-      ? Number(policy.commission)
-      : Math.round(
-          (((policy.valor_liquido || policy.premium_amount || 0) *
-            (policy.commission_percent || 0)) /
-            100) *
-            100,
-        ) / 100
-    : 0
-
-  // Saldo a receber ANTES desta baixa
-  const saldoAtual = Math.max(0, Math.round((comissaoPrevista - alreadyReceived) * 100) / 100)
-
-  // Quando o modal abre, preencher valor bruto sugerido = saldo atual e imposto padrão da seguradora
   useEffect(() => {
-    if (open) {
-      setDataRecebimento(todayLocalDate())
-      const defaultAliquota =
-        policySeguradora?.imposto_percentual != null
-          ? Number(policySeguradora.imposto_percentual)
-          : policy.iss != null && comissaoPrevista > 0
-            ? Math.round((policy.iss / comissaoPrevista) * 100 * 10) / 10
-            : 0
-
-      setAliquotaImposto(defaultAliquota)
-
-      // Sugere o saldo restante se for > 0, senão a comissão total
-      const initialBruto = saldoAtual > 0 ? saldoAtual : comissaoPrevista || 0
-      setValorBruto(initialBruto > 0 ? initialBruto : '')
-
-      const initialImposto = Math.round(((initialBruto * defaultAliquota) / 100) * 100) / 100
-      setDescontosImpostos(initialImposto)
-      setValorLiquido(Math.round((initialBruto - initialImposto) * 100) / 100)
-
-      setParcela('')
-      setCompetencia('')
-      setObservacao('')
+    if (open && recebimento) {
+      setDataRecebimento(formatDateForInput(recebimento.data_recebimento) || '')
+      setValorBruto(recebimento.valor_bruto != null ? Number(recebimento.valor_bruto) : '')
+      const desc =
+        recebimento.descontos_impostos != null ? Number(recebimento.descontos_impostos) : 0
+      setDescontosImpostos(desc)
+      const liq =
+        recebimento.valor_liquido != null
+          ? Number(recebimento.valor_liquido)
+          : Math.max(0, Number(recebimento.valor_bruto || 0) - desc)
+      setValorLiquido(liq)
+      setAliquotaImposto(
+        recebimento.aliquota_imposto != null ? Number(recebimento.aliquota_imposto) : 0,
+      )
+      setParcela(recebimento.parcela != null ? Number(recebimento.parcela) : '')
+      setCompetencia(recebimento.competencia || '')
+      setObservacao(recebimento.observacao || '')
       setIsSubmitting(false)
     }
-  }, [open, policy, policySeguradora, saldoAtual, comissaoPrevista])
+  }, [open, recebimento])
 
-  // Recalcula imposto e líquido ao alterar valor bruto ou alíquota
   const handleBrutoChange = (brutoVal: number | '') => {
     setValorBruto(brutoVal)
     const num = brutoVal === '' ? 0 : Number(brutoVal)
-    const imposto = Math.round(((num * aliquotaImposto) / 100) * 100) / 100
+    const imposto =
+      aliquotaImposto > 0
+        ? Math.round(((num * aliquotaImposto) / 100) * 100) / 100
+        : descontosImpostos
     setDescontosImpostos(imposto)
     setValorLiquido(Math.round((num - imposto) * 100) / 100)
   }
@@ -117,17 +97,17 @@ export function RegistrarRecebimentoModal({
   }
 
   const numBruto = valorBruto === '' ? 0 : Number(valorBruto)
-  const totalRecebidoApos = Math.round((alreadyReceived + numBruto) * 100) / 100
-  const isAcimaDoPrevisto = comissaoPrevista > 0 && totalRecebidoApos > comissaoPrevista
+  const novoTotalBrutoApos = Math.round((totalOutrosRecebimentosBrutos + numBruto) * 100) / 100
+  const isAcimaDoPrevisto = comissaoPrevista > 0 && novoTotalBrutoApos > comissaoPrevista
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
-    if (isSubmitting || !policy) return
+    if (!recebimento || isSubmitting) return
 
     if (!valorBruto || Number(valorBruto) <= 0) {
       toast({
         title: 'Valor inválido',
-        description: 'Informe um valor bruto de recebimento válido maior que zero.',
+        description: 'Informe um valor bruto válido maior que zero.',
         variant: 'destructive',
       })
       return
@@ -144,36 +124,30 @@ export function RegistrarRecebimentoModal({
 
     setIsSubmitting(true)
 
-    // Chave de idempotência no cliente baseada no timestamp único + id apólice + valor
-    const idempotencyKey = `rec_${policy.id}_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`
-
     try {
-      await createComissaoRecebimento({
-        policy: policy.id,
+      const editorInfo = user?.name || user?.email || 'Usuário'
+      await updateComissaoRecebimento(recebimento.id, {
         data_recebimento: dataRecebimento,
         valor_bruto: Number(valorBruto),
         descontos_impostos: Number(descontosImpostos || 0),
         valor_liquido: Number(valorLiquido),
         aliquota_imposto: Number(aliquotaImposto || 0),
-        origem: 'Manual',
+        parcela: parcela !== '' ? Number(parcela) : null,
+        competencia: competencia.trim() || null,
         observacao: observacao.trim() || undefined,
-        parcela: parcela !== '' ? Number(parcela) : undefined,
-        competencia: competencia.trim() || undefined,
-        idempotency_key: idempotencyKey,
+        editor_info: editorInfo,
       })
 
       toast({
-        title: 'Recebimento registrado com sucesso!',
-        description: isAcimaDoPrevisto
-          ? 'Aviso: o total recebido excedeu a comissão prevista da apólice.'
-          : undefined,
+        title: 'Recebimento atualizado com sucesso!',
+        description: 'Os saldos e indicadores financeiros foram recalculados automaticamente.',
       })
 
       onOpenChange(false)
       onSuccess()
     } catch (err) {
       toast({
-        title: 'Erro ao registrar recebimento',
+        title: 'Erro ao atualizar recebimento',
         description: getErrorMessage(err),
         variant: 'destructive',
       })
@@ -182,71 +156,58 @@ export function RegistrarRecebimentoModal({
     }
   }
 
-  if (!policy) return null
+  if (!recebimento) return null
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="sm:max-w-lg">
         <DialogHeader>
-          <DialogTitle>Registrar Recebimento de Comissão</DialogTitle>
+          <DialogTitle>Editar Recebimento de Comissão</DialogTitle>
           <p className="text-xs text-slate-500">
-            Apólice {policy.policy_number} — {policy.expand?.client?.name || 'Cliente'}
+            Atualize os dados deste lançamento. O valor líquido e os saldos da apólice serão
+            recalculados automaticamente.
           </p>
         </DialogHeader>
 
-        <form onSubmit={handleSubmit} className="space-y-4">
-          {/* Card com resumo de previsão e saldo */}
-          <div className="grid grid-cols-3 gap-2 p-3 bg-slate-50 rounded-lg border text-center text-xs">
+        {isLegado && (
+          <div className="p-3 bg-amber-50 border border-amber-200 rounded-md flex items-start gap-2 text-xs text-amber-800">
+            <AlertCircle className="w-4 h-4 text-amber-600 shrink-0 mt-0.5" />
             <div>
-              <span className="text-slate-500 block">Comissão Prevista (Bruta)</span>
-              <strong className="text-slate-800 text-sm">
-                R$ {comissaoPrevista.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
-              </strong>
-            </div>
-            <div>
-              <span className="text-slate-500 block">Já Recebido (Bruto)</span>
-              <strong className="text-emerald-700 text-sm">
-                R$ {alreadyReceived.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
-              </strong>
-            </div>
-            <div>
-              <span className="text-slate-500 block">Saldo a Receber</span>
-              <strong className="text-amber-700 text-sm">
-                R$ {saldoAtual.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
-              </strong>
+              <p className="font-bold">Atenção: Registro de Origem Legado</p>
+              <p>
+                Este recebimento foi importado/migrado como legado. A edição manual é permitida, mas
+                certifique-se de que os valores conferem com o extrato da seguradora.
+              </p>
             </div>
           </div>
+        )}
 
-          {/* Alerta caso o valor exceda a comissão prevista */}
+        <form onSubmit={handleSubmit} className="space-y-4">
+          {/* Alerta se ultrapassar previsto */}
           {isAcimaDoPrevisto && (
             <div className="p-3 bg-amber-50 border border-amber-200 rounded-md flex items-start gap-2 text-xs text-amber-800">
               <AlertTriangle className="w-4 h-4 text-amber-600 shrink-0 mt-0.5" />
               <div>
-                <p className="font-bold">Aviso de Divergência — Recebimento acima do previsto</p>
+                <p className="font-bold">Aviso: Total recebido supera a comissão prevista</p>
                 <p>
-                  O total acumulado (R${' '}
-                  {totalRecebidoApos.toLocaleString('pt-BR', { minimumFractionDigits: 2 })})
-                  ultrapassa a comissão prevista em R${' '}
-                  {(totalRecebidoApos - comissaoPrevista).toLocaleString('pt-BR', {
-                    minimumFractionDigits: 2,
-                  })}
-                  . O registro será gravado normalmente para refletir a realidade financeira.
+                  Com este valor bruto, o total recebido atingirá R${' '}
+                  {novoTotalBrutoApos.toLocaleString('pt-BR', { minimumFractionDigits: 2 })},
+                  excedendo a comissão prevista de R${' '}
+                  {comissaoPrevista.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}.
                 </p>
               </div>
             </div>
           )}
 
-          {/* Baixa simples: Valor bruto + Data */}
+          {/* Valor Bruto e Data */}
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
             <div>
               <Label className="text-xs font-semibold">Valor Bruto Recebido (R$) *</Label>
               <Input
                 type="number"
                 step="0.01"
-                min="0"
+                min="0.01"
                 required
-                autoFocus
-                placeholder="0,00"
                 value={valorBruto}
                 onChange={(e) =>
                   handleBrutoChange(e.target.value === '' ? '' : Number(e.target.value))
@@ -266,16 +227,12 @@ export function RegistrarRecebimentoModal({
             </div>
           </div>
 
-          {/* Sugestão de imposto pela seguradora */}
+          {/* Impostos e Líquido */}
           <div className="p-3 bg-slate-50/80 rounded border space-y-2">
             <div className="flex items-center justify-between text-xs text-slate-600">
-              <span className="font-medium">
-                Imposto da Seguradora (
-                {policySeguradora?.nome || policy.insurance_company || 'Seguradora'}:{' '}
-                {policySeguradora?.imposto_percentual != null
-                  ? `${policySeguradora.imposto_percentual}%`
-                  : 'alíquota padrão'}
-                )
+              <span className="font-medium">Impostos e Deduções</span>
+              <span className="text-[11px] text-slate-400">
+                (Líquido recalculado automaticamente)
               </span>
             </div>
             <div className="grid grid-cols-3 gap-2">
@@ -292,7 +249,7 @@ export function RegistrarRecebimentoModal({
                 />
               </div>
               <div>
-                <Label className="text-[11px] text-slate-500">Descontos / Impostos (R$)</Label>
+                <Label className="text-[11px] text-slate-500">Impostos / Descontos (R$)</Label>
                 <Input
                   type="number"
                   step="0.01"
@@ -304,19 +261,16 @@ export function RegistrarRecebimentoModal({
               </div>
               <div>
                 <Label className="text-[11px] text-slate-500 font-bold text-slate-700">
-                  Valor Líquido Creditado (R$)
+                  Valor Líquido (R$)
                 </Label>
-                <div
-                  className="h-9 px-3 py-2 bg-white rounded-md border text-sm font-bold text-emerald-700 flex items-center"
-                  title="Receita líquida que entrará no financeiro"
-                >
+                <div className="h-9 px-3 py-2 bg-white rounded-md border text-sm font-bold text-emerald-700 flex items-center">
                   R$ {valorLiquido.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
                 </div>
               </div>
             </div>
           </div>
 
-          {/* Detalhes opcionais: Parcela, Competência, Observação */}
+          {/* Detalhes opcionais */}
           <div className="space-y-2 pt-1 border-t">
             <p className="text-xs font-semibold text-slate-600">Detalhes Opcionais</p>
             <div className="grid grid-cols-2 gap-3">
@@ -334,7 +288,7 @@ export function RegistrarRecebimentoModal({
               <div>
                 <Label className="text-xs text-slate-500">Competência</Label>
                 <Input
-                  placeholder="Ex: 08/2026"
+                  placeholder="Ex: 09/2026"
                   value={competencia}
                   onChange={(e) => setCompetencia(e.target.value)}
                   disabled={isSubmitting}
@@ -344,7 +298,7 @@ export function RegistrarRecebimentoModal({
             <div>
               <Label className="text-xs text-slate-500">Observação</Label>
               <Input
-                placeholder="Observação opcional sobre este recebimento"
+                placeholder="Observação deste recebimento"
                 value={observacao}
                 onChange={(e) => setObservacao(e.target.value)}
                 disabled={isSubmitting}
@@ -363,10 +317,10 @@ export function RegistrarRecebimentoModal({
             </Button>
             <Button
               type="submit"
-              className="bg-emerald-600 hover:bg-emerald-700 text-white"
+              className="bg-blue-600 hover:bg-blue-700 text-white"
               disabled={isSubmitting}
             >
-              {isSubmitting ? 'Salvando...' : 'Salvar Recebimento'}
+              {isSubmitting ? 'Salvando...' : 'Salvar Alterações'}
             </Button>
           </DialogFooter>
         </form>

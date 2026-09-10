@@ -298,17 +298,15 @@ export default function Dashboard() {
           </CardContent>
         </Card>
         <Card
-          className={`shadow-sm ${pendingCommissions > 0 ? 'border-blue-300 bg-blue-50/30' : ''}`}
+          className={`shadow-sm ${pendingCommissions > 0 ? 'border-amber-300 bg-amber-50/30' : ''}`}
         >
           <CardHeader className="flex flex-row items-center justify-between pb-2">
-            <CardTitle className="text-sm font-medium text-slate-600">
-              Comissões a Receber
-            </CardTitle>
-            <DollarSign className="w-5 h-5 text-blue-600" />
+            <CardTitle className="text-sm font-medium text-slate-600">Saldo a Receber</CardTitle>
+            <DollarSign className="w-5 h-5 text-amber-600" />
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold text-blue-700">{maskValue(pendingCommissions)}</div>
-            <p className="text-xs text-blue-600 mt-1">Comissões pendentes</p>
+            <div className="text-2xl font-bold text-amber-700">{maskValue(pendingCommissions)}</div>
+            <p className="text-xs text-amber-600 mt-1">Comissão prevista − total bruto recebido</p>
           </CardContent>
         </Card>
       </div>
@@ -349,7 +347,7 @@ export default function Dashboard() {
         </div>
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 mb-4">
           <div className="bg-slate-50 rounded-lg p-3 border">
-            <p className="text-xs text-slate-500 font-medium">Receitas (Comissões Recebidas)</p>
+            <p className="text-xs text-slate-500 font-medium">Receitas Líquidas Realizadas</p>
             <p className="text-xl font-bold text-slate-900">{maskValue(metrics.totalReceitas)}</p>
           </div>
           <div className="bg-amber-50 rounded-lg p-3 border border-amber-100">

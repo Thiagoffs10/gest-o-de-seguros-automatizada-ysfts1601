@@ -1,7 +1,16 @@
 import { useEffect, useState } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
 import { Link } from 'react-router-dom'
-import { Pencil, RefreshCw, Trash2, Ban, AlertOctagon, ArrowUpRight, Plus } from 'lucide-react'
+import {
+  Pencil,
+  RefreshCw,
+  Trash2,
+  Ban,
+  AlertOctagon,
+  ArrowUpRight,
+  Plus,
+  AlertTriangle,
+} from 'lucide-react'
 import {
   getPolicy,
   createPolicy,
@@ -43,6 +52,7 @@ import {
 import { PolicyFormDialog } from '@/components/PolicyFormDialog'
 import { DeletePolicyDialog } from '@/components/DeletePolicyDialog'
 import { CancelPolicyDialog } from '@/components/CancelPolicyDialog'
+import { EditRecebimentoModal } from '@/components/EditRecebimentoModal'
 import { useToast } from '@/hooks/use-toast'
 import { useRealtime } from '@/hooks/use-realtime'
 import { usePermissions } from '@/hooks/use-permissions'
@@ -70,6 +80,11 @@ export default function PolicyDetail() {
   const [deleteLoading, setDeleteLoading] = useState(false)
   const [cancelOpen, setCancelOpen] = useState(false)
   const [relatedCount, setRelatedCount] = useState({ payments: 0, reminders: 0 })
+
+  // Estados para edição e exclusão de recebimento com confirmação
+  const [editingRecebimento, setEditingRecebimento] = useState<ComissaoRecebimento | null>(null)
+  const [deletingRecebimento, setDeletingRecebimento] = useState<ComissaoRecebimento | null>(null)
+  const [deleteRecebimentoLoading, setDeleteRecebimentoLoading] = useState(false)
 
   const [paymentForm, setPaymentForm] = useState({
     amount: 1000,
@@ -196,12 +211,16 @@ export default function PolicyDetail() {
     }
   }
 
-  const handleDeleteRecebimento = async (recId: string) => {
-    if (!id) return
-    if (!confirm('Deseja realmente excluir este registro de recebimento?')) return
+  const handleConfirmDeleteRecebimento = async () => {
+    if (!deletingRecebimento || !id) return
+    setDeleteRecebimentoLoading(true)
     try {
-      await deleteComissaoRecebimento(recId, id)
-      toast({ title: 'Recebimento excluído com sucesso!' })
+      await deleteComissaoRecebimento(deletingRecebimento.id, id)
+      toast({
+        title: 'Recebimento excluído com sucesso!',
+        description: 'Os saldos e o status da apólice foram recalculados.',
+      })
+      setDeletingRecebimento(null)
       loadData()
     } catch (err: any) {
       toast({
@@ -209,6 +228,8 @@ export default function PolicyDetail() {
         description: getErrorMessage(err),
         variant: 'destructive',
       })
+    } finally {
+      setDeleteRecebimentoLoading(false)
     }
   }
 
@@ -218,7 +239,12 @@ export default function PolicyDetail() {
   const initialData =
     dialogMode === 'edit' ? policy : dialogMode === 'renew' ? prepareRenewalData(policy) : undefined
 
-  // Cálculos dos 3 valores de comissão da apólice
+  // REGRA CORRETA:
+  // - Comissão prevista = valor bruto previsto
+  // - Já recebido = soma dos valores BRUTOS recebidos
+  // - Saldo a receber = comissão prevista - total BRUTO recebido
+  // - Impostos/descontos NÃO reduzem o saldo da comissão prevista
+  // - Valor líquido recebido = receita líquida realizada no financeiro
   const comissaoPrevista =
     policy.commission != null
       ? Number(policy.commission)
@@ -229,15 +255,28 @@ export default function PolicyDetail() {
             100,
         ) / 100
 
-  // Total já recebido (soma dos recebimentos da collection, ou legado se collection vazia mas comissao_recebida = true)
+  // Total BRUTO recebido
   const jaRecebido =
     recebimentos.length > 0
-      ? recebimentos.reduce(
-          (sum, r) => sum + (Number(r.valor_liquido) || Number(r.valor_bruto) || 0),
-          0,
-        )
+      ? Math.round(recebimentos.reduce((sum, r) => sum + (Number(r.valor_bruto) || 0), 0) * 100) /
+        100
       : policy.comissao_recebida
         ? comissaoPrevista
+        : 0
+
+  // Total LÍQUIDO recebido (Receita líquida realizada)
+  const receitaLiquidaRealizada =
+    recebimentos.length > 0
+      ? Math.round(
+          recebimentos.reduce(
+            (sum, r) =>
+              sum +
+              (r.valor_liquido != null ? Number(r.valor_liquido) : Number(r.valor_bruto) || 0),
+            0,
+          ) * 100,
+        ) / 100
+      : policy.comissao_recebida
+        ? Math.max(0, comissaoPrevista - (policy.iss || 0))
         : 0
 
   const saldoAReceber = Math.max(0, Math.round((comissaoPrevista - jaRecebido) * 100) / 100)
@@ -352,7 +391,7 @@ export default function PolicyDetail() {
             </div>
           )}
 
-          <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
             <div className="p-4 bg-white rounded-lg border shadow-xs text-center sm:text-left">
               <span className="text-xs font-semibold uppercase tracking-wider text-slate-500">
                 Comissão prevista
@@ -361,7 +400,7 @@ export default function PolicyDetail() {
                 R$ {fmtMoney(comissaoPrevista)}
               </p>
               <span className="text-[11px] text-slate-400">
-                {policy.commission_percent || 0}% do prêmio líquido
+                Bruto: {policy.commission_percent || 0}% do prêmio líquido
               </span>
             </div>
             <div className="p-4 bg-emerald-50/70 rounded-lg border border-emerald-200 text-center sm:text-left">
@@ -370,8 +409,8 @@ export default function PolicyDetail() {
               </span>
               <p className="text-2xl font-bold text-emerald-700 mt-1">R$ {fmtMoney(jaRecebido)}</p>
               <span className="text-[11px] text-emerald-600">
-                {recebimentos.length} recebimento{recebimentos.length !== 1 ? 's' : ''} registrado
-                {recebimentos.length !== 1 ? 's' : ''}
+                Total bruto ({recebimentos.length} recebimento{recebimentos.length !== 1 ? 's' : ''}
+                )
               </span>
             </div>
             <div className="p-4 bg-amber-50/70 rounded-lg border border-amber-200 text-center sm:text-left">
@@ -380,7 +419,18 @@ export default function PolicyDetail() {
               </span>
               <p className="text-2xl font-bold text-amber-700 mt-1">R$ {fmtMoney(saldoAReceber)}</p>
               <span className="text-[11px] text-amber-600">
-                {saldoAReceber === 0 ? 'Sem pendências' : 'Aguardando recebimento'}
+                {saldoAReceber === 0 ? 'Sem pendências' : 'Previsto − total bruto recebido'}
+              </span>
+            </div>
+            <div className="p-4 bg-blue-50/70 rounded-lg border border-blue-200 text-center sm:text-left">
+              <span className="text-xs font-semibold uppercase tracking-wider text-blue-800">
+                Receita líquida realizada
+              </span>
+              <p className="text-2xl font-bold text-blue-700 mt-1">
+                R$ {fmtMoney(receitaLiquidaRealizada)}
+              </p>
+              <span className="text-[11px] text-blue-600">
+                Efetivamente creditado (com descontos)
               </span>
             </div>
           </div>
@@ -429,17 +479,30 @@ export default function PolicyDetail() {
                           </div>
                         </td>
                         <td className="p-2.5 text-right">
-                          {can('policies', 'delete') && (
-                            <Button
-                              variant="ghost"
-                              size="sm"
-                              className="text-red-500 hover:text-red-700 hover:bg-red-50 h-7 px-2"
-                              onClick={() => handleDeleteRecebimento(rec.id)}
-                              title="Excluir recebimento"
-                            >
-                              <Trash2 className="w-3.5 h-3.5" />
-                            </Button>
-                          )}
+                          <div className="flex items-center justify-end gap-1">
+                            {can('policies', 'update') && (
+                              <Button
+                                variant="ghost"
+                                size="sm"
+                                className="text-blue-600 hover:text-blue-800 hover:bg-blue-50 h-7 px-2"
+                                onClick={() => setEditingRecebimento(rec)}
+                                title="Editar recebimento"
+                              >
+                                <Pencil className="w-3.5 h-3.5" />
+                              </Button>
+                            )}
+                            {can('policies', 'delete') && (
+                              <Button
+                                variant="ghost"
+                                size="sm"
+                                className="text-red-500 hover:text-red-700 hover:bg-red-50 h-7 px-2"
+                                onClick={() => setDeletingRecebimento(rec)}
+                                title="Desfazer / Excluir recebimento"
+                              >
+                                <Trash2 className="w-3.5 h-3.5" />
+                              </Button>
+                            )}
+                          </div>
                         </td>
                       </tr>
                     ))}
@@ -660,6 +723,109 @@ export default function PolicyDetail() {
         onConfirm={handleCancelConfirm}
         policyNumber={policy.policy_number}
       />
+
+      {/* Modal de Edição de Recebimento */}
+      <EditRecebimentoModal
+        open={!!editingRecebimento}
+        onOpenChange={(open) => !open && setEditingRecebimento(null)}
+        recebimento={editingRecebimento}
+        comissaoPrevista={comissaoPrevista}
+        totalOutrosRecebimentosBrutos={
+          editingRecebimento
+            ? Math.round(
+                recebimentos
+                  .filter((r) => r.id !== editingRecebimento.id)
+                  .reduce((sum, r) => sum + (Number(r.valor_bruto) || 0), 0) * 100,
+              ) / 100
+            : 0
+        }
+        onSuccess={() => {
+          loadData()
+        }}
+      />
+
+      {/* Diálogo de Confirmação para Desfazer / Excluir Recebimento */}
+      <Dialog
+        open={!!deletingRecebimento}
+        onOpenChange={(open) => !open && setDeletingRecebimento(null)}
+      >
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2 text-red-600">
+              <AlertTriangle className="w-5 h-5 text-red-600" />
+              <span>Desfazer / Excluir Recebimento?</span>
+            </DialogTitle>
+          </DialogHeader>
+
+          {deletingRecebimento && (
+            <div className="space-y-3 text-sm text-slate-600 py-1">
+              <p>
+                Tem certeza de que deseja desfazer este recebimento de comissão da apólice{' '}
+                <strong>{policy.policy_number}</strong>?
+              </p>
+
+              <div className="p-3 bg-slate-50 border rounded-lg text-xs space-y-1">
+                <div>
+                  <span className="text-slate-500">Data:</span>{' '}
+                  <span className="font-semibold text-slate-800">
+                    {formatDateDisplay(deletingRecebimento.data_recebimento)}
+                  </span>
+                </div>
+                <div>
+                  <span className="text-slate-500">Valor Bruto:</span>{' '}
+                  <span className="font-semibold text-slate-800">
+                    R$ {fmtMoney(deletingRecebimento.valor_bruto)}
+                  </span>
+                </div>
+                <div>
+                  <span className="text-slate-500">Valor Líquido:</span>{' '}
+                  <span className="font-semibold text-emerald-700">
+                    R$ {fmtMoney(deletingRecebimento.valor_liquido)}
+                  </span>
+                </div>
+                {deletingRecebimento.origem && (
+                  <div>
+                    <span className="text-slate-500">Origem:</span>{' '}
+                    <span className="font-semibold">{deletingRecebimento.origem}</span>
+                  </div>
+                )}
+              </div>
+
+              {deletingRecebimento.origem === 'Legado' && (
+                <div className="p-2.5 bg-amber-50 border border-amber-200 rounded text-xs text-amber-800">
+                  <strong>Aviso especial:</strong> Este registro possui origem &quot;Legado&quot;.
+                  Ao excluí-lo, o saldo da apólice voltará a ficar em aberto e você poderá registrar
+                  um novo recebimento corrigido se necessário.
+                </div>
+              )}
+
+              <p className="text-xs text-slate-500">
+                Esta ação atualizará automaticamente o saldo a receber, a receita líquida e o status
+                de quitação da comissão no Financeiro e no Dashboard.
+              </p>
+            </div>
+          )}
+
+          <DialogFooter className="pt-2">
+            <Button
+              type="button"
+              variant="outline"
+              onClick={() => setDeletingRecebimento(null)}
+              disabled={deleteRecebimentoLoading}
+            >
+              Cancelar
+            </Button>
+            <Button
+              type="button"
+              variant="destructive"
+              onClick={handleConfirmDeleteRecebimento}
+              disabled={deleteRecebimentoLoading}
+            >
+              {deleteRecebimentoLoading ? 'Excluindo...' : 'Confirmar e Desfazer'}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
 
       <Dialog open={isPayModalOpen} onOpenChange={setIsPayModalOpen}>
         <DialogContent>

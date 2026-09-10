@@ -1,5 +1,9 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
-import { createComissaoRecebimento, deleteComissaoRecebimento } from './comissao-recebimentos'
+import {
+  createComissaoRecebimento,
+  updateComissaoRecebimento,
+  deleteComissaoRecebimento,
+} from './comissao-recebimentos'
 import pb from '@/lib/pocketbase/client'
 
 // Mocking pb client
@@ -39,6 +43,19 @@ describe('Validação do Fluxo de Recebimento de Comissão — Caso R$ 250,00', 
       }
       receiptsInDb.push(newRec)
       return newRec
+    }),
+    getOne: vi.fn(async (id: string) => {
+      const rec = receiptsInDb.find((r) => r.id === id)
+      if (rec) return { ...rec }
+      throw new Error(`Receipt ${id} not found`)
+    }),
+    update: vi.fn(async (id: string, updates: any) => {
+      const idx = receiptsInDb.findIndex((r) => r.id === id)
+      if (idx !== -1) {
+        receiptsInDb[idx] = { ...receiptsInDb[idx], ...updates }
+        return { ...receiptsInDb[idx] }
+      }
+      throw new Error(`Receipt ${id} not found`)
     }),
     getFullList: vi.fn(async (options?: any) => {
       if (options?.filter?.includes(`policy = "${policyId}"`)) {
@@ -104,56 +121,84 @@ describe('Validação do Fluxo de Recebimento de Comissão — Caso R$ 250,00', 
     })
     expect(mockPolicy.comissao_recebida).toBe(false)
 
-    // Cálculos de saldo na regra de negócio
+    // Cálculos de saldo na regra de negócio: Já recebido = soma dos valores BRUTOS
     const allRecs = await mockComissaoCol.getFullList({ filter: `policy = "${policyId}"` })
-    const totalRecebido = allRecs.reduce((sum, r) => sum + r.valor_liquido, 0)
-    const saldo = mockPolicy.commission - totalRecebido
+    const totalRecebidoBruto = allRecs.reduce((sum, r) => sum + r.valor_bruto, 0)
+    const saldo = mockPolicy.commission - totalRecebidoBruto
 
-    expect(totalRecebido).toBe(100)
+    expect(totalRecebidoBruto).toBe(100)
     expect(saldo).toBe(150)
   })
 
-  it('Cenário R$ 250: 2ª baixa de R$ 150 completa R$ 250, saldo R$ 0 e comissao_recebida = true', async () => {
-    // 1ª baixa R$ 100
+  it('Cenário R$ 250: 2ª baixa de R$ 150 com desconto completa R$ 250 BRUTO, saldo R$ 0 e comissao_recebida = true', async () => {
+    // 1ª baixa R$ 100 bruto
     await createComissaoRecebimento({
       policy: policyId,
       data_recebimento: '2026-09-10',
       valor_bruto: 100,
-      valor_liquido: 100,
-      descontos_impostos: 0,
+      valor_liquido: 98,
+      descontos_impostos: 2,
       origem: 'Manual',
       idempotency_key: 'idemp_key_1',
     })
 
     expect(mockPolicy.comissao_recebida).toBe(false)
 
-    // 2ª baixa R$ 150
+    // 2ª baixa R$ 150 bruto (desconto de 3, líquido 147)
     const rec2 = await createComissaoRecebimento({
       policy: policyId,
       data_recebimento: '2026-09-11',
       valor_bruto: 150,
-      valor_liquido: 150,
-      descontos_impostos: 0,
+      valor_liquido: 147,
+      descontos_impostos: 3,
       origem: 'Manual',
       idempotency_key: 'idemp_key_2',
     })
 
-    expect(rec2.valor_liquido).toBe(150)
+    expect(rec2.valor_bruto).toBe(150)
+    expect(rec2.valor_liquido).toBe(147)
 
-    // Verificar que agora a apólice foi marcada com comissao_recebida = true
+    // Como a soma dos BRUTOS atingiu 250 (100 + 150), a apólice deve ser quitada
     expect(mockPoliciesCol.update).toHaveBeenLastCalledWith(policyId, {
       comissao_recebida: true,
       data_recebimento_comissao: '2026-09-11',
     })
     expect(mockPolicy.comissao_recebida).toBe(true)
 
-    // Verificar soma e saldo
+    // Verificar soma dos brutos e saldo (impostos NÃO reduzem o saldo da comissão prevista)
     const allRecs = await mockComissaoCol.getFullList({ filter: `policy = "${policyId}"` })
-    const totalRecebido = allRecs.reduce((sum, r) => sum + r.valor_liquido, 0)
-    const saldo = mockPolicy.commission - totalRecebido
+    const totalRecebidoBruto = allRecs.reduce((sum, r) => sum + r.valor_bruto, 0)
+    const totalReceitaLiquida = allRecs.reduce((sum, r) => sum + r.valor_liquido, 0)
+    const saldo = mockPolicy.commission - totalRecebidoBruto
 
-    expect(totalRecebido).toBe(250)
+    expect(totalRecebidoBruto).toBe(250)
+    expect(totalReceitaLiquida).toBe(245)
     expect(saldo).toBe(0)
+  })
+
+  it('Edição de recebimento recalcula os valores brutos, líquidos e status da apólice', async () => {
+    // Criar recebimento de 100 bruto (saldo restante 150)
+    const rec = await createComissaoRecebimento({
+      policy: policyId,
+      data_recebimento: '2026-09-10',
+      valor_bruto: 100,
+      valor_liquido: 98,
+      descontos_impostos: 2,
+      origem: 'Manual',
+      idempotency_key: 'idemp_edit_1',
+    })
+
+    expect(mockPolicy.comissao_recebida).toBe(false)
+
+    // Editar recebimento para 250 bruto (comissão total da apólice)
+    await updateComissaoRecebimento(rec.id, {
+      valor_bruto: 250,
+      descontos_impostos: 5,
+      editor_info: 'Teste QA',
+    })
+
+    // Deve quitar a apólice
+    expect(mockPolicy.comissao_recebida).toBe(true)
   })
 
   it('Idempotency Key: previne baixa duplicada com a mesma chave', async () => {

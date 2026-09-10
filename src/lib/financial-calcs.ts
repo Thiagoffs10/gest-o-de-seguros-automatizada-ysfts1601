@@ -3,7 +3,20 @@ import { DatePeriod, isDateInPeriod } from '@/lib/date-filter'
 
 export const calcNetCommission = (p: Policy) => (p.commission || 0) - (p.iss || 0)
 
-export function computeReceivedCommissions(
+/**
+ * Comissão Prevista bruta da apólice (valor bruto previsto)
+ */
+export const getPolicyExpectedCommission = (p: Policy): number => {
+  if (p.commission != null) return Number(p.commission)
+  const base = p.valor_liquido || p.premium_amount || 0
+  const pct = p.commission_percent || 0
+  return Math.round(((base * pct) / 100) * 100) / 100
+}
+
+/**
+ * Receita líquida realizada no financeiro (soma dos valores líquidos recebidos no período)
+ */
+export function computeReceivedNetCommissions(
   policies: Policy[],
   period: DatePeriod,
   recebimentos?: ComissaoRecebimento[],
@@ -20,7 +33,11 @@ export function computeReceivedCommissions(
         if (policies.length > 0 && !policyMap.has(r.policy)) return false
         return true
       })
-      .reduce((s, r) => s + (Number(r.valor_liquido) || 0), 0)
+      .reduce(
+        (s, r) =>
+          s + (r.valor_liquido != null ? Number(r.valor_liquido) : Number(r.valor_bruto) || 0),
+        0,
+      )
   }
 
   return policies
@@ -33,35 +50,79 @@ export function computeReceivedCommissions(
     .reduce((s, p) => s + calcNetCommission(p), 0)
 }
 
+/**
+ * Receitas realizadas no financeiro (valor líquido recebido):
+ * Representa a receita efetivamente realizada nas contas da corretora.
+ */
+export function computeReceivedCommissions(
+  policies: Policy[],
+  period: DatePeriod,
+  recebimentos?: ComissaoRecebimento[],
+): number {
+  return computeReceivedNetCommissions(policies, period, recebimentos)
+}
+
+/**
+ * Total BRUTO recebido de comissões no período
+ */
+export function computeReceivedGrossCommissions(
+  policies: Policy[],
+  period: DatePeriod,
+  recebimentos?: ComissaoRecebimento[],
+): number {
+  if (recebimentos && recebimentos.length > 0) {
+    const policyMap = new Map<string, Policy>()
+    for (const p of policies) {
+      policyMap.set(p.id, p)
+    }
+
+    return recebimentos
+      .filter((r) => {
+        if (!r.data_recebimento || !isDateInPeriod(period, r.data_recebimento)) return false
+        if (policies.length > 0 && !policyMap.has(r.policy)) return false
+        return true
+      })
+      .reduce((s, r) => s + (Number(r.valor_bruto) || 0), 0)
+  }
+
+  return policies
+    .filter(
+      (p) =>
+        p.comissao_recebida === true &&
+        Boolean(p.data_recebimento_comissao) &&
+        isDateInPeriod(period, p.data_recebimento_comissao),
+    )
+    .reduce((s, p) => s + getPolicyExpectedCommission(p), 0)
+}
+
+/**
+ * Saldo a receber de comissões:
+ * Regra: Saldo a receber = Comissão prevista (bruta) − Total BRUTO recebido.
+ * Impostos/descontos NÃO reduzem o saldo da comissão prevista.
+ */
 export function computePendingCommissions(
   policies: Policy[],
   recebimentos?: ComissaoRecebimento[],
 ): number {
   if (recebimentos && recebimentos.length > 0) {
-    const receivedByPolicy = new Map<string, number>()
+    // Mapa de total BRUTO recebido por apólice
+    const receivedGrossByPolicy = new Map<string, number>()
     for (const r of recebimentos) {
-      const current = receivedByPolicy.get(r.policy) || 0
-      receivedByPolicy.set(
-        r.policy,
-        current + (Number(r.valor_liquido) || Number(r.valor_bruto) || 0),
-      )
+      const current = receivedGrossByPolicy.get(r.policy) || 0
+      receivedGrossByPolicy.set(r.policy, current + (Number(r.valor_bruto) || 0))
     }
-    // Soma o saldo pendente de cada apólice
+    // Soma o saldo pendente (bruto previsto - bruto recebido) de cada apólice
     return policies.reduce((sum, p) => {
-      const totalPrevisto =
-        p.commission != null
-          ? Number(p.commission)
-          : Math.round(
-              (((p.valor_liquido || p.premium_amount || 0) * (p.commission_percent || 0)) / 100) *
-                100,
-            ) / 100
-      const recs = receivedByPolicy.get(p.id) ?? (p.comissao_recebida ? totalPrevisto : 0)
-      const saldo = Math.max(0, totalPrevisto - recs)
+      const totalPrevisto = getPolicyExpectedCommission(p)
+      const recsBruto = receivedGrossByPolicy.get(p.id) ?? (p.comissao_recebida ? totalPrevisto : 0)
+      const saldo = Math.max(0, Math.round((totalPrevisto - recsBruto) * 100) / 100)
       return sum + saldo
     }, 0)
   }
 
-  return policies.filter((p) => !p.comissao_recebida).reduce((s, p) => s + calcNetCommission(p), 0)
+  return policies
+    .filter((p) => !p.comissao_recebida)
+    .reduce((s, p) => s + getPolicyExpectedCommission(p), 0)
 }
 
 export function computePaidRepasses(policies: Policy[], period: DatePeriod): number {

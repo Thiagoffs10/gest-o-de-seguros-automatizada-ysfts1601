@@ -37,6 +37,7 @@ import { todayLocalDate } from '@/lib/utils'
 import {
   calcNetCommission,
   computeReceivedCommissions,
+  computePendingCommissions,
   computePendingRepasses,
   computePaidRepasses,
   computePaidCosts,
@@ -116,10 +117,8 @@ export default function ConciliacaoMensal() {
     // Comissões recebidas: data de recebimento da comissão no período (usando comissao_recebimentos como fonte dos realizados)
     const receivedComm = computeReceivedCommissions(policies, period, recebimentos)
 
-    // Pendentes do mês selecionado: comissões da produção do mês que ainda não foram recebidas
-    const pendingComm = periodPolicies
-      .filter((p) => !p.comissao_recebida)
-      .reduce((s, p) => s + calcNetCommission(p), 0)
+    // Pendentes do mês selecionado: comissões da produção do mês com saldo pendente (previsto bruto - bruto recebido)
+    const pendingComm = computePendingCommissions(periodPolicies, recebimentos)
 
     // Repasses pagos: data de pagamento do repasse no período
     const paidRepasses = computePaidRepasses(policies, period)

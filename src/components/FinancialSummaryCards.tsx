@@ -32,13 +32,13 @@ export function FinancialSummaryCards({
       title: 'RECEITAS',
       cards: [
         {
-          label: 'Comissões Previstas',
+          label: 'Comissão Prevista',
           value: expectedCommissions,
           icon: TrendingUp,
           color: 'text-slate-700',
         },
         {
-          label: 'Comissões Recebidas',
+          label: 'Receita Líquida Realizada',
           value: receivedCommissions,
           icon: CheckCircle2,
           color: 'text-emerald-700',
