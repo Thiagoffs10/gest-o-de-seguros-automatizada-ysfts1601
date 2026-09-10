@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useState, useRef } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
 import { Link } from 'react-router-dom'
 import {
@@ -77,6 +77,7 @@ export default function PolicyDetail() {
   const [dialogMode, setDialogMode] = useState<DialogMode>(null)
   const [fieldErrors, setFieldErrors] = useState<FieldErrors>({})
   const [deleteOpen, setDeleteOpen] = useState(false)
+  const [isPaySubmitting, setIsPaySubmitting] = useState(false)
   const [deleteLoading, setDeleteLoading] = useState(false)
   const [cancelOpen, setCancelOpen] = useState(false)
   const [relatedCount, setRelatedCount] = useState({ payments: 0, reminders: 0 })
@@ -85,6 +86,7 @@ export default function PolicyDetail() {
   const [editingRecebimento, setEditingRecebimento] = useState<ComissaoRecebimento | null>(null)
   const [deletingRecebimento, setDeletingRecebimento] = useState<ComissaoRecebimento | null>(null)
   const [deleteRecebimentoLoading, setDeleteRecebimentoLoading] = useState(false)
+  const isOperationInProgressRef = useRef(false)
 
   const [paymentForm, setPaymentForm] = useState({
     amount: 1000,
@@ -118,9 +120,22 @@ export default function PolicyDetail() {
   useEffect(() => {
     loadData()
   }, [id])
-  useRealtime('policies', () => loadData())
-  useRealtime('payments', () => loadData())
-  useRealtime('comissao_recebimentos', () => loadData())
+  // Carregamento com debounce/guard para evitar re-renderizações e reaberturas múltiplas via WebSocket
+  useRealtime('policies', () => {
+    if (!isOperationInProgressRef.current) {
+      loadData()
+    }
+  })
+  useRealtime('payments', () => {
+    if (!isOperationInProgressRef.current) {
+      loadData()
+    }
+  })
+  useRealtime('comissao_recebimentos', () => {
+    if (!isOperationInProgressRef.current) {
+      loadData()
+    }
+  })
 
   const handleSubmit = async (formData: any) => {
     if (!policy) return
@@ -196,32 +211,39 @@ export default function PolicyDetail() {
 
   const handleAddPayment = async (e: React.FormEvent) => {
     e.preventDefault()
-    if (!id) return
+    if (!id || isPaySubmitting) return
+    setIsPaySubmitting(true)
+    isOperationInProgressRef.current = true
     try {
       await createPayment({ policy: id, ...paymentForm })
       toast({ title: 'Pagamento registrado!' })
       setIsPayModalOpen(false)
-      loadData()
+      await loadData()
     } catch (err: any) {
       toast({
         title: 'Erro ao registrar pagamento',
         description: err.message,
         variant: 'destructive',
       })
+    } finally {
+      setIsPaySubmitting(false)
+      isOperationInProgressRef.current = false
     }
   }
 
   const handleConfirmDeleteRecebimento = async () => {
-    if (!deletingRecebimento || !id) return
+    if (!deletingRecebimento || !id || deleteRecebimentoLoading) return
     setDeleteRecebimentoLoading(true)
+    isOperationInProgressRef.current = true
     try {
-      await deleteComissaoRecebimento(deletingRecebimento.id, id)
+      const recId = deletingRecebimento.id
+      setDeletingRecebimento(null)
+      await deleteComissaoRecebimento(recId, id)
       toast({
         title: 'Recebimento excluído com sucesso!',
         description: 'Os saldos e o status da apólice foram recalculados.',
       })
-      setDeletingRecebimento(null)
-      loadData()
+      await loadData()
     } catch (err: any) {
       toast({
         title: 'Erro ao excluir recebimento',
@@ -230,6 +252,7 @@ export default function PolicyDetail() {
       })
     } finally {
       setDeleteRecebimentoLoading(false)
+      isOperationInProgressRef.current = false
     }
   }
 
@@ -885,11 +908,16 @@ export default function PolicyDetail() {
               </Select>
             </div>
             <DialogFooter>
-              <Button type="button" variant="outline" onClick={() => setIsPayModalOpen(false)}>
+              <Button
+                type="button"
+                variant="outline"
+                onClick={() => setIsPayModalOpen(false)}
+                disabled={isPaySubmitting}
+              >
                 Cancelar
               </Button>
-              <Button type="submit" className="bg-blue-600">
-                Salvar Pagamento
+              <Button type="submit" className="bg-blue-600" disabled={isPaySubmitting}>
+                {isPaySubmitting ? 'Salvando...' : 'Salvar Pagamento'}
               </Button>
             </DialogFooter>
           </form>

@@ -180,6 +180,8 @@ export default function ConciliacaoMensal() {
 
   // Fast actions to mark received / paid from the modal (usando data local Brasil)
   const handleMarkCommissionReceived = async (policyId: string) => {
+    if (actionLoading) return
+    setActionLoading(true)
     try {
       const today = todayLocalDate()
       const policyTarget = policies.find((p) => p.id === policyId)
@@ -210,10 +212,14 @@ export default function ConciliacaoMensal() {
     } catch (err: any) {
       toast({ title: 'Erro ao baixar comissão', description: err.message, variant: 'destructive' })
       throw err
+    } finally {
+      setActionLoading(false)
     }
   }
 
   const handleMarkRepassePaid = async (policyId: string) => {
+    if (actionLoading) return
+    setActionLoading(true)
     try {
       const today = todayLocalDate()
       await updatePolicyFinancial(policyId, {
@@ -228,10 +234,14 @@ export default function ConciliacaoMensal() {
     } catch (err: any) {
       toast({ title: 'Erro ao baixar repasse', description: err.message, variant: 'destructive' })
       throw err
+    } finally {
+      setActionLoading(false)
     }
   }
 
   const handleMarkCustoPaid = async (custoId: string) => {
+    if (actionLoading) return
+    setActionLoading(true)
     try {
       const today = todayLocalDate()
       await updateCustoFixo(custoId, {
@@ -246,6 +256,8 @@ export default function ConciliacaoMensal() {
     } catch (err: any) {
       toast({ title: 'Erro ao baixar custo', description: err.message, variant: 'destructive' })
       throw err
+    } finally {
+      setActionLoading(false)
     }
   }
 

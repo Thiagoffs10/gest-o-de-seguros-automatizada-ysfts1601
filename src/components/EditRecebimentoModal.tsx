@@ -143,8 +143,9 @@ export function EditRecebimentoModal({
         description: 'Os saldos e indicadores financeiros foram recalculados automaticamente.',
       })
 
+      // Fecha o modal antes de chamar o callback de sucesso para prevenir conflito de re-render
       onOpenChange(false)
-      onSuccess()
+      onSuccess?.()
     } catch (err) {
       toast({
         title: 'Erro ao atualizar recebimento',
@@ -155,7 +156,6 @@ export function EditRecebimentoModal({
       setIsSubmitting(false)
     }
   }
-
   if (!recebimento) return null
 
   return (

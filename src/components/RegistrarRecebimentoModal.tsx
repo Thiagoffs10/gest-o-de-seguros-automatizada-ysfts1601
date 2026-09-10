@@ -169,8 +169,9 @@ export function RegistrarRecebimentoModal({
           : undefined,
       })
 
+      // Fecha o modal antes de chamar onSuccess para prevenir flash/duplo toggle
       onOpenChange(false)
-      onSuccess()
+      onSuccess?.()
     } catch (err) {
       toast({
         title: 'Erro ao registrar recebimento',
@@ -181,7 +182,6 @@ export function RegistrarRecebimentoModal({
       setIsSubmitting(false)
     }
   }
-
   if (!policy) return null
 
   return (

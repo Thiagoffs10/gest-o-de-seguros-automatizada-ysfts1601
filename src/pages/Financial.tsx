@@ -1,4 +1,4 @@
-import { useEffect, useState, useCallback, useMemo } from 'react'
+import { useEffect, useState, useCallback, useMemo, useRef } from 'react'
 import { useSearchParams } from 'react-router-dom'
 import {
   Edit2,
@@ -89,6 +89,7 @@ export default function Financial() {
   const [editingRecebimento, setEditingRecebimento] = useState<ComissaoRecebimento | null>(null)
   const [deletingRecebimento, setDeletingRecebimento] = useState<ComissaoRecebimento | null>(null)
   const [deleteLoading, setDeleteLoading] = useState(false)
+  const isOperationInProgressRef = useRef(false)
   const [saving, setSaving] = useState(false)
   const [loading, setLoading] = useState(true)
   const [commPage, setCommPage] = useState(1)
@@ -132,9 +133,21 @@ export default function Financial() {
   useEffect(() => {
     loadData()
   }, [loadData])
-  useRealtime('policies', () => loadData())
-  useRealtime('custos_fixos', () => loadData())
-  useRealtime('comissao_recebimentos', () => loadData())
+  useRealtime('policies', () => {
+    if (!isOperationInProgressRef.current) {
+      loadData()
+    }
+  })
+  useRealtime('custos_fixos', () => {
+    if (!isOperationInProgressRef.current) {
+      loadData()
+    }
+  })
+  useRealtime('comissao_recebimentos', () => {
+    if (!isOperationInProgressRef.current) {
+      loadData()
+    }
+  })
 
   const period = useMemo(() => computePeriodFromFilters(filters), [filters])
 
@@ -366,10 +379,12 @@ export default function Financial() {
   }
 
   const handleConfirmDeleteRecebimento = async () => {
-    if (!deletingRecebimento) return
+    if (!deletingRecebimento || deleteLoading) return
+    const recId = deletingRecebimento.id
+    const targetPolicyId = deletingRecebimento.policy
     setDeleteLoading(true)
     try {
-      await deleteComissaoRecebimento(deletingRecebimento.id, deletingRecebimento.policy)
+      await deleteComissaoRecebimento(recId, targetPolicyId)
       toast({
         title: 'Recebimento excluído com sucesso!',
         description: 'Os valores financeiros e o status foram recalculados.',
@@ -388,6 +403,8 @@ export default function Financial() {
   }
 
   const handleQuickPayRepasse = async (policyId: string) => {
+    if (saving) return
+    setSaving(true)
     try {
       await updatePolicyFinancial(policyId, {
         pago_parceiro: true,
@@ -397,6 +414,8 @@ export default function Financial() {
       loadData()
     } catch (err: any) {
       toast({ title: 'Erro', description: err.message, variant: 'destructive' })
+    } finally {
+      setSaving(false)
     }
   }
 
