@@ -30,6 +30,11 @@ const COLLECTION_LABELS: Record<string, string> = {
   parceiros: 'Parceiros',
   custos_fixos: 'Custos Fixos',
   tipos_seguro: 'Tipos de Seguro',
+  conciliacoes: 'Conciliações',
+  parceiro_pagamentos: 'Pagamentos de Parceiros',
+  parceiro_debitos: 'Débitos de Parceiros',
+  email_templates: 'Modelos de E-mail',
+  password_resets: 'Tokens de Recuperação',
 }
 
 export default function Backup() {

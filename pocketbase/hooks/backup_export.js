@@ -20,6 +20,11 @@ routerAdd(
       'parceiros',
       'custos_fixos',
       'tipos_seguro',
+      'conciliacoes',
+      'parceiro_pagamentos',
+      'parceiro_debitos',
+      'email_templates',
+      'password_resets',
     ]
 
     var headers = e.requestInfo().headers || {}

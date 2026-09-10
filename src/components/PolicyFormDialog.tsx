@@ -55,6 +55,7 @@ const DEFAULT_FORM = {
   start_date: todayLocalDate(),
   end_date: toLocalDate(new Date(Date.now() + 365 * 86400000)),
   status: 'Ativa',
+  previous_policy: '',
 }
 
 interface Props {
@@ -149,6 +150,7 @@ export function PolicyFormDialog({
         start_date: formatDateForInput(initialData.start_date) || DEFAULT_FORM.start_date,
         end_date: formatDateForInput(initialData.end_date) || DEFAULT_FORM.end_date,
         status: initialData.status || 'Ativa',
+        previous_policy: initialData.previous_policy || '',
       })
     } else {
       setForm({ ...DEFAULT_FORM })

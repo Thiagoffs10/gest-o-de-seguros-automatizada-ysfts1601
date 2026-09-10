@@ -8,6 +8,7 @@ import {
   deletePolicyWithRelations,
   prepareRenewalData,
   countActivePolicies,
+  cancelPolicy,
 } from '@/services/policies'
 import { getClients } from '@/services/clients'
 import { getSeguradoras } from '@/services/seguradoras'
@@ -194,8 +195,7 @@ export default function Policies() {
   }) => {
     if (!cancelTarget) return
     try {
-      await updatePolicy(cancelTarget.id, {
-        status: 'Cancelada',
+      await cancelPolicy(cancelTarget.id, {
         data_cancelamento: data.data_cancelamento,
         motivo_cancelamento: data.motivo_cancelamento,
       })

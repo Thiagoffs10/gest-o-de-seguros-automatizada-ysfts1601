@@ -158,6 +158,16 @@ export function preparePolicyPayload(data: Partial<Policy> & Record<string, any>
     payload.end_date = toLocalDate(new Date(Date.now() + 365 * 86400000))
   }
 
+  // Preservar previous_policy explicitamente quando informado
+  if ('previous_policy' in data) {
+    payload.previous_policy =
+      data.previous_policy &&
+      typeof data.previous_policy === 'string' &&
+      data.previous_policy.trim() !== ''
+        ? data.previous_policy.trim()
+        : null
+  }
+
   // Remove expand helper property before sending to PocketBase
   delete payload.expand
 
@@ -257,6 +267,17 @@ export const updatePolicy = async (id: string, data: Partial<Policy>) => {
   return pb.collection('policies').update<Policy>(id, cleanData)
 }
 
+export const cancelPolicy = async (
+  id: string,
+  data: { data_cancelamento: string; motivo_cancelamento: string },
+) => {
+  return pb.collection('policies').update<Policy>(id, {
+    status: 'Cancelada',
+    data_cancelamento: formatDateForInput(data.data_cancelamento),
+    motivo_cancelamento: data.motivo_cancelamento ? String(data.motivo_cancelamento).trim() : '',
+  })
+}
+
 export const updatePolicyFinancial = async (
   id: string,
   data: {
@@ -302,6 +323,8 @@ export function prepareRenewalData(policy: Policy): Partial<Policy> {
     status: 'Ativa',
     comissao_recebida: false,
     data_recebimento_comissao: null,
+    data_cancelamento: null,
+    motivo_cancelamento: '',
     pago_parceiro: false,
     data_pagamento_parceiro: null,
     previous_policy: policy.id,

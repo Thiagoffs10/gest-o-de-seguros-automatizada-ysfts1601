@@ -7,6 +7,7 @@ import {
   updatePolicy,
   deletePolicyWithRelations,
   prepareRenewalData,
+  cancelPolicy,
 } from '@/services/policies'
 import { getPayments, createPayment } from '@/services/payments'
 import { getReminders } from '@/services/reminders'
@@ -134,8 +135,7 @@ export default function PolicyDetail() {
   }) => {
     if (!policy) return
     try {
-      await updatePolicy(policy.id, {
-        status: 'Cancelada',
+      await cancelPolicy(policy.id, {
         data_cancelamento: data.data_cancelamento,
         motivo_cancelamento: data.motivo_cancelamento,
       })

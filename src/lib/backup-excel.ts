@@ -17,6 +17,8 @@ const COLLECTION_TITLES: Record<string, string> = {
   conciliacoes: 'Conciliações',
   parceiro_pagamentos: 'Pagamentos Parceiros',
   parceiro_debitos: 'Débitos Parceiros',
+  email_templates: 'Modelos de E-mail',
+  password_resets: 'Tokens de Recuperação',
 }
 
 const FIELD_LABELS: Record<string, string> = {
@@ -118,6 +120,11 @@ const FIELD_LABELS: Record<string, string> = {
   usuario_id: 'Usuário',
   pagamento: 'ID Pagamento',
   previous_policy: 'Apólice Anterior',
+  key: 'Chave Identificadora',
+  is_system: 'Modelo Padrão?',
+  token: 'Token',
+  expires_at: 'Data de Expiração',
+  used: 'Utilizado?',
   created: 'Criado em',
   updated: 'Atualizado em',
 }
@@ -150,6 +157,7 @@ const DATE_FIELDS = new Set([
   'data_pagamento',
   'data_fechamento',
   'birth_date',
+  'expires_at',
 ])
 
 export function exportBackupToExcel(data: BackupData, filename: string): void {
