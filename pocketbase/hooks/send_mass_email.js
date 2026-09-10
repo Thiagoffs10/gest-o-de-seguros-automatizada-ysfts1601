@@ -2,6 +2,13 @@ routerAdd(
   'POST',
   '/backend/v1/send-mass-email',
   (e) => {
+    var auth = e.auth
+    if (!auth) return e.unauthorizedError('Autenticação necessária.')
+    var userRole = auth.getString('role')
+    if (userRole !== 'Admin' && userRole !== 'Administrador' && userRole !== 'Gerente') {
+      return e.forbiddenError('Apenas administradores e gerentes podem realizar envio em massa.')
+    }
+
     const body = e.requestInfo().body || {}
     const recipients = body.recipients || []
     var verifiedEmailSecret =

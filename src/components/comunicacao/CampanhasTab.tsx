@@ -226,16 +226,12 @@ export function CampanhasTab({
     const activePol = clientPols.find((p) => p.status === 'Ativa')
     const clientPolicy = activePol || clientPols[0]
 
-    let subjectTemplate = customSubject
-    let bodyTemplate = customBody
-
-    if (selectedTemplateId !== 'custom') {
-      const found = templates.find((t) => t.id === selectedTemplateId)
-      if (found) {
-        subjectTemplate = found.subject
-        bodyTemplate = found.body
-      }
-    }
+    // CRÍTICO (Item 3 do Usuário):
+    // "Se eu aplicar um modelo e editar manualmente assunto ou mensagem, envie exatamente o texto final que revisei.
+    // Não substitua minhas alterações pelo conteúdo original do modelo no momento do envio. Aplique a mesma regra em campanhas."
+    // Usa sempre o customSubject e customBody que estão nos inputs revisados pelo usuário!
+    const subjectTemplate = customSubject
+    const bodyTemplate = customBody
 
     const vars: Record<string, string> = {
       nome_cliente: client.name || '',

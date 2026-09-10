@@ -11,6 +11,9 @@ export type CollectionName =
   | 'custos_fixos'
   | 'tipos_seguro'
   | 'conciliacoes'
+  | 'parceiro_pagamentos'
+  | 'parceiro_debitos'
+  | 'email_templates'
 
 export type ActionType = 'create' | 'read' | 'update' | 'delete'
 
@@ -31,6 +34,9 @@ const PERMISSIONS: Record<UserRole, Record<CollectionName, ActionType[]>> = {
     custos_fixos: ALL,
     tipos_seguro: ALL,
     conciliacoes: ALL,
+    parceiro_pagamentos: ALL,
+    parceiro_debitos: ALL,
+    email_templates: ALL,
   },
   Administrador: {
     clients: ALL,
@@ -43,6 +49,9 @@ const PERMISSIONS: Record<UserRole, Record<CollectionName, ActionType[]>> = {
     custos_fixos: ALL,
     tipos_seguro: ALL,
     conciliacoes: ALL,
+    parceiro_pagamentos: ALL,
+    parceiro_debitos: ALL,
+    email_templates: ALL,
   },
   Gerente: {
     clients: CRU,
@@ -55,6 +64,9 @@ const PERMISSIONS: Record<UserRole, Record<CollectionName, ActionType[]>> = {
     custos_fixos: ALL,
     tipos_seguro: READ,
     conciliacoes: READ,
+    parceiro_pagamentos: CRU,
+    parceiro_debitos: CRU,
+    email_templates: CRU,
   },
   Operador: {
     clients: RU,
@@ -67,6 +79,9 @@ const PERMISSIONS: Record<UserRole, Record<CollectionName, ActionType[]>> = {
     custos_fixos: [] as ActionType[],
     tipos_seguro: READ,
     conciliacoes: [] as ActionType[],
+    parceiro_pagamentos: READ,
+    parceiro_debitos: READ,
+    email_templates: READ,
   },
   Visualizador: {
     clients: READ,
@@ -79,6 +94,9 @@ const PERMISSIONS: Record<UserRole, Record<CollectionName, ActionType[]>> = {
     custos_fixos: [] as ActionType[],
     tipos_seguro: READ,
     conciliacoes: [] as ActionType[],
+    parceiro_pagamentos: READ,
+    parceiro_debitos: READ,
+    email_templates: READ,
   },
 }
 

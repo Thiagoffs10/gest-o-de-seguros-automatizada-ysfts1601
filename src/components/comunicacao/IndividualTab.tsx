@@ -190,28 +190,17 @@ export function IndividualTab({
       return
     }
 
-    // Re-renderizar no momento do disparo para garantir que os dados pertencem ao cliente selecionado
-    let finalSubject = subject
-    let finalBody = body
+    // CRÍTICO (Item 3 do Usuário):
+    // "Se eu aplicar um modelo e editar manualmente assunto ou mensagem, envie exatamente o texto final que revisei.
+    // Não substitua minhas alterações pelo conteúdo original do modelo no momento do envio."
+    // Enviamos exatamente o texto final editado pelo usuário no estado (subject e body),
+    // aplicando apenas substituição de variáveis explícitas ainda presentes como {nome_cliente} etc.,
+    // SEM NUNCA resetar para o t.subject ou t.body original do modelo!
+    const vars = getClientVars(selectedClientId)
+    const finalSubject = personalizeTemplate(subject, vars)
+    const finalBody = personalizeTemplate(body, vars)
 
-    if (selectedTemplateId !== 'custom') {
-      const t = templates.find((item) => item.id === selectedTemplateId)
-      if (t) {
-        const vars = getClientVars(selectedClientId)
-        finalSubject = personalizeTemplate(t.subject, vars)
-        finalBody = personalizeTemplate(t.body, vars)
-      } else {
-        const rendered = renderContentForClient(subject, body, selectedClientId)
-        finalSubject = rendered.subject
-        finalBody = rendered.body
-      }
-    } else {
-      const rendered = renderContentForClient(subject, body, selectedClientId)
-      finalSubject = rendered.subject
-      finalBody = rendered.body
-    }
-
-    // Manter a tela sincronizada com o texto final recalculado
+    // Manter a tela sincronizada com o texto final revisado
     setSubject(finalSubject)
     setBody(finalBody)
 

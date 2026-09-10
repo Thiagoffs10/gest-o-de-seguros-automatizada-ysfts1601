@@ -29,6 +29,7 @@ import { useRealtime } from '@/hooks/use-realtime'
 import { usePermissions } from '@/hooks/use-permissions'
 import { useAuth } from '@/hooks/use-auth'
 import { computePeriod, isDateInPeriod, formatBRDate } from '@/lib/date-filter'
+import { todayLocalDate } from '@/lib/utils'
 import {
   calcNetCommission,
   computeReceivedCommissions,
@@ -170,10 +171,10 @@ export default function ConciliacaoMensal() {
 
   const canEditFinancial = can('policies', 'update') && !isClosed
 
-  // Fast actions to mark received / paid from the modal
+  // Fast actions to mark received / paid from the modal (usando data local Brasil)
   const handleMarkCommissionReceived = async (policyId: string) => {
     try {
-      const today = new Date().toISOString().split('T')[0]
+      const today = todayLocalDate()
       await updatePolicyFinancial(policyId, {
         comissao_recebida: true,
         data_recebimento_comissao: today,
@@ -191,7 +192,7 @@ export default function ConciliacaoMensal() {
 
   const handleMarkRepassePaid = async (policyId: string) => {
     try {
-      const today = new Date().toISOString().split('T')[0]
+      const today = todayLocalDate()
       await updatePolicyFinancial(policyId, {
         pago_parceiro: true,
         data_pagamento_parceiro: today,
@@ -209,7 +210,7 @@ export default function ConciliacaoMensal() {
 
   const handleMarkCustoPaid = async (custoId: string) => {
     try {
-      const today = new Date().toISOString().split('T')[0]
+      const today = todayLocalDate()
       await updateCustoFixo(custoId, {
         pago: true,
         data_pagamento: today,

@@ -1,5 +1,6 @@
 import pb from '@/lib/pocketbase/client'
 import { ParceiroPagamento, ParceiroDebito, ParceiroDebitoItem } from '@/types'
+import { todayLocalDate } from '@/lib/utils'
 
 export const getParceiroPagamentos = async (parceiroId?: string): Promise<ParceiroPagamento[]> => {
   const filter = parceiroId && parceiroId !== 'all' ? `parceiro = "${parceiroId}"` : ''
@@ -60,6 +61,35 @@ export const deleteParceiroDebito = async (id: string): Promise<boolean> => {
   return pb.collection('parceiro_debitos').delete(id)
 }
 
+export interface FechamentoParceiroResult {
+  success: boolean
+  pagamento_id: string
+  parceiro_id: string
+  data_pagamento: string
+  total_comissoes: number
+  total_debitos_abatidos: number
+  taxa_pix: number
+  valor_liquido: number
+  policies_count: number
+  policies_ids: string[]
+  debitos_detalhes?: any[]
+  error?: string
+}
+
+export const executarFechamentoParceiro = async (data: {
+  parceiro_id: string
+  data_pagamento: string
+  observacoes?: string
+  debitos?: ParceiroDebitoItem[]
+  taxa_pix_manual?: number | null
+  policy_ids?: string[]
+}): Promise<FechamentoParceiroResult> => {
+  return pb.send<FechamentoParceiroResult>('/backend/v1/parceiro-fechamento', {
+    method: 'POST',
+    body: data,
+  })
+}
+
 export const liquidarDebitosPagamento = async (
   debitos: ParceiroDebitoItem[],
   parceiroId: string,
@@ -85,7 +115,7 @@ export const liquidarDebitosPagamento = async (
           valor: deb.valor,
           status: 'Pago',
           pagamento: pagamentoId,
-          data: new Date().toISOString().split('T')[0],
+          data: todayLocalDate(),
         })
       } catch {
         // Continue

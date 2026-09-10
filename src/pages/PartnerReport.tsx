@@ -19,12 +19,11 @@ import { getParceiros } from '@/services/parceiros'
 import { findClientByDocument } from '@/services/clients'
 import {
   getParceiroPagamentos,
-  createParceiroPagamento,
   getParceiroDebitosPendentes,
   createParceiroDebito,
   updateParceiroDebito,
   deleteParceiroDebito,
-  liquidarDebitosPagamento,
+  executarFechamentoParceiro,
 } from '@/services/parceiro-pagamentos'
 import { Policy, Parceiro, Client, ParceiroDebitoItem, ParceiroPagamento } from '@/types'
 import { Button } from '@/components/ui/button'
@@ -235,8 +234,12 @@ export default function PartnerReport() {
   const reportEntries: PartnerReportEntry[] = useMemo(() => {
     return filteredPolicies.map((p) => {
       const valorLiquido = p.valor_liquido || p.premium_amount || 0
-      const repassePercent = p.percentual_repasse || 0
-      const valorRepasse = p.valor_repasse || (repassePercent / 100) * valorLiquido
+      const repassePercent = p.percentual_repasse ?? 0
+      // CRÍTICO: Se p.valor_repasse for explicitamente 0, continuar zero e não recalcular!
+      const valorRepasse =
+        p.valor_repasse !== undefined && p.valor_repasse !== null
+          ? Number(p.valor_repasse)
+          : (repassePercent / 100) * valorLiquido
       const client = p.expand?.client
 
       return {
@@ -443,7 +446,7 @@ export default function PartnerReport() {
     })
   }
 
-  // Marcar repasses como pagos e salvar histórico permanente
+  // Marcar repasses como pagos e salvar histórico permanente de forma ATÔMICA e SEGURA
   const handleConfirmMarkAsPaid = async () => {
     if (!selectedPartner || selectedPartner === 'all') {
       toast({
@@ -465,36 +468,26 @@ export default function PartnerReport() {
     try {
       const policyIdsToPay = pendingPoliciesToPay.map((p) => p.id)
 
-      // 1. Criar registro histórico de fechamento/pagamento (apenas repasses pendentes sendo liquidados)
-      const novoPagamento = await createParceiroPagamento({
-        parceiro: selectedPartner,
+      // Chamada transacional ao endpoint seguro no servidor
+      // Garante atomicidade: se falhar, nada é gravado.
+      // Se débito > repasse disponível, abate somente o disponível e mantém o saldo restante pendente.
+      // Repasse R$ 0,00 continua zero e nunca é recalculado.
+      const res = await executarFechamentoParceiro({
+        parceiro_id: selectedPartner,
         data_pagamento: dataPagamentoFinal || todayLocalDate(),
-        total_comissoes: totalPending,
-        total_debitos: totalDebitos,
-        taxa_pix: taxaPixEfetiva,
-        valor_liquido: totalLiquidoAPagar,
-        policies_ids: JSON.stringify(policyIdsToPay),
-        detalhes_debitos: JSON.stringify(debitos),
         observacoes: observacaoPagamento.trim(),
-        usuario_id: user?.id,
-        usuario_nome: user?.name || user?.email || '',
+        debitos,
+        taxa_pix_manual: taxaPixManual,
+        policy_ids: policyIdsToPay,
       })
 
-      // 2. Liquidar débitos vinculando ao pagamento
-      await liquidarDebitosPagamento(debitos, selectedPartner, novoPagamento.id)
-
-      // 3. Atualizar as apólices pendentes para pago_parceiro = true com a data
-      for (const policyId of policyIdsToPay) {
-        await updatePolicyFinancial(policyId, {
-          pago_parceiro: true,
-          data_pagamento_parceiro: dataPagamentoFinal || todayLocalDate(),
-          forma_pagamento_repasse: 'PIX',
-        })
+      if (!res.success) {
+        throw new Error(res.error || 'Falha no fechamento transacional.')
       }
 
       toast({
         title: 'Pagamento concluído com sucesso!',
-        description: `Histórico salvo. Líquido pago: R$ ${fmt(totalLiquidoAPagar)}`,
+        description: `Fechamento gravado de forma atômica. Líquido pago: R$ ${fmt(res.valor_liquido)}`,
       })
 
       setIsMarkPaidConfirmOpen(false)
@@ -502,11 +495,22 @@ export default function PartnerReport() {
       setDebitos([])
       setTaxaPixManual(null)
 
-      // Recarregar dados
+      // Recarregar dados e débitos pendentes atualizados
       await loadData()
       if (selectedPartner !== 'all') {
-        const hist = await getParceiroPagamentos(selectedPartner)
+        const [hist, debtList] = await Promise.all([
+          getParceiroPagamentos(selectedPartner),
+          getParceiroDebitosPendentes(selectedPartner),
+        ])
         setPagamentosHistorico(hist)
+        setDebitos(
+          debtList.map((d) => ({
+            id: d.id,
+            descricao: d.descricao,
+            valor: d.valor,
+            data: d.data,
+          })),
+        )
       }
     } catch (err: any) {
       toast({

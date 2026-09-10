@@ -1,5 +1,5 @@
 {
-  "generatedAt": "2026-09-10T12:13:52.383Z",
+  "generatedAt": "2026-09-10T15:41:16.464Z",
   "collections": [
     {
       "name": "users",
@@ -1078,9 +1078,9 @@
       "apiRules": {
         "list": "@request.auth.id != ''",
         "view": "@request.auth.id != ''",
-        "create": "@request.auth.id != ''",
-        "update": "@request.auth.id != ''",
-        "delete": "@request.auth.id != ''"
+        "create": "@request.auth.role = 'Admin' || @request.auth.role = 'Administrador' || @request.auth.role = 'Gerente'",
+        "update": "@request.auth.role = 'Admin' || @request.auth.role = 'Administrador' || @request.auth.role = 'Gerente'",
+        "delete": "@request.auth.role = 'Admin' || @request.auth.role = 'Administrador'"
       },
       "fields": [
         {
@@ -1177,9 +1177,9 @@
       "apiRules": {
         "list": "@request.auth.id != ''",
         "view": "@request.auth.id != ''",
-        "create": "@request.auth.id != ''",
-        "update": "@request.auth.id != ''",
-        "delete": "@request.auth.id != ''"
+        "create": "@request.auth.role = 'Admin' || @request.auth.role = 'Administrador' || @request.auth.role = 'Gerente'",
+        "update": "@request.auth.role = 'Admin' || @request.auth.role = 'Administrador' || @request.auth.role = 'Gerente'",
+        "delete": "@request.auth.role = 'Admin' || @request.auth.role = 'Administrador'"
       },
       "fields": [
         {
@@ -1247,9 +1247,9 @@
       "apiRules": {
         "list": "@request.auth.id != ''",
         "view": "@request.auth.id != ''",
-        "create": "@request.auth.id != ''",
-        "update": "@request.auth.id != ''",
-        "delete": "@request.auth.id != ''"
+        "create": "@request.auth.role = 'Admin' || @request.auth.role = 'Administrador' || @request.auth.role = 'Gerente'",
+        "update": "@request.auth.role = 'Admin' || @request.auth.role = 'Administrador' || @request.auth.role = 'Gerente'",
+        "delete": "@request.auth.role = 'Admin' || @request.auth.role = 'Administrador'"
       },
       "fields": [
         {

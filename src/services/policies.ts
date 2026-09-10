@@ -26,8 +26,11 @@ export function preparePolicyPayload(data: Partial<Policy> & Record<string, any>
   const rawIss = data.iss != null ? Number(data.iss) : 0
   const rawPercentualRepasse =
     data.percentual_repasse != null ? Number(data.percentual_repasse) : 50
+  // CRÍTICO: Se data.valor_repasse for explicitamente informado (inclusive 0), manter o valor exato e NUNCA recalcular automaticamente!
   const rawRepasse =
-    data.valor_repasse != null
+    data.valor_repasse !== undefined &&
+    data.valor_repasse !== null &&
+    !isNaN(Number(data.valor_repasse))
       ? Number(data.valor_repasse)
       : Math.round(((valorLiquido * rawPercentualRepasse) / 100) * 100) / 100
 

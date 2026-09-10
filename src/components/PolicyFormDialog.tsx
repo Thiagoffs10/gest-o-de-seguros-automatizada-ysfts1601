@@ -204,14 +204,19 @@ export function PolicyFormDialog({
     setForm((prev: any) => ({ ...prev, iss: issVal }))
   }, [form.commission, form.seguradora, impostoPercentual])
 
-  // 3. Calculate Repasse to Partner based on Valor Líquido and % Repasse
+  // 3. Calculate Repasse to Partner based on Valor Líquido and % Repasse (apenas se % Repasse mudar e valor não for fixado em 0 manualmente)
   useEffect(() => {
     if (skipAuto.current) return
     if (form.tipo_de_venda === 'Parceiro') {
+      // Se o percentual de repasse for 0 explicitamente, repasse é 0
       const vLiquido = form.valor_liquido != null ? Number(form.valor_liquido) : 0
       const pRepasse = form.percentual_repasse != null ? Number(form.percentual_repasse) : 0
-      const repasse = Math.round(((vLiquido * pRepasse) / 100) * 100) / 100
-      setForm((prev: any) => ({ ...prev, valor_repasse: repasse }))
+      if (pRepasse === 0) {
+        setForm((prev: any) => ({ ...prev, valor_repasse: 0 }))
+      } else {
+        const repasse = Math.round(((vLiquido * pRepasse) / 100) * 100) / 100
+        setForm((prev: any) => ({ ...prev, valor_repasse: repasse }))
+      }
     }
   }, [form.tipo_de_venda, form.valor_liquido, form.percentual_repasse])
 
@@ -523,7 +528,13 @@ export function PolicyFormDialog({
                     onChange={(e) => {
                       const val = Number(e.target.value)
                       set('valor_repasse', val)
-                      if (form.valor_liquido > 0) {
+                      if (val === 0) {
+                        setForm((prev: any) => ({
+                          ...prev,
+                          percentual_repasse: 0,
+                          valor_repasse: 0,
+                        }))
+                      } else if (form.valor_liquido > 0) {
                         const calculatedP =
                           Math.round((val / Number(form.valor_liquido)) * 100 * 100) / 100
                         setForm((prev: any) => ({

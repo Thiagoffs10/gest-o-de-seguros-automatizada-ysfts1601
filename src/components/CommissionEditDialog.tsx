@@ -18,6 +18,7 @@ import {
   SelectValue,
 } from '@/components/ui/select'
 import { Policy } from '@/types'
+import { formatDateForInput, todayLocalDate } from '@/lib/utils'
 
 const FORMAS_PAGAMENTO = ['PIX', 'Transferência', 'Dinheiro', 'Cartão', 'Boleto', 'Outro']
 
@@ -47,13 +48,9 @@ export function CommissionEditDialog({ open, onOpenChange, policy, onSave, savin
   useEffect(() => {
     if (policy) {
       setComissaoRecebida(!!policy.comissao_recebida)
-      setDataRecebimento(
-        policy.data_recebimento_comissao ? policy.data_recebimento_comissao.split('T')[0] : '',
-      )
+      setDataRecebimento(formatDateForInput(policy.data_recebimento_comissao))
       setPagoParceiro(!!policy.pago_parceiro)
-      setDataPagamento(
-        policy.data_pagamento_parceiro ? policy.data_pagamento_parceiro.split('T')[0] : '',
-      )
+      setDataPagamento(formatDateForInput(policy.data_pagamento_parceiro))
       setFormaPagamento(policy.forma_pagamento_repasse || '')
     }
   }, [policy])
@@ -82,7 +79,13 @@ export function CommissionEditDialog({ open, onOpenChange, policy, onSave, savin
               <Checkbox
                 id="comissao"
                 checked={comissaoRecebida}
-                onCheckedChange={(v) => setComissaoRecebida(!!v)}
+                onCheckedChange={(v) => {
+                  const checked = !!v
+                  setComissaoRecebida(checked)
+                  if (checked && !dataRecebimento) {
+                    setDataRecebimento(todayLocalDate())
+                  }
+                }}
               />
               <Label htmlFor="comissao" className="text-sm cursor-pointer">
                 Comissão Recebida
@@ -104,7 +107,13 @@ export function CommissionEditDialog({ open, onOpenChange, policy, onSave, savin
                 <Checkbox
                   id="parceiro"
                   checked={pagoParceiro}
-                  onCheckedChange={(v) => setPagoParceiro(!!v)}
+                  onCheckedChange={(v) => {
+                    const checked = !!v
+                    setPagoParceiro(checked)
+                    if (checked && !dataPagamento) {
+                      setDataPagamento(todayLocalDate())
+                    }
+                  }}
                 />
                 <Label htmlFor="parceiro" className="text-sm cursor-pointer">
                   Pago ao Parceiro

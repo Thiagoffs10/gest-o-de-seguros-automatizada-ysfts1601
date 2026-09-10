@@ -40,15 +40,27 @@ export interface PartnerReportData {
   totalPending: number
 }
 
+function escapeHtml(val: unknown): string {
+  if (val === null || val === undefined) return ''
+  const str = String(val)
+  return str
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#039;')
+    .replace(/`/g, '&#96;')
+}
+
 export function generatePartnerReportPDF(data: PartnerReportData) {
   const win = window.open('', '_blank', 'width=1000,height=800')
   if (!win) return
 
   const fmt = (v: number) =>
-    v.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })
+    (Number(v) || 0).toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })
 
-  const dateStr = data.generatedAt.toLocaleDateString('pt-BR')
-  const timeStr = data.generatedAt.toLocaleTimeString('pt-BR')
+  const dateStr = escapeHtml(data.generatedAt.toLocaleDateString('pt-BR'))
+  const timeStr = escapeHtml(data.generatedAt.toLocaleTimeString('pt-BR'))
 
   const partnerHeader = data.isAllPartners
     ? `<div class="partner-header"><h2>Relatório de Comissões - Todos os Parceiros</h2></div>`
@@ -56,21 +68,21 @@ export function generatePartnerReportPDF(data: PartnerReportData) {
       ? `<div class="partner-header">
         <h2>Dados do Parceiro</h2>
         <div class="partner-grid">
-          <div class="partner-field"><span class="partner-label">Nome:</span> ${data.partnerInfo.nome}</div>
-          ${data.partnerInfo.cpf ? `<div class="partner-field"><span class="partner-label">CPF/CNPJ:</span> ${data.partnerInfo.cpf}</div>` : ''}
-          ${data.partnerInfo.telefone ? `<div class="partner-field"><span class="partner-label">Telefone:</span> ${data.partnerInfo.telefone}</div>` : ''}
-          ${data.partnerInfo.email ? `<div class="partner-field"><span class="partner-label">E-mail:</span> ${data.partnerInfo.email}</div>` : ''}
-          ${data.partnerInfo.dadosBancarios ? `<div class="partner-field"><span class="partner-label">Dados Bancários/PIX:</span> ${data.partnerInfo.dadosBancarios}</div>` : ''}
+          <div class="partner-field"><span class="partner-label">Nome:</span> ${escapeHtml(data.partnerInfo.nome)}</div>
+          ${data.partnerInfo.cpf ? `<div class="partner-field"><span class="partner-label">CPF/CNPJ:</span> ${escapeHtml(data.partnerInfo.cpf)}</div>` : ''}
+          ${data.partnerInfo.telefone ? `<div class="partner-field"><span class="partner-label">Telefone:</span> ${escapeHtml(data.partnerInfo.telefone)}</div>` : ''}
+          ${data.partnerInfo.email ? `<div class="partner-field"><span class="partner-label">E-mail:</span> ${escapeHtml(data.partnerInfo.email)}</div>` : ''}
+          ${data.partnerInfo.dadosBancarios ? `<div class="partner-field"><span class="partner-label">Dados Bancários/PIX:</span> ${escapeHtml(data.partnerInfo.dadosBancarios)}</div>` : ''}
         </div>
       </div>`
-      : `<div class="partner-header"><h2>${data.partnerName}</h2></div>`
+      : `<div class="partner-header"><h2>${escapeHtml(data.partnerName)}</h2></div>`
 
   const foundClientSection = data.foundClientName
     ? `<div class="partner-header" style="border-left-color:#16a34a">
         <h2>Cliente Localizado</h2>
         <div class="partner-grid">
-          <div class="partner-field"><span class="partner-label">Nome:</span> ${data.foundClientName}</div>
-          ${data.foundClientDocument ? `<div class="partner-field"><span class="partner-label">CPF/CNPJ:</span> ${data.foundClientDocument}</div>` : ''}
+          <div class="partner-field"><span class="partner-label">Nome:</span> ${escapeHtml(data.foundClientName)}</div>
+          ${data.foundClientDocument ? `<div class="partner-field"><span class="partner-label">CPF/CNPJ:</span> ${escapeHtml(data.foundClientDocument)}</div>` : ''}
         </div>
       </div>`
     : ''
@@ -78,16 +90,16 @@ export function generatePartnerReportPDF(data: PartnerReportData) {
   const rows = data.entries
     .map(
       (e) => `<tr>
-        <td><strong>${e.clientName}</strong></td>
-        <td>${e.clientCpfCnpj || '-'}</td>
-        <td>${e.seguradoraName}</td>
-        <td>${e.tipoSeguro}</td>
+        <td><strong>${escapeHtml(e.clientName)}</strong></td>
+        <td>${escapeHtml(e.clientCpfCnpj || '-')}</td>
+        <td>${escapeHtml(e.seguradoraName)}</td>
+        <td>${escapeHtml(e.tipoSeguro)}</td>
         <td class="right">R$ ${fmt(e.valorLiquido)}</td>
-        <td class="center">${e.repassePercent}%</td>
+        <td class="center">${Number(e.repassePercent || 0)}%</td>
         <td class="right"><strong>R$ ${fmt(e.valorRepasse)}</strong></td>
         <td class="center"><span class="badge ${e.statusRepasse === 'Pago' ? 'paid' : 'pending'}">${e.statusRepasse === 'Pago' ? 'Pago' : 'Pendente'}</span></td>
-        <td class="center">${e.dataPagamentoRepasse || '-'}</td>
-        <td class="center"><span class="badge ${e.statusSeguradora === 'Recebida' ? 'paid' : 'pending'}">${e.statusSeguradora}</span></td>
+        <td class="center">${escapeHtml(e.dataPagamentoRepasse || '-')}</td>
+        <td class="center"><span class="badge ${e.statusSeguradora === 'Recebida' ? 'paid' : 'pending'}">${escapeHtml(e.statusSeguradora)}</span></td>
       </tr>`,
     )
     .join('')
@@ -97,7 +109,7 @@ export function generatePartnerReportPDF(data: PartnerReportData) {
       ? data.debitosList
           .map(
             (d) => `<tr>
-              <td class="sum-label" style="padding-left:12px; font-size:11px; color:#64748b">• ${d.descricao || 'Débito'}:</td>
+              <td class="sum-label" style="padding-left:12px; font-size:11px; color:#64748b">• ${escapeHtml(d.descricao || 'Débito')}:</td>
               <td class="sum-val right text-danger" style="font-size:11px">- R$ ${fmt(d.valor)}</td>
             </tr>`,
           )
@@ -208,7 +220,7 @@ tr:nth-child(even){background:#f8fafc}
   </div>
   <div class="header-meta">
     <div class="date">Gerado em ${dateStr} às ${timeStr}</div>
-    <div class="partner">${data.partnerName}</div>
+    <div class="partner">${escapeHtml(data.partnerName)}</div>
   </div>
 </div>
 ${partnerHeader}
