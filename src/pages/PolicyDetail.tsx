@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
 import { Link } from 'react-router-dom'
-import { Pencil, RefreshCw, Trash2, Ban, AlertOctagon, ArrowUpRight } from 'lucide-react'
+import { Pencil, RefreshCw, Trash2, Ban, AlertOctagon, ArrowUpRight, Plus } from 'lucide-react'
 import {
   getPolicy,
   createPolicy,

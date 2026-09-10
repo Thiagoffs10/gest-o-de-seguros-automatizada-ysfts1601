@@ -23,8 +23,6 @@ import { formatDateForInput, todayLocalDate } from '@/lib/utils'
 const FORMAS_PAGAMENTO = ['PIX', 'Transferência', 'Dinheiro', 'Cartão', 'Boleto', 'Outro']
 
 export interface FinancialEditData {
-  comissao_recebida?: boolean
-  data_recebimento_comissao?: string | null
   pago_parceiro: boolean
   data_pagamento_parceiro: string | null
   forma_pagamento_repasse?: string | null

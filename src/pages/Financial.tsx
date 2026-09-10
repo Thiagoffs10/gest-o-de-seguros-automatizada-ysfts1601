@@ -116,6 +116,33 @@ export default function Financial() {
 
   const period = useMemo(() => computePeriodFromFilters(filters), [filters])
 
+  // Mapa de total recebido histórico por apólice
+  const receivedByPolicy = useMemo(() => {
+    const map = new Map<string, number>()
+    for (const r of recebimentos) {
+      const val = Number(r.valor_liquido) || Number(r.valor_bruto) || 0
+      map.set(r.policy, (map.get(r.policy) || 0) + val)
+    }
+    return map
+  }, [recebimentos])
+
+  // Helper para verificar se comissão da apólice está quitada
+  const isPolicyCommissionSettled = useCallback(
+    (p: Policy) => {
+      if (p.comissao_recebida) return true
+      const previsto =
+        p.commission != null
+          ? Number(p.commission)
+          : Math.round(
+              (((p.valor_liquido || p.premium_amount || 0) * (p.commission_percent || 0)) / 100) *
+                100,
+            ) / 100
+      const rec = receivedByPolicy.get(p.id) || 0
+      return previsto > 0 && rec >= previsto
+    },
+    [receivedByPolicy],
+  )
+
   const applyFilters = useCallback(
     (p: Policy, checkDate = true): boolean => {
       if (checkDate && !isDateInPeriod(period, p.start_date)) return false
@@ -165,33 +192,6 @@ export default function Financial() {
       period,
       isPolicyCommissionSettled,
     ],
-  )
-
-  // Mapa de total recebido histórico por apólice
-  const receivedByPolicy = useMemo(() => {
-    const map = new Map<string, number>()
-    for (const r of recebimentos) {
-      const val = Number(r.valor_liquido) || Number(r.valor_bruto) || 0
-      map.set(r.policy, (map.get(r.policy) || 0) + val)
-    }
-    return map
-  }, [recebimentos])
-
-  // Helper para verificar se comissão da apólice está quitada
-  const isPolicyCommissionSettled = useCallback(
-    (p: Policy) => {
-      if (p.comissao_recebida) return true
-      const previsto =
-        p.commission != null
-          ? Number(p.commission)
-          : Math.round(
-              (((p.valor_liquido || p.premium_amount || 0) * (p.commission_percent || 0)) / 100) *
-                100,
-            ) / 100
-      const rec = receivedByPolicy.get(p.id) || 0
-      return previsto > 0 && rec >= previsto
-    },
-    [receivedByPolicy],
   )
 
   // Mapa de recebimentos por apólice no período selecionado

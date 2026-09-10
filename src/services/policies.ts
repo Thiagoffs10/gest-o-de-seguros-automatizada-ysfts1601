@@ -135,9 +135,10 @@ export function preparePolicyPayload(data: Partial<Policy> & Record<string, any>
   if (!('pago_parceiro' in data)) {
     delete payload.pago_parceiro
   }
-  if (!('comissao_recebida' in data)) {
-    delete payload.comissao_recebida
-  }
+  // Bloquear alteração direta de comissao_recebida em updates normais de apólices
+  // O status de comissão deve ser gerenciado exclusivamente via createComissaoRecebimento/deleteComissaoRecebimento
+  delete payload.comissao_recebida
+  delete payload.data_recebimento_comissao
 
   if (
     !payload.renewal_date ||
@@ -284,8 +285,6 @@ export const cancelPolicy = async (
 export const updatePolicyFinancial = async (
   id: string,
   data: {
-    comissao_recebida?: boolean
-    data_recebimento_comissao?: string | null
     pago_parceiro?: boolean
     data_pagamento_parceiro?: string | null
     forma_pagamento_repasse?: string | null
