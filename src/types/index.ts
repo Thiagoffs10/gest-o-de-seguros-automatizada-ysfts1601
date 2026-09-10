@@ -197,6 +197,32 @@ export interface Conciliacao {
   updated: string
 }
 
+export interface ComissaoRecebimento {
+  id: string
+  policy: string
+  expand?: {
+    policy?: Policy & {
+      expand?: {
+        client?: Client
+        seguradora?: Seguradora
+        parceiro?: Parceiro
+      }
+    }
+  }
+  data_recebimento: string
+  valor_bruto: number
+  descontos_impostos?: number
+  valor_liquido: number
+  aliquota_imposto?: number
+  origem: string
+  observacao?: string
+  parcela?: number
+  competencia?: string
+  idempotency_key?: string
+  created: string
+  updated: string
+}
+
 export interface ParceiroDebitoItem {
   id?: string
   descricao: string

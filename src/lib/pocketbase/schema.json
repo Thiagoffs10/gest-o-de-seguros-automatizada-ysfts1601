@@ -1,5 +1,5 @@
 {
-  "generatedAt": "2026-09-10T15:50:41.064Z",
+  "generatedAt": "2026-09-10T21:37:47.410Z",
   "collections": [
     {
       "name": "users",
@@ -1391,6 +1391,105 @@
       "indexes": [
         "CREATE INDEX idx_system_backups_created ON system_backups (created DESC)",
         "CREATE INDEX idx_system_backups_type ON system_backups (backup_type)"
+      ]
+    },
+    {
+      "name": "comissao_recebimentos",
+      "type": "base",
+      "apiRules": {
+        "list": "@request.auth.id != ''",
+        "view": "@request.auth.id != ''",
+        "create": "@request.auth.id != ''",
+        "update": "@request.auth.id != ''",
+        "delete": "@request.auth.id != ''"
+      },
+      "fields": [
+        {
+          "name": "policy",
+          "type": "relation",
+          "required": true,
+          "system": false,
+          "collectionRef": "policies"
+        },
+        {
+          "name": "data_recebimento",
+          "type": "date",
+          "required": true,
+          "system": false
+        },
+        {
+          "name": "valor_bruto",
+          "type": "number",
+          "required": true,
+          "system": false
+        },
+        {
+          "name": "descontos_impostos",
+          "type": "number",
+          "required": false,
+          "system": false
+        },
+        {
+          "name": "valor_liquido",
+          "type": "number",
+          "required": true,
+          "system": false
+        },
+        {
+          "name": "aliquota_imposto",
+          "type": "number",
+          "required": false,
+          "system": false
+        },
+        {
+          "name": "origem",
+          "type": "text",
+          "required": true,
+          "system": false
+        },
+        {
+          "name": "observacao",
+          "type": "text",
+          "required": false,
+          "system": false
+        },
+        {
+          "name": "parcela",
+          "type": "number",
+          "required": false,
+          "system": false
+        },
+        {
+          "name": "competencia",
+          "type": "text",
+          "required": false,
+          "system": false
+        },
+        {
+          "name": "idempotency_key",
+          "type": "text",
+          "required": false,
+          "system": false
+        },
+        {
+          "name": "created",
+          "type": "autodate",
+          "required": false,
+          "system": false,
+          "autodateTriggers": ["onCreate"]
+        },
+        {
+          "name": "updated",
+          "type": "autodate",
+          "required": false,
+          "system": false,
+          "autodateTriggers": ["onCreate", "onUpdate"]
+        }
+      ],
+      "indexes": [
+        "CREATE INDEX idx_comissao_rec_policy ON comissao_recebimentos (policy)",
+        "CREATE INDEX idx_comissao_rec_data ON comissao_recebimentos (data_recebimento)",
+        "CREATE UNIQUE INDEX idx_comissao_rec_idempotency ON comissao_recebimentos (idempotency_key) WHERE idempotency_key != \"\""
       ]
     }
   ]

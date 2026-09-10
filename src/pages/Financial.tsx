@@ -4,7 +4,8 @@ import { getPolicies, updatePolicyFinancial } from '@/services/policies'
 import { getParceiros } from '@/services/parceiros'
 import { getSeguradoras } from '@/services/seguradoras'
 import { getCustosFixos } from '@/services/custos-fixos'
-import { Policy, Parceiro, Seguradora, CustoFixo, FilterState } from '@/types'
+import { getComissaoRecebimentos } from '@/services/comissao-recebimentos'
+import { Policy, Parceiro, Seguradora, CustoFixo, FilterState, ComissaoRecebimento } from '@/types'
 import { Card, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
@@ -52,6 +53,7 @@ export default function Financial() {
   const [parceiros, setParceiros] = useState<Parceiro[]>([])
   const [seguradoras, setSeguradoras] = useState<Seguradora[]>([])
   const [custosFixos, setCustosFixos] = useState<CustoFixo[]>([])
+  const [recebimentos, setRecebimentos] = useState<ComissaoRecebimento[]>([])
   const [filters, setFilters] = useState<FilterState>({
     year: String(new Date().getFullYear()),
     month: String(new Date().getMonth() + 1),
@@ -74,16 +76,18 @@ export default function Financial() {
   const loadData = useCallback(async () => {
     setLoading(true)
     try {
-      const [pols, pars, segs, custos] = await Promise.all([
+      const [pols, pars, segs, custos, recs] = await Promise.all([
         getPolicies(),
         getParceiros(),
         getSeguradoras(),
         getCustosFixos(),
+        getComissaoRecebimentos().catch(() => []),
       ])
       setAllPolicies(pols)
       setParceiros(pars)
       setSeguradoras(segs)
       setCustosFixos(custos)
+      setRecebimentos(recs)
     } catch {
       /* ignored */
     }
@@ -95,6 +99,7 @@ export default function Financial() {
   }, [loadData])
   useRealtime('policies', () => loadData())
   useRealtime('custos_fixos', () => loadData())
+  useRealtime('comissao_recebimentos', () => loadData())
 
   const period = useMemo(() => computePeriodFromFilters(filters), [filters])
 
@@ -134,17 +139,29 @@ export default function Financial() {
     [statusFilter, commFilter, filters, cpfCnpjFilter, period],
   )
 
+  // Mapa de recebimentos por apólice no período
+  const recsInPeriodByPolicy = useMemo(() => {
+    const set = new Set<string>()
+    for (const r of recebimentos) {
+      if (r.data_recebimento && isDateInPeriod(period, r.data_recebimento)) {
+        set.add(r.policy)
+      }
+    }
+    return set
+  }, [recebimentos, period])
+
   const tablePolicies = useMemo(
     () =>
       allPolicies.filter((p) => {
         // Se filtro de comissão for 'received', incluir apólices cuja comissão foi recebida no período selecionado
         if (commFilter === 'received') {
           if (!applyFilters(p, false)) return false
-          return (
+          const hasRecInPeriod = recsInPeriodByPolicy.has(p.id)
+          const hasLegacyInPeriod =
             p.comissao_recebida === true &&
             Boolean(p.data_recebimento_comissao) &&
             isDateInPeriod(period, p.data_recebimento_comissao)
-          )
+          return hasRecInPeriod || hasLegacyInPeriod
         }
         // Se filtro de comissão for 'pending', vigência no período e não recebida
         if (commFilter === 'pending') {
@@ -155,12 +172,13 @@ export default function Financial() {
         if (!applyFilters(p, false)) return false
         const inStart = isDateInPeriod(period, p.start_date)
         const inReceived =
-          p.comissao_recebida === true &&
-          Boolean(p.data_recebimento_comissao) &&
-          isDateInPeriod(period, p.data_recebimento_comissao)
+          recsInPeriodByPolicy.has(p.id) ||
+          (p.comissao_recebida === true &&
+            Boolean(p.data_recebimento_comissao) &&
+            isDateInPeriod(period, p.data_recebimento_comissao))
         return inStart || inReceived
       }),
-    [allPolicies, applyFilters, commFilter, period],
+    [allPolicies, applyFilters, commFilter, period, recsInPeriodByPolicy],
   )
 
   // Apólices filtradas pelas condições (exceto data), para aplicar regras de data do evento em comissões recebidas e repasses pagos
@@ -174,7 +192,7 @@ export default function Financial() {
     const periodStartPolicies = matchingPolicies.filter((p) => isDateInPeriod(period, p.start_date))
     const expectedCommissions = computeExpectedCommissions(periodStartPolicies, period)
     // Comissões recebidas: data de recebimento pertence ao período selecionado
-    const receivedCommissions = computeReceivedCommissions(matchingPolicies, period)
+    const receivedCommissions = computeReceivedCommissions(matchingPolicies, period, recebimentos)
     const pendingCommissions = periodStartPolicies
       .filter((p) => !p.comissao_recebida)
       .reduce((s, p) => s + calcNetCommission(p), 0)
@@ -217,7 +235,7 @@ export default function Financial() {
       realProfit,
       partnerPols,
     }
-  }, [matchingPolicies, custosFixos, period])
+  }, [matchingPolicies, custosFixos, period, recebimentos])
 
   const totalCommPages = Math.ceil(tablePolicies.length / ITEMS_PER_PAGE) || 1
   const paginatedCommPolicies = useMemo(() => {

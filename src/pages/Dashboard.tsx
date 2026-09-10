@@ -17,7 +17,16 @@ import { getPolicies } from '@/services/policies'
 import { getPayments } from '@/services/payments'
 import { getCustosFixos } from '@/services/custos-fixos'
 import { getTiposSeguro } from '@/services/tipos-seguro'
-import { Client, Policy, Payment, CustoFixo, FilterState, TipoSeguro } from '@/types'
+import { getComissaoRecebimentos } from '@/services/comissao-recebimentos'
+import {
+  Client,
+  Policy,
+  Payment,
+  CustoFixo,
+  FilterState,
+  TipoSeguro,
+  ComissaoRecebimento,
+} from '@/types'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { SecretsGuideDialog } from '@/components/SecretsGuideDialog'
@@ -81,6 +90,7 @@ export default function Dashboard() {
   const [payments, setPayments] = useState<Payment[]>([])
   const [custosFixos, setCustosFixos] = useState<CustoFixo[]>([])
   const [tiposSeguro, setTiposSeguro] = useState<TipoSeguro[]>([])
+  const [recebimentos, setRecebimentos] = useState<ComissaoRecebimento[]>([])
   const [filters, setFilters] = useState<FilterState>({
     year: String(new Date().getFullYear()),
     month: String(new Date().getMonth() + 1),
@@ -94,18 +104,20 @@ export default function Dashboard() {
 
   const loadData = async () => {
     try {
-      const [cls, pols, pays, custos, tps] = await Promise.all([
+      const [cls, pols, pays, custos, tps, recs] = await Promise.all([
         getClients(),
         getPolicies(),
         getPayments(),
         getCustosFixos(),
         getTiposSeguro().catch(() => []),
+        getComissaoRecebimentos().catch(() => []),
       ])
       setClients(cls)
       setPolicies(pols)
       setPayments(pays)
       setCustosFixos(custos)
       setTiposSeguro(tps)
+      setRecebimentos(recs)
     } catch {
       /* intentionally ignored */
     }
@@ -119,6 +131,7 @@ export default function Dashboard() {
   useRealtime('policies', () => loadData())
   useRealtime('payments', () => loadData())
   useRealtime('custos_fixos', () => loadData())
+  useRealtime('comissao_recebimentos', () => loadData())
 
   const period = useMemo(() => computePeriodFromFilters(filters), [filters])
 
@@ -133,8 +146,8 @@ export default function Dashboard() {
   const pendingCommissions = useMemo(() => computePendingCommissions(policies), [policies])
 
   const metrics = useMemo(
-    () => calculateFinancialMetrics(policies, custosFixos, period),
-    [policies, custosFixos, period],
+    () => calculateFinancialMetrics(policies, custosFixos, period, recebimentos),
+    [policies, custosFixos, period, recebimentos],
   )
 
   const topCustos = useMemo(() => {

@@ -299,6 +299,16 @@ export const deletePolicy = async (id: string) => {
 }
 
 export const deletePolicyWithRelations = async (id: string) => {
+  try {
+    const receipts = await pb
+      .collection('comissao_recebimentos')
+      .getFullList({ filter: `policy = "${id}"` })
+    for (const r of receipts) {
+      await pb.collection('comissao_recebimentos').delete(r.id)
+    }
+  } catch {
+    /* intentionally ignored */
+  }
   const payments = await pb.collection('payments').getFullList({ filter: `policy = "${id}"` })
   for (const p of payments) {
     await pb.collection('payments').delete(p.id)

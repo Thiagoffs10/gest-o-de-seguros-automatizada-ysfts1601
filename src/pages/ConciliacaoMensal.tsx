@@ -12,8 +12,9 @@ import {
 import { getPolicies, updatePolicyFinancial } from '@/services/policies'
 import { getCustosFixos, updateCustoFixo } from '@/services/custos-fixos'
 import { getConciliacao, createConciliacao, deleteConciliacao } from '@/services/conciliacoes'
+import { getComissaoRecebimentos } from '@/services/comissao-recebimentos'
 import { getErrorMessage } from '@/lib/pocketbase/errors'
-import { Policy, CustoFixo, Conciliacao } from '@/types'
+import { Policy, CustoFixo, Conciliacao, ComissaoRecebimento } from '@/types'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { ConciliacaoDetailModal, ConciliacaoDetailType } from '@/components/ConciliacaoDetailModal'
@@ -69,6 +70,7 @@ export default function ConciliacaoMensal() {
   const [ano, setAno] = useState(new Date().getFullYear())
   const [policies, setPolicies] = useState<Policy[]>([])
   const [custos, setCustos] = useState<CustoFixo[]>([])
+  const [recebimentos, setRecebimentos] = useState<ComissaoRecebimento[]>([])
   const [conciliacao, setConciliacao] = useState<Conciliacao | null>(null)
   const [loading, setLoading] = useState(true)
   const [actionLoading, setActionLoading] = useState(false)
@@ -79,14 +81,16 @@ export default function ConciliacaoMensal() {
   const loadData = useCallback(async () => {
     setLoading(true)
     try {
-      const [pols, custosData, conc] = await Promise.all([
+      const [pols, custosData, conc, recs] = await Promise.all([
         getPolicies(),
         getCustosFixos(),
         getConciliacao(mes, ano),
+        getComissaoRecebimentos().catch(() => []),
       ])
       setPolicies(pols)
       setCustos(custosData)
       setConciliacao(conc)
+      setRecebimentos(recs)
     } catch {
       /* ignored */
     }
@@ -99,14 +103,15 @@ export default function ConciliacaoMensal() {
   useRealtime('policies', () => loadData())
   useRealtime('custos_fixos', () => loadData())
   useRealtime('conciliacoes', () => loadData())
+  useRealtime('comissao_recebimentos', () => loadData())
 
   const m = useMemo(() => {
     // Produção do mês selecionado (início da vigência no período)
     const periodPolicies = policies.filter((p) => isDateInPeriod(period, p.start_date))
     const expectedComm = computeExpectedCommissions(policies, period)
 
-    // Comissões recebidas: data de recebimento da comissão no período
-    const receivedComm = computeReceivedCommissions(policies, period)
+    // Comissões recebidas: data de recebimento da comissão no período (usando comissao_recebimentos como fonte dos realizados)
+    const receivedComm = computeReceivedCommissions(policies, period, recebimentos)
 
     // Pendentes do mês selecionado: comissões da produção do mês que ainda não foram recebidas
     const pendingComm = periodPolicies
@@ -165,7 +170,7 @@ export default function ConciliacaoMensal() {
       lucroReal,
       pendencias,
     }
-  }, [policies, custos, period])
+  }, [policies, custos, period, recebimentos])
 
   const isClosed = !!conciliacao
 
@@ -238,17 +243,24 @@ export default function ConciliacaoMensal() {
           otherPeriodPolicies: [],
           custos: [],
         }
-      case 'comissoes-recebidas':
+      case 'comissoes-recebidas': {
+        const polIdsWithRecInPeriod = new Set(
+          recebimentos
+            .filter((r) => r.data_recebimento && isDateInPeriod(period, r.data_recebimento))
+            .map((r) => r.policy),
+        )
         return {
           policies: policies.filter(
             (p) =>
-              p.comissao_recebida === true &&
-              Boolean(p.data_recebimento_comissao) &&
-              isDateInPeriod(period, p.data_recebimento_comissao),
+              polIdsWithRecInPeriod.has(p.id) ||
+              (p.comissao_recebida === true &&
+                Boolean(p.data_recebimento_comissao) &&
+                isDateInPeriod(period, p.data_recebimento_comissao)),
           ),
           otherPeriodPolicies: [],
           custos: [],
         }
+      }
       case 'comissoes-pendentes':
         return {
           policies: policies.filter(
@@ -313,7 +325,7 @@ export default function ConciliacaoMensal() {
       default:
         return { policies: [], otherPeriodPolicies: [], custos: [] }
     }
-  }, [detailModalType, policies, custos, period])
+  }, [detailModalType, policies, custos, period, recebimentos])
 
   const handleDownloadPDF = () => {
     // Apólices para o relatório da conciliação: apólices da produção do mês OU apólices com comissão recebida no mês

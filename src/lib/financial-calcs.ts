@@ -1,9 +1,28 @@
-import { Policy, CustoFixo } from '@/types'
+import { Policy, CustoFixo, ComissaoRecebimento } from '@/types'
 import { DatePeriod, isDateInPeriod } from '@/lib/date-filter'
 
 export const calcNetCommission = (p: Policy) => (p.commission || 0) - (p.iss || 0)
 
-export function computeReceivedCommissions(policies: Policy[], period: DatePeriod): number {
+export function computeReceivedCommissions(
+  policies: Policy[],
+  period: DatePeriod,
+  recebimentos?: ComissaoRecebimento[],
+): number {
+  if (recebimentos && recebimentos.length > 0) {
+    const policyMap = new Map<string, Policy>()
+    for (const p of policies) {
+      policyMap.set(p.id, p)
+    }
+
+    return recebimentos
+      .filter((r) => {
+        if (!r.data_recebimento || !isDateInPeriod(period, r.data_recebimento)) return false
+        if (policies.length > 0 && !policyMap.has(r.policy)) return false
+        return true
+      })
+      .reduce((s, r) => s + (Number(r.valor_liquido) || 0), 0)
+  }
+
   return policies
     .filter(
       (p) =>
@@ -89,8 +108,9 @@ export function calculateFinancialMetrics(
   policies: Policy[],
   custos: CustoFixo[],
   period: DatePeriod,
+  recebimentos?: ComissaoRecebimento[],
 ): FinancialMetrics {
-  const totalReceitas = computeReceivedCommissions(policies, period)
+  const totalReceitas = computeReceivedCommissions(policies, period, recebimentos)
   const totalRepasses = computePaidRepasses(policies, period)
   const totalCustos = computePaidCosts(custos, period)
   return {

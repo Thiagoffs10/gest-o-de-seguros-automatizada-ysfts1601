@@ -84,7 +84,7 @@ routerAdd(
     // 1. users, seguradoras, parceiros, tipos_seguro
     // 2. clients, custos_fixos, email_templates, conciliacoes
     // 3. policies
-    // 4. payments, reminders, communications, parceiro_pagamentos, parceiro_debitos, password_resets
+    // 4. comissao_recebimentos, payments, reminders, communications, parceiro_pagamentos, parceiro_debitos, password_resets
     var PRIORITY_ORDER = [
       'users',
       'seguradoras',
@@ -95,6 +95,7 @@ routerAdd(
       'email_templates',
       'conciliacoes',
       'policies',
+      'comissao_recebimentos',
       'payments',
       'reminders',
       'communications',

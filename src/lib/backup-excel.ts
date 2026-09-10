@@ -19,6 +19,7 @@ const COLLECTION_TITLES: Record<string, string> = {
   parceiro_debitos: 'Débitos Parceiros',
   email_templates: 'Modelos de E-mail',
   password_resets: 'Tokens de Recuperação',
+  comissao_recebimentos: 'Recebimentos de Comissão',
 }
 
 const FIELD_LABELS: Record<string, string> = {

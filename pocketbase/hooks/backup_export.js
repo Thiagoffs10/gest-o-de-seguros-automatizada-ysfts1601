@@ -13,6 +13,7 @@ routerAdd(
       'users',
       'clients',
       'policies',
+      'comissao_recebimentos',
       'payments',
       'reminders',
       'communications',

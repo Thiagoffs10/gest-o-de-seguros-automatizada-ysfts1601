@@ -4,6 +4,7 @@ cronAdd('backup_daily_cron', '0 3 * * *', () => {
       'users',
       'clients',
       'policies',
+      'comissao_recebimentos',
       'payments',
       'reminders',
       'communications',

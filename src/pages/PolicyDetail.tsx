@@ -14,7 +14,12 @@ import { getReminders } from '@/services/reminders'
 import { getClients } from '@/services/clients'
 import { getSeguradoras } from '@/services/seguradoras'
 import { getParceiros } from '@/services/parceiros'
-import { Policy, Payment, Client, Seguradora, Parceiro } from '@/types'
+import { Policy, Payment, Client, Seguradora, Parceiro, ComissaoRecebimento } from '@/types'
+import {
+  getComissaoRecebimentosByPolicy,
+  deleteComissaoRecebimento,
+} from '@/services/comissao-recebimentos'
+import { RegistrarRecebimentoModal } from '@/components/RegistrarRecebimentoModal'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs'
@@ -54,10 +59,12 @@ export default function PolicyDetail() {
 
   const [policy, setPolicy] = useState<Policy | null>(null)
   const [payments, setPayments] = useState<Payment[]>([])
+  const [recebimentos, setRecebimentos] = useState<ComissaoRecebimento[]>([])
   const [clients, setClients] = useState<Client[]>([])
   const [seguradoras, setSeguradoras] = useState<Seguradora[]>([])
   const [parceiros, setParceiros] = useState<Parceiro[]>([])
   const [isPayModalOpen, setIsPayModalOpen] = useState(false)
+  const [isRecebimentoModalOpen, setIsRecebimentoModalOpen] = useState(false)
   const [dialogMode, setDialogMode] = useState<DialogMode>(null)
   const [fieldErrors, setFieldErrors] = useState<FieldErrors>({})
   const [deleteOpen, setDeleteOpen] = useState(false)
@@ -77,9 +84,15 @@ export default function PolicyDetail() {
     try {
       const p = await getPolicy(id)
       setPolicy(p)
-      const pays = await getPayments(`policy = "${id}"`)
+      const [pays, recs, cls, segs, pars] = await Promise.all([
+        getPayments(`policy = "${id}"`),
+        getComissaoRecebimentosByPolicy(id),
+        getClients(),
+        getSeguradoras(),
+        getParceiros(),
+      ])
       setPayments(pays)
-      const [cls, segs, pars] = await Promise.all([getClients(), getSeguradoras(), getParceiros()])
+      setRecebimentos(recs)
       setClients(cls)
       setSeguradoras(segs)
       setParceiros(pars)
@@ -93,6 +106,7 @@ export default function PolicyDetail() {
   }, [id])
   useRealtime('policies', () => loadData())
   useRealtime('payments', () => loadData())
+  useRealtime('comissao_recebimentos', () => loadData())
 
   const handleSubmit = async (formData: any) => {
     if (!policy) return
@@ -183,11 +197,52 @@ export default function PolicyDetail() {
     }
   }
 
+  const handleDeleteRecebimento = async (recId: string) => {
+    if (!id) return
+    if (!confirm('Deseja realmente excluir este registro de recebimento?')) return
+    try {
+      await deleteComissaoRecebimento(recId, id)
+      toast({ title: 'Recebimento excluído com sucesso!' })
+      loadData()
+    } catch (err: any) {
+      toast({
+        title: 'Erro ao excluir recebimento',
+        description: getErrorMessage(err),
+        variant: 'destructive',
+      })
+    }
+  }
+
   if (!policy) return <div className="p-8 text-center text-slate-500">Carregando apólice...</div>
 
   const fmtMoney = (v: number) => v?.toLocaleString('pt-BR', { minimumFractionDigits: 2 }) || '0,00'
   const initialData =
     dialogMode === 'edit' ? policy : dialogMode === 'renew' ? prepareRenewalData(policy) : undefined
+
+  // Cálculos dos 3 valores de comissão da apólice
+  const comissaoPrevista =
+    policy.commission != null
+      ? Number(policy.commission)
+      : Math.round(
+          (((policy.valor_liquido || policy.premium_amount || 0) *
+            (policy.commission_percent || 0)) /
+            100) *
+            100,
+        ) / 100
+
+  // Total já recebido (soma dos recebimentos da collection, ou legado se collection vazia mas comissao_recebida = true)
+  const jaRecebido =
+    recebimentos.length > 0
+      ? recebimentos.reduce(
+          (sum, r) => sum + (Number(r.valor_liquido) || Number(r.valor_bruto) || 0),
+          0,
+        )
+      : policy.comissao_recebida
+        ? comissaoPrevista
+        : 0
+
+  const saldoAReceber = Math.max(0, Math.round((comissaoPrevista - jaRecebido) * 100) / 100)
+  const temDivergenciaExcesso = jaRecebido > comissaoPrevista && comissaoPrevista > 0
 
   return (
     <div className="space-y-6">
@@ -242,6 +297,149 @@ export default function PolicyDetail() {
           )}
         </div>
       </div>
+
+      {/* BLOCO DE RECEBIMENTOS DE COMISSÃO (ETAPA 1) */}
+      <Card className="border-blue-200 bg-gradient-to-br from-blue-50/40 via-white to-slate-50 shadow-sm">
+        <CardHeader className="pb-3">
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+            <div>
+              <CardTitle className="text-base font-bold text-slate-900 flex items-center gap-2">
+                <span>Controle de Recebimentos da Comissão</span>
+                {saldoAReceber === 0 && comissaoPrevista > 0 && (
+                  <Badge className="bg-emerald-600 text-white font-medium text-xs">
+                    Quitada Integralmente
+                  </Badge>
+                )}
+                {temDivergenciaExcesso && (
+                  <Badge className="bg-amber-500 text-white font-medium text-xs">
+                    Acima do Previsto
+                  </Badge>
+                )}
+              </CardTitle>
+              <p className="text-xs text-slate-500 mt-0.5">
+                Valores previstos, realizados e saldo pendente para a comissão desta apólice.
+              </p>
+            </div>
+            {can('policies', 'update') && (
+              <Button
+                onClick={() => setIsRecebimentoModalOpen(true)}
+                className="bg-emerald-600 hover:bg-emerald-700 text-white shrink-0"
+              >
+                <Plus className="w-4 h-4 mr-1.5" /> Registrar recebimento
+              </Button>
+            )}
+          </div>
+        </CardHeader>
+        <CardContent className="space-y-4">
+          {temDivergenciaExcesso && (
+            <div className="p-3 bg-amber-50 border border-amber-200 rounded-md flex items-center gap-2 text-xs text-amber-800">
+              <AlertOctagon className="w-4 h-4 text-amber-600 shrink-0" />
+              <span>
+                <strong>Aviso de divergência:</strong> O total já recebido (R${' '}
+                {fmtMoney(jaRecebido)}) supera a comissão prevista (R$ {fmtMoney(comissaoPrevista)})
+                em R$ {fmtMoney(jaRecebido - comissaoPrevista)}.
+              </span>
+            </div>
+          )}
+
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+            <div className="p-4 bg-white rounded-lg border shadow-xs text-center sm:text-left">
+              <span className="text-xs font-semibold uppercase tracking-wider text-slate-500">
+                Comissão prevista
+              </span>
+              <p className="text-2xl font-bold text-slate-900 mt-1">
+                R$ {fmtMoney(comissaoPrevista)}
+              </p>
+              <span className="text-[11px] text-slate-400">
+                {policy.commission_percent || 0}% do prêmio líquido
+              </span>
+            </div>
+            <div className="p-4 bg-emerald-50/70 rounded-lg border border-emerald-200 text-center sm:text-left">
+              <span className="text-xs font-semibold uppercase tracking-wider text-emerald-800">
+                Já recebido
+              </span>
+              <p className="text-2xl font-bold text-emerald-700 mt-1">R$ {fmtMoney(jaRecebido)}</p>
+              <span className="text-[11px] text-emerald-600">
+                {recebimentos.length} recebimento{recebimentos.length !== 1 ? 's' : ''} registrado
+                {recebimentos.length !== 1 ? 's' : ''}
+              </span>
+            </div>
+            <div className="p-4 bg-amber-50/70 rounded-lg border border-amber-200 text-center sm:text-left">
+              <span className="text-xs font-semibold uppercase tracking-wider text-amber-800">
+                Saldo a receber
+              </span>
+              <p className="text-2xl font-bold text-amber-700 mt-1">R$ {fmtMoney(saldoAReceber)}</p>
+              <span className="text-[11px] text-amber-600">
+                {saldoAReceber === 0 ? 'Sem pendências' : 'Aguardando recebimento'}
+              </span>
+            </div>
+          </div>
+
+          {/* Histórico detalhado de recebimentos desta apólice */}
+          {recebimentos.length > 0 && (
+            <div className="pt-2">
+              <h4 className="text-xs font-bold text-slate-700 uppercase tracking-wider mb-2">
+                Histórico de Recebimentos da Apólice
+              </h4>
+              <div className="overflow-x-auto border rounded-lg bg-white">
+                <table className="w-full text-left text-xs text-slate-700">
+                  <thead className="bg-slate-50 text-slate-600 font-semibold border-b">
+                    <tr>
+                      <th className="p-2.5">Data Efetiva</th>
+                      <th className="p-2.5">Valor Bruto</th>
+                      <th className="p-2.5">Impostos / Descontos</th>
+                      <th className="p-2.5">Valor Líquido</th>
+                      <th className="p-2.5">Origem / Observação</th>
+                      <th className="p-2.5 text-right">Ações</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-slate-100">
+                    {recebimentos.map((rec) => (
+                      <tr key={rec.id} className="hover:bg-slate-50/80">
+                        <td className="p-2.5 font-medium">
+                          {formatDateDisplay(rec.data_recebimento)}
+                        </td>
+                        <td className="p-2.5">R$ {fmtMoney(rec.valor_bruto)}</td>
+                        <td className="p-2.5 text-slate-500">
+                          {rec.descontos_impostos ? `R$ ${fmtMoney(rec.descontos_impostos)}` : '-'}
+                        </td>
+                        <td className="p-2.5 font-bold text-emerald-700">
+                          R$ {fmtMoney(rec.valor_liquido)}
+                        </td>
+                        <td className="p-2.5">
+                          <div className="flex flex-col">
+                            <span className="font-medium text-slate-800">
+                              {rec.origem || 'Manual'}
+                              {rec.competencia && ` • Comp: ${rec.competencia}`}
+                              {rec.parcela ? ` • Parc: ${rec.parcela}` : ''}
+                            </span>
+                            {rec.observacao && (
+                              <span className="text-slate-500 text-[11px]">{rec.observacao}</span>
+                            )}
+                          </div>
+                        </td>
+                        <td className="p-2.5 text-right">
+                          {can('policies', 'delete') && (
+                            <Button
+                              variant="ghost"
+                              size="sm"
+                              className="text-red-500 hover:text-red-700 hover:bg-red-50 h-7 px-2"
+                              onClick={() => handleDeleteRecebimento(rec.id)}
+                              title="Excluir recebimento"
+                            >
+                              <Trash2 className="w-3.5 h-3.5" />
+                            </Button>
+                          )}
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          )}
+        </CardContent>
+      </Card>
 
       {policy.status === 'Cancelada' && (
         <Card className="border-red-300 bg-red-50/70 shadow-sm">
@@ -451,6 +649,15 @@ export default function PolicyDetail() {
         onOpenChange={setCancelOpen}
         onConfirm={handleCancelConfirm}
         policyNumber={policy.policy_number}
+      />
+
+      <RegistrarRecebimentoModal
+        open={isRecebimentoModalOpen}
+        onOpenChange={setIsRecebimentoModalOpen}
+        policy={policy}
+        seguradoras={seguradoras}
+        alreadyReceived={jaRecebido}
+        onSuccess={loadData}
       />
 
       <Dialog open={isPayModalOpen} onOpenChange={setIsPayModalOpen}>
