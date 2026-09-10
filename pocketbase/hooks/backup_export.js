@@ -66,12 +66,17 @@ routerAdd(
     var result = {
       metadata: {
         exported_at: new Date().toISOString(),
-        version: '1.0.0',
+        version: '1.2.0',
         source: e.request.host,
+        application: 'CRED10MIX Seguros',
       },
       schema: {},
       records: {},
+      files: {},
     }
+
+    var totalRecordsCount = 0
+    var summaryCounts = {}
 
     for (var i = 0; i < collections.length; i++) {
       var colName = collections[i]
@@ -128,6 +133,9 @@ routerAdd(
         page++
       }
 
+      summaryCounts[colName] = allRecs.length
+      totalRecordsCount += allRecs.length
+
       var exportedRecs = []
       for (var k = 0; k < allRecs.length; k++) {
         var rec = allRecs[k]
@@ -151,10 +159,18 @@ routerAdd(
           if (ft === 'file') {
             var fv = rec.getString(fn)
             if (fv) {
+              var fileUrl = baseUrl + '/api/files/' + colName + '/' + rec.id + '/' + fv
               ex[fn] = {
                 filename: fv,
-                url: baseUrl + '/api/files/' + colName + '/' + rec.id + '/' + fv,
+                url: fileUrl,
               }
+              if (!result.files[colName]) result.files[colName] = []
+              result.files[colName].push({
+                recordId: rec.id,
+                fieldName: fn,
+                filename: fv,
+                url: fileUrl,
+              })
             } else {
               ex[fn] = null
             }
@@ -162,6 +178,13 @@ routerAdd(
             ex[fn] = rec.getBool(fn)
           } else if (ft === 'number') {
             ex[fn] = rec.getFloat(fn)
+          } else if (ft === 'json') {
+            try {
+              var rawJson = rec.get(fn)
+              ex[fn] = rawJson
+            } catch (_) {
+              ex[fn] = null
+            }
           } else {
             ex[fn] = rec.getString(fn)
           }
@@ -181,6 +204,42 @@ routerAdd(
       }
 
       result.records[colName] = exportedRecs
+    }
+
+    result.metadata.summary = summaryCounts
+    result.metadata.total_records = totalRecordsCount
+
+    // Salvar registro de auditoria/histórico do backup manual gerado
+    try {
+      var bkCol = $app.findCollectionByNameOrId('system_backups')
+      var bkRec = new Record(bkCol)
+      var nowIso = new Date().toISOString()
+      var pad = function (n) {
+        return (n < 10 ? '0' : '') + n
+      }
+      var d = new Date()
+      var dateSlug =
+        d.getFullYear() +
+        '-' +
+        pad(d.getMonth() + 1) +
+        '-' +
+        pad(d.getDate()) +
+        '_' +
+        pad(d.getHours()) +
+        pad(d.getMinutes()) +
+        pad(d.getSeconds())
+      var fileName = 'manual_backup_' + dateSlug + '.json'
+
+      bkRec.set('backup_type', 'manual')
+      bkRec.set('status', 'completed')
+      bkRec.set('file_name', fileName)
+      bkRec.set('total_records', totalRecordsCount)
+      bkRec.set('summary_json', summaryCounts)
+      bkRec.set('data_json', result)
+      bkRec.set('created_by', auth.getString('name') || auth.getString('email') || 'Admin')
+      $app.save(bkRec)
+    } catch (saveErr) {
+      $app.logger().warn('Nao foi possivel salvar log do backup manual', 'error', String(saveErr))
     }
 
     return e.json(200, result)

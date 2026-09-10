@@ -75,12 +75,13 @@ export function createZip(entries: ZipEntry[]): Uint8Array {
   }
 
   const centralStart = offset
+  const centralSize = central.length
   u32(central, 0x06054b50)
   u16(central, 0)
   u16(central, 0)
   u16(central, entries.length)
   u16(central, entries.length)
-  u32(central, central.length - 22)
+  u32(central, centralSize)
   u32(central, centralStart)
   u16(central, 0)
 

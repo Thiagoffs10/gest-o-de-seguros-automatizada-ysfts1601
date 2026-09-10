@@ -100,6 +100,8 @@ function buildSheet(
   rows: (string | number | boolean | null | undefined)[][],
 ): string {
   const lastCol = colName(Math.max(0, columns.length - 1))
+  const maxRow = Math.max(1, rows.length + 1)
+  const dimensionRef = columns.length > 0 ? `A1:${lastCol}${maxRow}` : 'A1:A1'
   let rowsXml = ''
   let headerCells = ''
   for (let c = 0; c < columns.length; c++) {
@@ -113,20 +115,28 @@ function buildSheet(
     }
     rowsXml += `<row r="${r + 2}">${cells}</row>`
   }
-  const colsXml = columns
-    .map((col, i) => {
-      const w = col.type === 'text' ? 24 : col.type === 'currency' ? 16 : 14
-      return `<col min="${i + 1}" max="${i + 1}" width="${w}" customWidth="1"/>`
-    })
-    .join('')
+  const colsXml =
+    columns.length > 0
+      ? `<cols>${columns
+          .map((col, i) => {
+            const w = col.type === 'text' ? 24 : col.type === 'currency' ? 16 : 14
+            return `<col min="${i + 1}" max="${i + 1}" width="${w}" customWidth="1"/>`
+          })
+          .join('')}</cols>`
+      : ''
+
+  const autoFilterXml =
+    columns.length > 0 && rows.length > 0 ? `<autoFilter ref="A1:${lastCol}${maxRow}"/>` : ''
 
   return `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
-<worksheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships">
-<sheetViews><sheetView workbookViewId="0"><pane ySplit="1" topLeftCell="A2" activePane="bottomLeft" state="frozen"/></sheetView></sheetViews>
+<worksheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main">
+<dimension ref="${dimensionRef}"/>
+<sheetViews><sheetView workbookViewId="0"><pane ySplit="1" topLeftCell="A2" activePane="bottomLeft" state="frozen"/><selection pane="bottomLeft" activeCell="A2" sqref="A2"/></sheetView></sheetViews>
 <sheetFormatPr defaultRowHeight="15"/>
-<cols>${colsXml}</cols>
+${colsXml}
 <sheetData>${rowsXml}</sheetData>
-<autoFilter ref="A1:${lastCol}${Math.max(1, rows.length + 1)}"/>
+${autoFilterXml}
+<pageMargins left="0.7" right="0.7" top="0.75" bottom="0.75" header="0.3" footer="0.3"/>
 </worksheet>`
 }
 
@@ -155,11 +165,20 @@ export function downloadMultiSheetXlsx(filename: string, sheets: ExcelSheet[]): 
 
   // 3. Workbook
   let sheetTags = ''
+  let definedNamesXml = ''
   for (let i = 0; i < validSheets.length; i++) {
-    const sName = validSheets[i].name.substring(0, 31) || `Aba${i + 1}`
+    const s = validSheets[i]
+    const sName = s.name.substring(0, 31) || `Aba${i + 1}`
     sheetTags += `<sheet name="${escXml(sName)}" sheetId="${i + 1}" r:id="rId${i + 1}"/>`
+    if (s.columns.length > 0 && s.rows.length > 0) {
+      const lastCol = colName(Math.max(0, s.columns.length - 1))
+      const maxRow = Math.max(1, s.rows.length + 1)
+      const escapedSheetName = sName.replace(/'/g, "''")
+      definedNamesXml += `<definedName name="_xlnm._FilterDatabase" localSheetId="${i}" hidden="1">'${escapedSheetName}'!$A$1:$${lastCol}$${maxRow}</definedName>`
+    }
   }
-  const workbookXml = `<?xml version="1.0" encoding="UTF-8" standalone="yes"?><workbook xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships"><sheets>${sheetTags}</sheets></workbook>`
+  const definedNamesTag = definedNamesXml ? `<definedNames>${definedNamesXml}</definedNames>` : ''
+  const workbookXml = `<?xml version="1.0" encoding="UTF-8" standalone="yes"?><workbook xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships"><sheets>${sheetTags}</sheets>${definedNamesTag}</workbook>`
 
   // 4. Workbook Rels
   let wbRels = ''
