@@ -52,12 +52,22 @@ export function computePeriod(
   dateFrom?: string,
   dateTo?: string,
 ): DatePeriod {
-  if (dateFrom && dateTo) {
+  if (dateFrom || dateTo) {
+    const s = dateFrom || '1970-01-01'
+    const e = dateTo || '2099-12-31'
+    const label =
+      dateFrom && dateTo
+        ? dateFrom === dateTo
+          ? formatBRDate(dateFrom)
+          : `${formatBRDate(dateFrom)} a ${formatBRDate(dateTo)}`
+        : dateFrom
+          ? `A partir de ${formatBRDate(dateFrom)}`
+          : `Até ${formatBRDate(dateTo!)}`
     return {
-      start: dateFrom,
-      end: dateTo,
+      start: s,
+      end: e,
       endInclusive: true,
-      label: `${formatBRDate(dateFrom)} a ${formatBRDate(dateTo)}`,
+      label,
     }
   }
 
@@ -135,7 +145,7 @@ export function buildPocketBaseDateFilter(field: string, period: DatePeriod): st
     return ''
   }
   if (period.endInclusive) {
-    return `${field} >= "${period.start}" && ${field} <= "${period.end}"`
+    return `${field} >= "${period.start} 00:00:00" && ${field} <= "${period.end} 23:59:59.999Z"`
   }
   return `${field} >= "${period.start}" && ${field} < "${period.end}"`
 }

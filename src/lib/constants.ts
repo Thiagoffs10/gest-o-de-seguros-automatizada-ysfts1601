@@ -64,12 +64,12 @@ export function buildFilterString(filters: any): string {
   if (filters?.dateFrom || filters?.dateTo) {
     if (filters?.dateFrom && filters?.dateTo) {
       parts.push(
-        `(start_date >= "${filters.dateFrom}" && start_date <= "${filters.dateTo} 23:59:59")`,
+        `(start_date >= "${filters.dateFrom} 00:00:00" && start_date <= "${filters.dateTo} 23:59:59.999Z")`,
       )
     } else if (filters?.dateFrom) {
-      parts.push(`start_date >= "${filters.dateFrom}"`)
+      parts.push(`start_date >= "${filters.dateFrom} 00:00:00"`)
     } else if (filters?.dateTo) {
-      parts.push(`start_date <= "${filters.dateTo} 23:59:59"`)
+      parts.push(`start_date <= "${filters.dateTo} 23:59:59.999Z"`)
     }
   } else if (filters?.year && filters.year !== 'ALL') {
     const y = parseInt(filters.year, 10)
@@ -83,10 +83,14 @@ export function buildFilterString(filters: any): string {
           const endDate = `${nextYear}-${String(nextMonth).padStart(2, '0')}-01 00:00:00`
           parts.push(`(start_date >= "${startDate}" && start_date < "${endDate}")`)
         } else {
-          parts.push(`(start_date >= "${y}-01-01 00:00:00" && start_date <= "${y}-12-31 23:59:59")`)
+          parts.push(
+            `(start_date >= "${y}-01-01 00:00:00" && start_date <= "${y}-12-31 23:59:59.999Z")`,
+          )
         }
       } else {
-        parts.push(`(start_date >= "${y}-01-01 00:00:00" && start_date <= "${y}-12-31 23:59:59")`)
+        parts.push(
+          `(start_date >= "${y}-01-01 00:00:00" && start_date <= "${y}-12-31 23:59:59.999Z")`,
+        )
       }
     }
   }

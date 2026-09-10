@@ -3,6 +3,7 @@ import { Send, Loader2, Mail, CheckCircle2, XCircle, AlertTriangle, Eye } from '
 import { Client, Policy, Seguradora, Parceiro, TipoSeguro, EmailTemplate } from '@/types'
 import { sendMassEmail } from '@/services/communications'
 import { personalizeTemplate } from '@/lib/constants'
+import { extractDateOnly } from '@/lib/utils'
 import { ImageUploadField, AttachedImage } from './ImageUploadField'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
@@ -88,13 +89,15 @@ export function CampanhasTab({
         if (!c.birth_date) return false
         const currentMonth = new Date().getMonth() + 1
         let bMonth = -1
-        const rawDateOnly = c.birth_date.split('T')[0].split(' ')[0]
-        const parts = rawDateOnly.split('-')
-        if (parts.length >= 2) {
-          bMonth = parseInt(parts[1], 10)
-        }
-        if (bMonth === -1 || isNaN(bMonth)) {
-          bMonth = new Date(c.birth_date).getUTCMonth() + 1
+        const dateOnly = extractDateOnly(c.birth_date)
+        if (dateOnly && dateOnly.includes('-')) {
+          bMonth = parseInt(dateOnly.split('-')[1], 10)
+        } else {
+          const rawDateOnly = c.birth_date.split('T')[0].split(' ')[0]
+          const parts = rawDateOnly.split('-')
+          if (parts.length >= 2) {
+            bMonth = parseInt(parts[1], 10)
+          }
         }
         if (bMonth !== currentMonth) return false
       } else if (['renovacao_30', 'renovacao_15', 'renovacao_7'].includes(filters.eventFilter)) {

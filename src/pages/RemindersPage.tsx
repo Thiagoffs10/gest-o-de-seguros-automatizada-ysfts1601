@@ -207,17 +207,14 @@ export default function RemindersPage() {
     return clients.filter((c) => {
       if (!c.birth_date) return false
       let bMonth = -1
-      const rawDateOnly = c.birth_date.split('T')[0].split(' ')[0]
-      const parts = rawDateOnly.split('-')
-      if (parts.length >= 2) {
-        bMonth = parseInt(parts[1], 10)
-      }
-      if (bMonth === -1 || isNaN(bMonth)) {
-        const bDatePart = extractDateOnly(c.birth_date)
-        if (bDatePart) {
-          bMonth = Number(bDatePart.split('-')[1])
-        } else {
-          bMonth = new Date(c.birth_date).getUTCMonth() + 1
+      const bDatePart = extractDateOnly(c.birth_date)
+      if (bDatePart && bDatePart.includes('-')) {
+        bMonth = parseInt(bDatePart.split('-')[1], 10)
+      } else {
+        const rawDateOnly = c.birth_date.split('T')[0].split(' ')[0]
+        const parts = rawDateOnly.split('-')
+        if (parts.length >= 2) {
+          bMonth = parseInt(parts[1], 10)
         }
       }
       return bMonth === month

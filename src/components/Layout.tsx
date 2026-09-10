@@ -27,6 +27,7 @@ import { usePermissions } from '@/hooks/use-permissions'
 import { canAccessMassSend } from '@/lib/permissions'
 import { getReminders, updateReminder } from '@/services/reminders'
 import { Reminder } from '@/types'
+import { formatDateDisplay, todayLocalDate } from '@/lib/utils'
 import { Avatar, AvatarFallback } from '@/components/ui/avatar'
 import { Button } from '@/components/ui/button'
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover'
@@ -43,7 +44,7 @@ export default function Layout() {
 
   const fetchPendingReminders = async () => {
     try {
-      const today = new Date().toISOString().split('T')[0]
+      const today = todayLocalDate()
       const data = await getReminders(`sent = false && date <= "${today}"`)
       setReminders(data)
     } catch {
@@ -211,9 +212,7 @@ export default function Layout() {
                       >
                         <div className="flex items-center justify-between font-medium">
                           <span className="text-blue-600">{rem.type}</span>
-                          <span className="text-slate-400">
-                            {new Date(rem.date).toLocaleDateString('pt-BR')}
-                          </span>
+                          <span className="text-slate-400">{formatDateDisplay(rem.date)}</span>
                         </div>
                         <p className="text-slate-700">{rem.message}</p>
                         {can('reminders', 'update') && (

@@ -210,16 +210,19 @@ export default function PartnerReport() {
     if (seguradoraStatus === 'received') result = result.filter((p) => p.comissao_recebida)
     else if (seguradoraStatus === 'pending') result = result.filter((p) => !p.comissao_recebida)
 
-    if (dateFrom) {
+    const cleanDateFrom = extractDateOnly(dateFrom) || dateFrom
+    const cleanDateTo = extractDateOnly(dateTo) || dateTo
+
+    if (cleanDateFrom) {
       result = result.filter((p) => {
         const ref = extractDateOnly(p.start_date)
-        return ref && ref >= dateFrom
+        return ref && ref >= cleanDateFrom
       })
     }
-    if (dateTo) {
+    if (cleanDateTo) {
       result = result.filter((p) => {
         const ref = extractDateOnly(p.start_date)
-        return ref && ref <= dateTo
+        return ref && ref <= cleanDateTo
       })
     }
     if (foundClient) {

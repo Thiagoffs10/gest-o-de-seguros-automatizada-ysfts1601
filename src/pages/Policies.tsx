@@ -77,13 +77,13 @@ export default function Policies() {
       setTotalActiveCount(activeCount)
       let filter = buildFilterString(filters)
       if (periodStart && periodEnd) {
-        const periodFilter = `start_date >= "${periodStart}" && start_date <= "${periodEnd} 23:59:59"`
+        const periodFilter = `start_date >= "${periodStart} 00:00:00" && start_date <= "${periodEnd} 23:59:59.999Z"`
         filter = filter ? `${filter} && (${periodFilter})` : periodFilter
       } else if (periodStart) {
-        const periodFilter = `start_date >= "${periodStart}"`
+        const periodFilter = `start_date >= "${periodStart} 00:00:00"`
         filter = filter ? `${filter} && (${periodFilter})` : periodFilter
       } else if (periodEnd) {
-        const periodFilter = `start_date <= "${periodEnd} 23:59:59"`
+        const periodFilter = `start_date <= "${periodEnd} 23:59:59.999Z"`
         filter = filter ? `${filter} && (${periodFilter})` : periodFilter
       }
       if (statusFilter !== 'ALL') {
