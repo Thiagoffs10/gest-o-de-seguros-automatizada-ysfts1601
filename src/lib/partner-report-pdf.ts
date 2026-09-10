@@ -33,7 +33,7 @@ export interface PartnerReportData {
   entries: PartnerReportEntry[]
   totalBrutoRepasse: number
   totalDebitos: number
-  debitosList?: ParceiroDebitoItem[]
+  debitosList: Array<{ descricao: string; valor: number; data?: string }>
   taxaPixValor: number
   totalLiquidoAPagar: number
   totalPaid: number
@@ -113,8 +113,16 @@ export function generatePartnerReportPDF(data: PartnerReportData) {
       <table class="summary-table">
         <tbody>
           <tr>
-            <td class="sum-label"><strong>Total das Comissões (Bruto):</strong></td>
-            <td class="sum-val right"><strong>R$ ${fmt(data.totalBrutoRepasse)}</strong></td>
+            <td class="sum-label">Total das Comissões (Bruto):</td>
+            <td class="sum-val right">R$ ${fmt(data.totalBrutoRepasse)}</td>
+          </tr>
+          <tr>
+            <td class="sum-label">Repasses já Pagos:</td>
+            <td class="sum-val right" style="color:#166534;">R$ ${fmt(data.totalPaid)}</td>
+          </tr>
+          <tr>
+            <td class="sum-label"><strong>Repasses Pendentes a Pagar (Base):</strong></td>
+            <td class="sum-val right font-bold" style="color:#b45309;"><strong>R$ ${fmt(data.totalPending)}</strong></td>
           </tr>
           ${
             data.totalDebitos > 0

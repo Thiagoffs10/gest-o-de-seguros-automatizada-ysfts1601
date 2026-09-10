@@ -100,28 +100,22 @@ export default function ConciliacaoMensal() {
   useRealtime('conciliacoes', () => loadData())
 
   const m = useMemo(() => {
+    // Produção do mês selecionado (início da vigência no período)
     const periodPolicies = policies.filter((p) => isDateInPeriod(period, p.start_date))
     const expectedComm = computeExpectedCommissions(policies, period)
-    // Comissões recebidas correspondentes às apólices do período selecionado
-    const receivedComm = periodPolicies
-      .filter((p) => p.comissao_recebida === true)
-      .reduce((s, p) => s + calcNetCommission(p), 0)
-    // Pendentes do mês selecionado: apenas comissões do mês ainda não recebidas
+
+    // Comissões recebidas: data de recebimento da comissão no período
+    const receivedComm = computeReceivedCommissions(policies, period)
+
+    // Pendentes do mês selecionado: comissões da produção do mês que ainda não foram recebidas
     const pendingComm = periodPolicies
       .filter((p) => !p.comissao_recebida)
       .reduce((s, p) => s + calcNetCommission(p), 0)
 
-    // Repasses do período selecionado
-    const paidRepasses = periodPolicies
-      .filter(
-        (p) =>
-          p.tipo_de_venda === 'Parceiro' &&
-          (p.parceiro || p.expand?.parceiro) &&
-          (p.valor_repasse || 0) > 0 &&
-          p.pago_parceiro,
-      )
-      .reduce((s, p) => s + (p.valor_repasse || 0), 0)
+    // Repasses pagos: data de pagamento do repasse no período
+    const paidRepasses = computePaidRepasses(policies, period)
 
+    // Repasses pendentes: repasses da produção do mês que ainda não foram pagos
     const pendingRepasses = periodPolicies
       .filter(
         (p) =>
@@ -132,6 +126,7 @@ export default function ConciliacaoMensal() {
       )
       .reduce((s, p) => s + (p.valor_repasse || 0), 0)
 
+    // Custos pagos: data de pagamento no período (ou data do custo se não preenchida)
     const paidCustos = computePaidCosts(custos, period)
     const pendingCustos = computePendingCosts(custos, period)
     const totalCustos = computeCosts(custos, period)
@@ -245,7 +240,10 @@ export default function ConciliacaoMensal() {
       case 'comissoes-recebidas':
         return {
           policies: policies.filter(
-            (p) => isDateInPeriod(period, p.start_date) && p.comissao_recebida === true,
+            (p) =>
+              p.comissao_recebida === true &&
+              Boolean(p.data_recebimento_comissao) &&
+              isDateInPeriod(period, p.data_recebimento_comissao),
           ),
           otherPeriodPolicies: [],
           custos: [],
@@ -264,11 +262,12 @@ export default function ConciliacaoMensal() {
         return {
           policies: policies.filter(
             (p) =>
-              isDateInPeriod(period, p.start_date) &&
               p.tipo_de_venda === 'Parceiro' &&
               (p.parceiro || p.expand?.parceiro) &&
               (p.valor_repasse || 0) > 0 &&
-              p.pago_parceiro,
+              p.pago_parceiro &&
+              Boolean(p.data_pagamento_parceiro) &&
+              isDateInPeriod(period, p.data_pagamento_parceiro),
           ),
           otherPeriodPolicies: [],
           custos: [],
@@ -297,7 +296,12 @@ export default function ConciliacaoMensal() {
         return {
           policies: [],
           otherPeriodPolicies: [],
-          custos: custos.filter((c) => c.pago === true && isDateInPeriod(period, c.data)),
+          custos: custos.filter(
+            (c) =>
+              c.pago === true &&
+              Boolean(c.data_pagamento || c.data) &&
+              isDateInPeriod(period, c.data_pagamento || c.data),
+          ),
         }
       case 'custos-pendentes':
         return {
@@ -311,8 +315,28 @@ export default function ConciliacaoMensal() {
   }, [detailModalType, policies, custos, period])
 
   const handleDownloadPDF = () => {
-    const reportPolicies = m.periodPolicies.map((p) => {
+    // Apólices para o relatório da conciliação: apólices da produção do mês OU apólices com comissão recebida no mês
+    const reportMap = new Map<string, (typeof policies)[0]>()
+    m.periodPolicies.forEach((p) => reportMap.set(p.id, p))
+    policies.forEach((p) => {
+      if (
+        p.comissao_recebida &&
+        p.data_recebimento_comissao &&
+        isDateInPeriod(period, p.data_recebimento_comissao)
+      ) {
+        reportMap.set(p.id, p)
+      }
+    })
+
+    const reportPolicies = Array.from(reportMap.values()).map((p) => {
       const net = calcNetCommission(p)
+      // Se a comissão foi recebida dentro do período selecionado, ela conta como recebida neste relatório
+      const receivedInPeriod =
+        p.comissao_recebida &&
+        Boolean(p.data_recebimento_comissao) &&
+        isDateInPeriod(period, p.data_recebimento_comissao)
+      const belongsToPeriodProduction = isDateInPeriod(period, p.start_date)
+
       return {
         clienteNome: p.expand?.client?.name || 'Cliente não informado',
         seguradoraNome: p.expand?.seguradora?.nome || p.insurance_company || '-',
@@ -320,9 +344,9 @@ export default function ConciliacaoMensal() {
         tipoSeguro: p.tipo_de_seguro || p.coverage_type || '-',
         numeroApolice: p.policy_number || '-',
         valorLiquido: p.valor_liquido || p.premium_amount || 0,
-        comissaoPrevista: net,
-        comissaoRecebida: p.comissao_recebida ? net : 0,
-        statusComissao: (p.comissao_recebida ? 'Recebida' : 'Pendente') as 'Recebida' | 'Pendente',
+        comissaoPrevista: belongsToPeriodProduction ? net : 0,
+        comissaoRecebida: receivedInPeriod ? net : 0,
+        statusComissao: (receivedInPeriod ? 'Recebida' : 'Pendente') as 'Recebida' | 'Pendente',
         dataRecebimento: p.data_recebimento_comissao,
       }
     })

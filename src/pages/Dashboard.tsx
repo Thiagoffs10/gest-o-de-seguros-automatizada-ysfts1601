@@ -133,7 +133,12 @@ export default function Dashboard() {
   )
 
   const topCustos = useMemo(() => {
-    const monthCustos = custosFixos.filter((c) => isDateInPeriod(period, c.data))
+    const monthCustos = custosFixos.filter(
+      (c) =>
+        c.pago === true &&
+        Boolean(c.data_pagamento || c.data) &&
+        isDateInPeriod(period, c.data_pagamento || c.data),
+    )
     return [...monthCustos].sort((a, b) => (b.valor || 0) - (a.valor || 0)).slice(0, 5)
   }, [custosFixos, period])
 
@@ -328,7 +333,7 @@ export default function Dashboard() {
             <p className="text-xl font-bold text-amber-700">{maskValue(metrics.totalRepasses)}</p>
           </div>
           <div className="bg-rose-50 rounded-lg p-3 border border-rose-100">
-            <p className="text-xs text-rose-600 font-medium">Custos</p>
+            <p className="text-xs text-rose-600 font-medium">Custos Pagos</p>
             <p className="text-xl font-bold text-rose-700">{maskValue(metrics.totalCustos)}</p>
           </div>
           <div className="bg-blue-50 rounded-lg p-3 border border-blue-100">
@@ -338,7 +343,9 @@ export default function Dashboard() {
         </div>
         {topCustos.length > 0 && (
           <div>
-            <p className="text-xs font-semibold text-slate-600 mb-2">Top 5 Custos do Período</p>
+            <p className="text-xs font-semibold text-slate-600 mb-2">
+              Top 5 Custos Pagos do Período
+            </p>
             <div className="space-y-1.5">
               {topCustos.map((c) => (
                 <div

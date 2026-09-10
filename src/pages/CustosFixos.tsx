@@ -25,13 +25,14 @@ import { useToast } from '@/hooks/use-toast'
 import { useRealtime } from '@/hooks/use-realtime'
 import { usePermissions } from '@/hooks/use-permissions'
 import { getErrorMessage } from '@/lib/pocketbase/errors'
-import { computePeriodFromFilters, buildPocketBaseDateFilter } from '@/lib/date-filter'
+import { computePeriodFromFilters, isDateInPeriod } from '@/lib/date-filter'
 import {
   computeReceivedCommissions,
   computePaidRepasses,
   computeCosts,
   computeNetProfit,
   computePaidCosts,
+  computeRealProfit,
   computePendingCosts,
 } from '@/lib/financial-calcs'
 import { DevTrackingPanel } from '@/components/DevTrackingPanel'
@@ -74,15 +75,14 @@ export default function CustosFixos() {
   const loadData = useCallback(async () => {
     setLoading(true)
     try {
-      const costFilter = buildPocketBaseDateFilter('data', effectivePeriod)
-      const [costsData, pols] = await Promise.all([getCustosFixos(costFilter), getPolicies('')])
+      const [costsData, pols] = await Promise.all([getCustosFixos(''), getPolicies('')])
       setCosts(costsData)
       setPolicies(pols)
     } catch {
       /* ignored */
     }
     setLoading(false)
-  }, [effectivePeriod])
+  }, [])
 
   useEffect(() => {
     loadData()
@@ -97,7 +97,7 @@ export default function CustosFixos() {
       const totalCustos = computeCosts(costs, effectivePeriod)
       const custosPagos = computePaidCosts(costs, effectivePeriod)
       const custosPendentes = computePendingCosts(costs, effectivePeriod)
-      const lucroLiquido = computeNetProfit(totalReceitas, totalRepasses, totalCustos)
+      const lucroLiquido = computeRealProfit(totalReceitas, totalRepasses, custosPagos)
       return {
         totalReceitas,
         totalRepasses,
@@ -108,7 +108,16 @@ export default function CustosFixos() {
       }
     }, [policies, costs, effectivePeriod])
 
-  const sortedCosts = [...costs].sort((a, b) => {
+  const periodCosts = useMemo(() => {
+    return costs.filter((c) => {
+      if (c.pago && c.data_pagamento) {
+        return isDateInPeriod(effectivePeriod, c.data_pagamento)
+      }
+      return isDateInPeriod(effectivePeriod, c.data)
+    })
+  }, [costs, effectivePeriod])
+
+  const sortedCosts = [...periodCosts].sort((a, b) => {
     const cmp =
       sortField === 'data'
         ? new Date(a.data).getTime() - new Date(b.data).getTime()

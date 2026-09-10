@@ -117,7 +117,7 @@ export function ConciliacaoDetailModal({
       case 'comissoes-recebidas':
         return {
           title: 'Detalhamento de Comissões Recebidas',
-          subtitle: `Comissões recebidas de apólices com vigência neste período (${periodLabel})`,
+          subtitle: `Comissões com data de recebimento neste período (${periodLabel})`,
           badgeClass: 'bg-emerald-100 text-emerald-800 border-emerald-300',
           badgeText: 'Recebida',
           isPolicy: true,
@@ -144,7 +144,7 @@ export function ConciliacaoDetailModal({
       case 'repasses-pagos':
         return {
           title: 'Detalhamento de Repasses Pagos',
-          subtitle: `Repasses a parceiros das apólices do período (${periodLabel})`,
+          subtitle: `Repasses a parceiros com data de pagamento neste período (${periodLabel})`,
           badgeClass: 'bg-emerald-100 text-emerald-800 border-emerald-300',
           badgeText: 'Pago',
           isPolicy: true,

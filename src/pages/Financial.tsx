@@ -135,23 +135,76 @@ export default function Financial() {
   )
 
   const tablePolicies = useMemo(
-    () => allPolicies.filter((p) => applyFilters(p, true)),
+    () =>
+      allPolicies.filter((p) => {
+        // Se filtro de comissão for 'received', incluir apólices cuja comissão foi recebida no período selecionado
+        if (commFilter === 'received') {
+          if (!applyFilters(p, false)) return false
+          return (
+            p.comissao_recebida === true &&
+            Boolean(p.data_recebimento_comissao) &&
+            isDateInPeriod(period, p.data_recebimento_comissao)
+          )
+        }
+        // Se filtro de comissão for 'pending', vigência no período e não recebida
+        if (commFilter === 'pending') {
+          if (!applyFilters(p, true)) return false
+          return !p.comissao_recebida
+        }
+        // Se 'ALL', apólices iniciadas no período OU comissão recebida no período
+        if (!applyFilters(p, false)) return false
+        const inStart = isDateInPeriod(period, p.start_date)
+        const inReceived =
+          p.comissao_recebida === true &&
+          Boolean(p.data_recebimento_comissao) &&
+          isDateInPeriod(period, p.data_recebimento_comissao)
+        return inStart || inReceived
+      }),
+    [allPolicies, applyFilters, commFilter, period],
+  )
+
+  // Apólices filtradas pelas condições (exceto data), para aplicar regras de data do evento em comissões recebidas e repasses pagos
+  const matchingPolicies = useMemo(
+    () => allPolicies.filter((p) => applyFilters(p, false)),
     [allPolicies, applyFilters],
   )
 
   const metrics = useMemo(() => {
-    const expectedCommissions = computeExpectedCommissions(tablePolicies, period)
-    const receivedCommissions = computeReceivedCommissions(tablePolicies, period)
-    const pendingCommissions = expectedCommissions - receivedCommissions
-    const paidRepasses = computePaidRepasses(tablePolicies, period)
-    const pendingRepasses = computePendingRepasses(tablePolicies)
+    // Apólices iniciadas no período (produção do mês)
+    const periodStartPolicies = matchingPolicies.filter((p) => isDateInPeriod(period, p.start_date))
+    const expectedCommissions = computeExpectedCommissions(periodStartPolicies, period)
+    // Comissões recebidas: data de recebimento pertence ao período selecionado
+    const receivedCommissions = computeReceivedCommissions(matchingPolicies, period)
+    const pendingCommissions = periodStartPolicies
+      .filter((p) => !p.comissao_recebida)
+      .reduce((s, p) => s + calcNetCommission(p), 0)
+    // Repasses pagos: data de pagamento pertence ao período selecionado
+    const paidRepasses = computePaidRepasses(matchingPolicies, period)
+    const pendingRepasses = computePendingRepasses(periodStartPolicies)
     const paidCosts = computePaidCosts(custosFixos, period)
     const pendingCosts = computePendingCosts(custosFixos, period)
-    const expectedRepasses = computeExpectedRepasses(tablePolicies, period)
+    const expectedRepasses = computeExpectedRepasses(periodStartPolicies, period)
     const totalCustos = computeCosts(custosFixos, period)
     const expectedProfit = computeExpectedProfit(expectedCommissions, expectedRepasses, totalCustos)
     const realProfit = computeRealProfit(receivedCommissions, paidRepasses, paidCosts)
-    const partnerPols = getPartnerPolicies(tablePolicies)
+
+    // Repasses na tabela: apólices com repasse cuja vigência é do período (produção) OU cujo repasse pago ocorreu no período
+    const partnerPols = matchingPolicies.filter((p) => {
+      if (
+        p.tipo_de_venda !== 'Parceiro' ||
+        !(p.parceiro || p.expand?.parceiro) ||
+        (p.valor_repasse || 0) <= 0
+      ) {
+        return false
+      }
+      const inStart = isDateInPeriod(period, p.start_date)
+      const inPaid =
+        p.pago_parceiro &&
+        Boolean(p.data_pagamento_parceiro) &&
+        isDateInPeriod(period, p.data_pagamento_parceiro)
+      return inStart || inPaid
+    })
+
     return {
       expectedCommissions,
       receivedCommissions,
@@ -164,7 +217,7 @@ export default function Financial() {
       realProfit,
       partnerPols,
     }
-  }, [allPolicies, tablePolicies, custosFixos, period])
+  }, [matchingPolicies, custosFixos, period])
 
   const totalCommPages = Math.ceil(tablePolicies.length / ITEMS_PER_PAGE) || 1
   const paginatedCommPolicies = useMemo(() => {

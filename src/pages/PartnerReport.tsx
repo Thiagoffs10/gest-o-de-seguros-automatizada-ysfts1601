@@ -273,30 +273,6 @@ export default function PartnerReport() {
     [debitos],
   )
 
-  // Base para cálculo da taxa PIX: valor após débitos (se positivo) ou total bruto
-  // Cálculo automático da taxa PIX: 1% sobre o valor da transferência, limitado ao máximo de R$ 10,00 (mínimo R$ 0)
-  const taxaPixCalculadaAuto = useMemo(() => {
-    if (totalBrutoRepasse <= 0) return 0
-    const baseTransferencia = Math.max(0, totalBrutoRepasse - totalDebitos)
-    const taxa = (baseTransferencia * 1) / 100
-    const taxaLimitada = Math.min(10, taxa)
-    return Math.round(taxaLimitada * 100) / 100
-  }, [totalBrutoRepasse, totalDebitos])
-
-  // Taxa PIX efetiva (se foi editada manualmente, usa o valor manual; caso contrário a calculada automaticamente)
-  const taxaPixEfetiva = useMemo(() => {
-    if (taxaPixManual !== null && !isNaN(taxaPixManual) && taxaPixManual >= 0) {
-      return taxaPixManual
-    }
-    return taxaPixCalculadaAuto
-  }, [taxaPixManual, taxaPixCalculadaAuto])
-
-  // Líquido a Pagar final (destacado na tela)
-  const totalLiquidoAPagar = useMemo(() => {
-    const liquido = totalBrutoRepasse - totalDebitos - taxaPixEfetiva
-    return Math.max(0, Math.round(liquido * 100) / 100)
-  }, [totalBrutoRepasse, totalDebitos, taxaPixEfetiva])
-
   const totalPaid = reportEntries
     .filter((e) => e.statusRepasse === 'Pago')
     .reduce((s, e) => s + e.valorRepasse, 0)
@@ -308,6 +284,32 @@ export default function PartnerReport() {
   const pendingPoliciesToPay = useMemo(() => {
     return filteredPolicies.filter((p) => !p.pago_parceiro)
   }, [filteredPolicies])
+
+  // Base para cálculo da taxa PIX: apenas repasses PENDENTES após débitos (se positivo)
+  // Cálculo automático da taxa PIX: 1% sobre o valor da transferência a pagar, limitado ao máximo de R$ 10,00 (mínimo R$ 0)
+  const taxaPixCalculadaAuto = useMemo(() => {
+    if (totalPending <= 0) return 0
+    const baseTransferencia = Math.max(0, totalPending - totalDebitos)
+    const taxa = (baseTransferencia * 1) / 100
+    const taxaLimitada = Math.min(10, taxa)
+    return Math.round(taxaLimitada * 100) / 100
+  }, [totalPending, totalDebitos])
+
+  // Taxa PIX efetiva (se foi editada manualmente, usa o valor manual; caso contrário a calculada automaticamente)
+  const taxaPixEfetiva = useMemo(() => {
+    if (totalPending <= 0) return 0
+    if (taxaPixManual !== null && !isNaN(taxaPixManual) && taxaPixManual >= 0) {
+      return taxaPixManual
+    }
+    return taxaPixCalculadaAuto
+  }, [totalPending, taxaPixManual, taxaPixCalculadaAuto])
+
+  // Líquido a Pagar final (destacado na tela): repasses PENDENTES menos débitos e taxa PIX
+  const totalLiquidoAPagar = useMemo(() => {
+    if (totalPending <= 0) return 0
+    const liquido = totalPending - totalDebitos - taxaPixEfetiva
+    return Math.max(0, Math.round(liquido * 100) / 100)
+  }, [totalPending, totalDebitos, taxaPixEfetiva])
 
   // Ações de Débito
   const handleOpenAddDebito = () => {
@@ -448,7 +450,7 @@ export default function PartnerReport() {
       return
     }
 
-    if (pendingPoliciesToPay.length === 0 && totalBrutoRepasse === 0) {
+    if (pendingPoliciesToPay.length === 0) {
       toast({
         title: 'Nenhum repasse pendente para marcar como pago neste filtro',
         variant: 'destructive',
@@ -460,11 +462,11 @@ export default function PartnerReport() {
     try {
       const policyIdsToPay = pendingPoliciesToPay.map((p) => p.id)
 
-      // 1. Criar registro histórico de fechamento/pagamento
+      // 1. Criar registro histórico de fechamento/pagamento (apenas repasses pendentes sendo liquidados)
       const novoPagamento = await createParceiroPagamento({
         parceiro: selectedPartner,
         data_pagamento: dataPagamentoFinal || todayLocalDate(),
-        total_comissoes: totalBrutoRepasse,
+        total_comissoes: totalPending,
         total_debitos: totalDebitos,
         taxa_pix: taxaPixEfetiva,
         valor_liquido: totalLiquidoAPagar,
@@ -812,12 +814,14 @@ export default function PartnerReport() {
             {selectedPartner !== 'all' && (
               <Button
                 className="bg-emerald-600 hover:bg-emerald-700 text-white font-semibold"
+                disabled={pendingPoliciesToPay.length === 0}
                 onClick={() => {
                   setDataPagamentoFinal(todayLocalDate())
                   setIsMarkPaidConfirmOpen(true)
                 }}
               >
-                <CheckCircle className="w-4 h-4 mr-2" /> Marcar Repasse como Pago
+                <CheckCircle className="w-4 h-4 mr-2" /> Marcar Repasse como Pago (
+                {pendingPoliciesToPay.length})
               </Button>
             )}
           </div>
@@ -984,7 +988,15 @@ export default function PartnerReport() {
               <div className="space-y-2 text-sm">
                 <div className="flex justify-between text-slate-700">
                   <span>Total das Comissões (Bruto):</span>
-                  <span className="font-bold text-slate-900">R$ {fmt(totalBrutoRepasse)}</span>
+                  <span className="font-semibold text-slate-900">R$ {fmt(totalBrutoRepasse)}</span>
+                </div>
+                <div className="flex justify-between text-slate-700">
+                  <span>Repasses já Pagos:</span>
+                  <span className="font-semibold text-emerald-700">R$ {fmt(totalPaid)}</span>
+                </div>
+                <div className="flex justify-between text-slate-700">
+                  <span>Repasses Pendentes a Pagar (Base):</span>
+                  <span className="font-bold text-amber-700">R$ {fmt(totalPending)}</span>
                 </div>
 
                 {totalDebitos > 0 && (
@@ -1095,8 +1107,8 @@ export default function PartnerReport() {
 
                 <div className="p-3 bg-slate-50 border rounded-md space-y-1 text-xs">
                   <div className="flex justify-between">
-                    <span>Total Comissões:</span>
-                    <strong className="text-slate-800">R$ {fmt(totalBrutoRepasse)}</strong>
+                    <span>Repasses Pendentes ({pendingPoliciesToPay.length}):</span>
+                    <strong className="text-slate-800">R$ {fmt(totalPending)}</strong>
                   </div>
                   <div className="flex justify-between text-red-600">
                     <span>(-) Débitos:</span>

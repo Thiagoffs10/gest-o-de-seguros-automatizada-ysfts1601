@@ -92,12 +92,12 @@ export function calculateFinancialMetrics(
 ): FinancialMetrics {
   const totalReceitas = computeReceivedCommissions(policies, period)
   const totalRepasses = computePaidRepasses(policies, period)
-  const totalCustos = computeCosts(custos, period)
+  const totalCustos = computePaidCosts(custos, period)
   return {
     totalReceitas,
     totalRepasses,
     totalCustos,
-    lucroLiquido: computeNetProfit(totalReceitas, totalRepasses, totalCustos),
+    lucroLiquido: computeRealProfit(totalReceitas, totalRepasses, totalCustos),
   }
 }
 
@@ -121,7 +121,12 @@ export function computeExpectedRepasses(policies: Policy[], period: DatePeriod):
 
 export function computePaidCosts(custos: CustoFixo[], period: DatePeriod): number {
   return custos
-    .filter((c) => c.pago === true && isDateInPeriod(period, c.data))
+    .filter(
+      (c) =>
+        c.pago === true &&
+        Boolean(c.data_pagamento || c.data) &&
+        isDateInPeriod(period, c.data_pagamento || c.data),
+    )
     .reduce((s, c) => s + (c.valor || 0), 0)
 }
 
