@@ -1,5 +1,6 @@
 import { useEffect, useState, useCallback, useMemo } from 'react'
-import { Edit2, CheckCircle2, Check } from 'lucide-react'
+import { useSearchParams } from 'react-router-dom'
+import { Edit2, CheckCircle2, Check, ArrowDownCircle } from 'lucide-react'
 import { getPolicies, updatePolicyFinancial } from '@/services/policies'
 import { getParceiros } from '@/services/parceiros'
 import { getSeguradoras } from '@/services/seguradoras'
@@ -13,6 +14,7 @@ import { Input } from '@/components/ui/input'
 import { GlobalFilters } from '@/components/GlobalFilters'
 import { FinancialSummaryCards } from '@/components/FinancialSummaryCards'
 import { CommissionEditDialog, FinancialEditData } from '@/components/CommissionEditDialog'
+import { RegistrarRecebimentoModal } from '@/components/RegistrarRecebimentoModal'
 import { useToast } from '@/hooks/use-toast'
 import { useRealtime } from '@/hooks/use-realtime'
 import { usePermissions } from '@/hooks/use-permissions'
@@ -49,6 +51,7 @@ const fmtMoney = (v: number) =>
 export default function Financial() {
   const { toast } = useToast()
   const { can } = usePermissions()
+  const [searchParams] = useSearchParams()
   const [allPolicies, setAllPolicies] = useState<Policy[]>([])
   const [parceiros, setParceiros] = useState<Parceiro[]>([])
   const [seguradoras, setSeguradoras] = useState<Seguradora[]>([])
@@ -61,17 +64,27 @@ export default function Financial() {
   const [statusFilter, setStatusFilter] = useState('ALL')
   const [commFilter, setCommFilter] = useState('ALL')
   const [cpfCnpjFilter, setCpfCnpjFilter] = useState('')
+  const [policySearchFilter, setPolicySearchFilter] = useState('')
   const [editPolicy, setEditPolicy] = useState<Policy | null>(null)
+  const [recebimentoPolicy, setRecebimentoPolicy] = useState<Policy | null>(null)
   const [saving, setSaving] = useState(false)
   const [loading, setLoading] = useState(true)
   const [commPage, setCommPage] = useState(1)
   const [repassePage, setRepassePage] = useState(1)
   const ITEMS_PER_PAGE = 10
 
+  // Lê eventual ?policy= da URL (quando redirecionado de PolicyDetail)
+  useEffect(() => {
+    const urlPolicy = searchParams.get('policy')
+    if (urlPolicy) {
+      setPolicySearchFilter(urlPolicy)
+    }
+  }, [searchParams])
+
   useEffect(() => {
     setCommPage(1)
     setRepassePage(1)
-  }, [filters, statusFilter, commFilter, cpfCnpjFilter])
+  }, [filters, statusFilter, commFilter, cpfCnpjFilter, policySearchFilter])
 
   const loadData = useCallback(async () => {
     setLoading(true)
@@ -114,8 +127,9 @@ export default function Financial() {
           return false
         }
       }
-      if (commFilter === 'received' && !p.comissao_recebida) return false
-      if (commFilter === 'pending' && p.comissao_recebida) return false
+      const isSettled = isPolicyCommissionSettled(p)
+      if (commFilter === 'received' && !isSettled) return false
+      if (commFilter === 'pending' && isSettled) return false
       if (filters.partnerId && filters.partnerId !== 'ALL' && p.parceiro !== filters.partnerId)
         return false
       if (
@@ -134,12 +148,53 @@ export default function Financial() {
       if (cpfCnpjFilter.trim()) {
         if (!matchDocument(p.expand?.client, cpfCnpjFilter)) return false
       }
+      if (policySearchFilter.trim()) {
+        const query = policySearchFilter.trim().toLowerCase()
+        const polNum = (p.policy_number || '').toLowerCase()
+        const clientName = (p.expand?.client?.name || '').toLowerCase()
+        if (!polNum.includes(query) && !clientName.includes(query)) return false
+      }
       return true
     },
-    [statusFilter, commFilter, filters, cpfCnpjFilter, period],
+    [
+      statusFilter,
+      commFilter,
+      filters,
+      cpfCnpjFilter,
+      policySearchFilter,
+      period,
+      isPolicyCommissionSettled,
+    ],
   )
 
-  // Mapa de recebimentos por apólice no período
+  // Mapa de total recebido histórico por apólice
+  const receivedByPolicy = useMemo(() => {
+    const map = new Map<string, number>()
+    for (const r of recebimentos) {
+      const val = Number(r.valor_liquido) || Number(r.valor_bruto) || 0
+      map.set(r.policy, (map.get(r.policy) || 0) + val)
+    }
+    return map
+  }, [recebimentos])
+
+  // Helper para verificar se comissão da apólice está quitada
+  const isPolicyCommissionSettled = useCallback(
+    (p: Policy) => {
+      if (p.comissao_recebida) return true
+      const previsto =
+        p.commission != null
+          ? Number(p.commission)
+          : Math.round(
+              (((p.valor_liquido || p.premium_amount || 0) * (p.commission_percent || 0)) / 100) *
+                100,
+            ) / 100
+      const rec = receivedByPolicy.get(p.id) || 0
+      return previsto > 0 && rec >= previsto
+    },
+    [receivedByPolicy],
+  )
+
+  // Mapa de recebimentos por apólice no período selecionado
   const recsInPeriodByPolicy = useMemo(() => {
     const set = new Set<string>()
     for (const r of recebimentos) {
@@ -153,9 +208,13 @@ export default function Financial() {
   const tablePolicies = useMemo(
     () =>
       allPolicies.filter((p) => {
+        // Se o usuário digitou uma busca específica de apólice/cliente ou CPF/CNPJ, priorizar exibição
+        const isTargetedSearch = Boolean(policySearchFilter.trim() || cpfCnpjFilter.trim())
+
         // Se filtro de comissão for 'received', incluir apólices cuja comissão foi recebida no período selecionado
         if (commFilter === 'received') {
           if (!applyFilters(p, false)) return false
+          if (isTargetedSearch) return true
           const hasRecInPeriod = recsInPeriodByPolicy.has(p.id)
           const hasLegacyInPeriod =
             p.comissao_recebida === true &&
@@ -163,13 +222,14 @@ export default function Financial() {
             isDateInPeriod(period, p.data_recebimento_comissao)
           return hasRecInPeriod || hasLegacyInPeriod
         }
-        // Se filtro de comissão for 'pending', vigência no período e não recebida
+        // Se filtro de comissão for 'pending'
         if (commFilter === 'pending') {
-          if (!applyFilters(p, true)) return false
-          return !p.comissao_recebida
+          if (!applyFilters(p, !isTargetedSearch)) return false
+          return !isPolicyCommissionSettled(p)
         }
-        // Se 'ALL', apólices iniciadas no período OU comissão recebida no período
+        // Se 'ALL', apólices iniciadas no período OU comissão recebida no período (ou achadas pela busca direta)
         if (!applyFilters(p, false)) return false
+        if (isTargetedSearch) return true
         const inStart = isDateInPeriod(period, p.start_date)
         const inReceived =
           recsInPeriodByPolicy.has(p.id) ||
@@ -178,7 +238,16 @@ export default function Financial() {
             isDateInPeriod(period, p.data_recebimento_comissao))
         return inStart || inReceived
       }),
-    [allPolicies, applyFilters, commFilter, period, recsInPeriodByPolicy],
+    [
+      allPolicies,
+      applyFilters,
+      commFilter,
+      period,
+      recsInPeriodByPolicy,
+      policySearchFilter,
+      cpfCnpjFilter,
+      isPolicyCommissionSettled,
+    ],
   )
 
   // Apólices filtradas pelas condições (exceto data), para aplicar regras de data do evento em comissões recebidas e repasses pagos
@@ -193,9 +262,18 @@ export default function Financial() {
     const expectedCommissions = computeExpectedCommissions(periodStartPolicies, period)
     // Comissões recebidas: data de recebimento pertence ao período selecionado
     const receivedCommissions = computeReceivedCommissions(matchingPolicies, period, recebimentos)
-    const pendingCommissions = periodStartPolicies
-      .filter((p) => !p.comissao_recebida)
-      .reduce((s, p) => s + calcNetCommission(p), 0)
+    const pendingCommissions = periodStartPolicies.reduce((sum, p) => {
+      const previsto =
+        p.commission != null
+          ? Number(p.commission)
+          : Math.round(
+              (((p.valor_liquido || p.premium_amount || 0) * (p.commission_percent || 0)) / 100) *
+                100,
+            ) / 100
+      const rec = receivedByPolicy.get(p.id) ?? (p.comissao_recebida ? previsto : 0)
+      const saldo = Math.max(0, previsto - rec)
+      return sum + saldo
+    }, 0)
     // Repasses pagos: data de pagamento pertence ao período selecionado
     const paidRepasses = computePaidRepasses(matchingPolicies, period)
     const pendingRepasses = computePendingRepasses(periodStartPolicies)
@@ -235,7 +313,7 @@ export default function Financial() {
       realProfit,
       partnerPols,
     }
-  }, [matchingPolicies, custosFixos, period, recebimentos])
+  }, [matchingPolicies, custosFixos, period, recebimentos, receivedByPolicy])
 
   const totalCommPages = Math.ceil(tablePolicies.length / ITEMS_PER_PAGE) || 1
   const paginatedCommPolicies = useMemo(() => {
@@ -250,17 +328,8 @@ export default function Financial() {
     return partnerPols.slice(start, start + ITEMS_PER_PAGE)
   }, [metrics?.partnerPols, repassePage])
 
-  const handleQuickReceive = async (policyId: string) => {
-    try {
-      await updatePolicyFinancial(policyId, {
-        comissao_recebida: true,
-        data_recebimento_comissao: todayLocalDate(),
-      })
-      toast({ title: 'Comissão marcada como recebida!' })
-      loadData()
-    } catch (err: any) {
-      toast({ title: 'Erro', description: err.message, variant: 'destructive' })
-    }
+  const handleOpenRegistrarRecebimento = (policy: Policy) => {
+    setRecebimentoPolicy(policy)
   }
 
   const handleQuickPayRepasse = async (policyId: string) => {
@@ -337,10 +406,16 @@ export default function Financial() {
         />
         <div className="flex flex-wrap items-center gap-2">
           <Input
+            placeholder="Buscar por Apólice / Cliente"
+            value={policySearchFilter}
+            onChange={(e) => setPolicySearchFilter(e.target.value)}
+            className="w-[200px] text-xs h-9 bg-white"
+          />
+          <Input
             placeholder="Filtrar por CPF/CNPJ"
             value={cpfCnpjFilter}
             onChange={(e) => setCpfCnpjFilter(e.target.value)}
-            className="w-[170px] text-xs h-9 bg-white"
+            className="w-[160px] text-xs h-9 bg-white"
           />
           <Select value={statusFilter} onValueChange={setStatusFilter}>
             <SelectTrigger className="w-[160px]">
@@ -376,6 +451,7 @@ export default function Financial() {
               setStatusFilter('ALL')
               setCommFilter('ALL')
               setCpfCnpjFilter('')
+              setPolicySearchFilter('')
             }}
           >
             Limpar Filtros
@@ -395,71 +471,106 @@ export default function Financial() {
                 <th className="p-3">Cliente</th>
                 <th className="p-3">Seguradora</th>
                 <th className="p-3">Tipo</th>
-                <th className="p-3 text-right">Bruto</th>
-                <th className="p-3 text-right">Líquido</th>
-                <th className="p-3 text-right">Comissão</th>
-                <th className="p-3 text-right">ISS</th>
-                <th className="p-3 text-right">Com. Líquida</th>
-                <th className="p-3 text-center">Recebida</th>
-                <th className="p-3">Data Receb.</th>
+                <th className="p-3 text-right">Prêmio Líq.</th>
+                <th className="p-3 text-right">Comissão Prevista</th>
+                <th className="p-3 text-right">Já Recebido</th>
+                <th className="p-3 text-right">Saldo a Receber</th>
+                <th className="p-3 text-center">Status</th>
                 <th className="p-3 text-right">Ações</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-100">
               {tablePolicies.length === 0 ? (
                 <tr>
-                  <td colSpan={12} className="text-center p-6 text-slate-500">
+                  <td colSpan={10} className="text-center p-6 text-slate-500">
                     Nenhuma apólice encontrada.
                   </td>
                 </tr>
               ) : (
-                paginatedCommPolicies.map((p) => (
-                  <tr key={p.id} className="hover:bg-slate-50/80">
-                    <td className="p-3 font-bold text-slate-900">{p.policy_number}</td>
-                    <td className="p-3">{p.expand?.client?.name || '-'}</td>
-                    <td className="p-3">
-                      {p.expand?.seguradora?.nome || p.insurance_company || '-'}
-                    </td>
-                    <td className="p-3">{p.tipo_de_seguro || p.coverage_type}</td>
-                    <td className="p-3 text-right">R$ {fmtMoney(p.valor_bruto || 0)}</td>
-                    <td className="p-3 text-right font-bold">
-                      R$ {fmtMoney(p.valor_liquido || p.premium_amount || 0)}
-                    </td>
-                    <td className="p-3 text-right">R$ {fmtMoney(p.commission || 0)}</td>
-                    <td className="p-3 text-right text-red-600">R$ {fmtMoney(p.iss || 0)}</td>
-                    <td className="p-3 text-right font-bold text-blue-600">
-                      R$ {fmtMoney(calcNetCommission(p))}
-                    </td>
-                    <td className="p-3 text-center">
-                      <Badge className={p.comissao_recebida ? 'bg-emerald-500' : 'bg-amber-500'}>
-                        {p.comissao_recebida ? 'Recebida' : 'Pendente'}
-                      </Badge>
-                    </td>
-                    <td className="p-3 text-xs">
-                      {formatDateDisplay(p.data_recebimento_comissao)}
-                    </td>
-                    <td className="p-3 text-right">
-                      <div className="flex items-center justify-end gap-1">
-                        {can('policies', 'update') && !p.comissao_recebida && (
-                          <Button
-                            size="sm"
-                            variant="ghost"
-                            className="text-emerald-600"
-                            title="Receber Comissão"
-                            onClick={() => handleQuickReceive(p.id)}
-                          >
-                            <CheckCircle2 className="w-4 h-4" />
-                          </Button>
+                paginatedCommPolicies.map((p) => {
+                  const previsto =
+                    p.commission != null
+                      ? Number(p.commission)
+                      : Math.round(
+                          (((p.valor_liquido || p.premium_amount || 0) *
+                            (p.commission_percent || 0)) /
+                            100) *
+                            100,
+                        ) / 100
+                  const recTotal =
+                    receivedByPolicy.get(p.id) ?? (p.comissao_recebida ? previsto : 0)
+                  const saldo = Math.max(0, Math.round((previsto - recTotal) * 100) / 100)
+                  const quitada = p.comissao_recebida || (previsto > 0 && recTotal >= previsto)
+                  const parcial = !quitada && recTotal > 0
+                  const acima = previsto > 0 && recTotal > previsto
+
+                  return (
+                    <tr key={p.id} className="hover:bg-slate-50/80">
+                      <td className="p-3 font-bold text-slate-900">{p.policy_number}</td>
+                      <td className="p-3">{p.expand?.client?.name || '-'}</td>
+                      <td className="p-3">
+                        {p.expand?.seguradora?.nome || p.insurance_company || '-'}
+                      </td>
+                      <td className="p-3">{p.tipo_de_seguro || p.coverage_type}</td>
+                      <td className="p-3 text-right font-medium">
+                        R$ {fmtMoney(p.valor_liquido || p.premium_amount || 0)}
+                      </td>
+                      <td className="p-3 text-right font-bold text-slate-900">
+                        R$ {fmtMoney(previsto)}
+                      </td>
+                      <td className="p-3 text-right font-semibold text-emerald-700">
+                        R$ {fmtMoney(recTotal)}
+                      </td>
+                      <td className="p-3 text-right font-bold text-amber-700">
+                        R$ {fmtMoney(saldo)}
+                      </td>
+                      <td className="p-3 text-center">
+                        {quitada ? (
+                          <Badge className="bg-emerald-600 hover:bg-emerald-600 text-white font-medium">
+                            {acima ? 'Recebida (Acima)' : 'Recebida'}
+                          </Badge>
+                        ) : parcial ? (
+                          <Badge className="bg-blue-600 hover:bg-blue-600 text-white font-medium">
+                            Parcial
+                          </Badge>
+                        ) : (
+                          <Badge className="bg-amber-500 hover:bg-amber-500 text-white font-medium">
+                            Pendente
+                          </Badge>
                         )}
-                        {can('policies', 'update') && (
-                          <Button size="sm" variant="ghost" onClick={() => setEditPolicy(p)}>
-                            <Edit2 className="w-3.5 h-3.5" />
-                          </Button>
-                        )}
-                      </div>
-                    </td>
-                  </tr>
-                ))
+                      </td>
+                      <td className="p-3 text-right">
+                        <div className="flex items-center justify-end gap-1">
+                          {can('policies', 'update') && (
+                            <Button
+                              size="sm"
+                              className={
+                                quitada
+                                  ? 'bg-slate-100 hover:bg-slate-200 text-slate-700 border text-xs h-8 px-2'
+                                  : 'bg-emerald-600 hover:bg-emerald-700 text-white text-xs h-8 px-2 shadow-sm'
+                              }
+                              title="Registrar recebimento de comissão"
+                              onClick={() => handleOpenRegistrarRecebimento(p)}
+                            >
+                              <ArrowDownCircle className="w-3.5 h-3.5 mr-1" />
+                              Registrar recebimento
+                            </Button>
+                          )}
+                          {can('policies', 'update') && (
+                            <Button
+                              size="sm"
+                              variant="ghost"
+                              title="Editar Repasse Parceiro"
+                              onClick={() => setEditPolicy(p)}
+                            >
+                              <Edit2 className="w-3.5 h-3.5" />
+                            </Button>
+                          )}
+                        </div>
+                      </td>
+                    </tr>
+                  )
+                })
               )}
             </tbody>
           </table>
@@ -605,6 +716,22 @@ export default function Financial() {
         policy={editPolicy}
         onSave={handleSave}
         saving={saving}
+      />
+
+      <RegistrarRecebimentoModal
+        open={!!recebimentoPolicy}
+        onOpenChange={(open) => !open && setRecebimentoPolicy(null)}
+        policy={recebimentoPolicy}
+        seguradoras={seguradoras}
+        alreadyReceived={
+          recebimentoPolicy
+            ? (receivedByPolicy.get(recebimentoPolicy.id) ??
+              (recebimentoPolicy.comissao_recebida ? recebimentoPolicy.commission || 0 : 0))
+            : 0
+        }
+        onSuccess={() => {
+          loadData()
+        }}
       />
     </div>
   )

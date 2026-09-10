@@ -33,7 +33,34 @@ export function computeReceivedCommissions(
     .reduce((s, p) => s + calcNetCommission(p), 0)
 }
 
-export function computePendingCommissions(policies: Policy[]): number {
+export function computePendingCommissions(
+  policies: Policy[],
+  recebimentos?: ComissaoRecebimento[],
+): number {
+  if (recebimentos && recebimentos.length > 0) {
+    const receivedByPolicy = new Map<string, number>()
+    for (const r of recebimentos) {
+      const current = receivedByPolicy.get(r.policy) || 0
+      receivedByPolicy.set(
+        r.policy,
+        current + (Number(r.valor_liquido) || Number(r.valor_bruto) || 0),
+      )
+    }
+    // Soma o saldo pendente de cada apólice
+    return policies.reduce((sum, p) => {
+      const totalPrevisto =
+        p.commission != null
+          ? Number(p.commission)
+          : Math.round(
+              (((p.valor_liquido || p.premium_amount || 0) * (p.commission_percent || 0)) / 100) *
+                100,
+            ) / 100
+      const recs = receivedByPolicy.get(p.id) ?? (p.comissao_recebida ? totalPrevisto : 0)
+      const saldo = Math.max(0, totalPrevisto - recs)
+      return sum + saldo
+    }, 0)
+  }
+
   return policies.filter((p) => !p.comissao_recebida).reduce((s, p) => s + calcNetCommission(p), 0)
 }
 

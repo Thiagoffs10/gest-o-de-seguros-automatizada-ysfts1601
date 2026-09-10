@@ -19,7 +19,7 @@ import { AlertTriangle } from 'lucide-react'
 interface Props {
   open: boolean
   onOpenChange: (open: boolean) => void
-  policy: Policy
+  policy: Policy | null
   seguradoras: Seguradora[]
   alreadyReceived: number
   onSuccess: () => void
@@ -45,13 +45,14 @@ export function RegistrarRecebimentoModal({
   const [isSubmitting, setIsSubmitting] = useState(false)
 
   // Identificar a alíquota da seguradora vinculada à apólice
-  const policySeguradora =
-    policy.expand?.seguradora ||
-    seguradoras.find((s) => s.id === policy.seguradora || s.nome === policy.insurance_company)
+  const policySeguradora = policy
+    ? policy.expand?.seguradora ||
+      seguradoras.find((s) => s.id === policy.seguradora || s.nome === policy.insurance_company)
+    : undefined
 
   // Previsão total da comissão
-  const comissaoPrevista =
-    policy.commission != null
+  const comissaoPrevista = policy
+    ? policy.commission != null
       ? Number(policy.commission)
       : Math.round(
           (((policy.valor_liquido || policy.premium_amount || 0) *
@@ -59,6 +60,7 @@ export function RegistrarRecebimentoModal({
             100) *
             100,
         ) / 100
+    : 0
 
   // Saldo a receber ANTES desta baixa
   const saldoAtual = Math.max(0, Math.round((comissaoPrevista - alreadyReceived) * 100) / 100)
@@ -120,7 +122,7 @@ export function RegistrarRecebimentoModal({
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
-    if (isSubmitting) return
+    if (isSubmitting || !policy) return
 
     if (!valorBruto || Number(valorBruto) <= 0) {
       toast({
@@ -179,6 +181,8 @@ export function RegistrarRecebimentoModal({
       setIsSubmitting(false)
     }
   }
+
+  if (!policy) return null
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>

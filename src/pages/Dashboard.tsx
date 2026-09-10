@@ -143,7 +143,10 @@ export default function Dashboard() {
   const activePolicies = policies.filter((p) => p.status === 'Ativa')
   const pendingRenewals = policies.filter((p) => p.status === 'Renovação Pendente')
 
-  const pendingCommissions = useMemo(() => computePendingCommissions(policies), [policies])
+  const pendingCommissions = useMemo(
+    () => computePendingCommissions(policies, recebimentos),
+    [policies, recebimentos],
+  )
 
   const metrics = useMemo(
     () => calculateFinancialMetrics(policies, custosFixos, period, recebimentos),

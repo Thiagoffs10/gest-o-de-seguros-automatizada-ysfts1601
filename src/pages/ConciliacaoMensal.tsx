@@ -12,7 +12,10 @@ import {
 import { getPolicies, updatePolicyFinancial } from '@/services/policies'
 import { getCustosFixos, updateCustoFixo } from '@/services/custos-fixos'
 import { getConciliacao, createConciliacao, deleteConciliacao } from '@/services/conciliacoes'
-import { getComissaoRecebimentos } from '@/services/comissao-recebimentos'
+import {
+  getComissaoRecebimentos,
+  createComissaoRecebimento,
+} from '@/services/comissao-recebimentos'
 import { getErrorMessage } from '@/lib/pocketbase/errors'
 import { Policy, CustoFixo, Conciliacao, ComissaoRecebimento } from '@/types'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
@@ -180,13 +183,29 @@ export default function ConciliacaoMensal() {
   const handleMarkCommissionReceived = async (policyId: string) => {
     try {
       const today = todayLocalDate()
-      await updatePolicyFinancial(policyId, {
-        comissao_recebida: true,
-        data_recebimento_comissao: today,
+      const policyTarget = policies.find((p) => p.id === policyId)
+      const valorBruto =
+        policyTarget?.commission != null
+          ? Number(policyTarget.commission)
+          : calcNetCommission(policyTarget || ({} as any))
+      const iss = policyTarget?.iss || 0
+      const valorLiquido = Math.max(0, valorBruto - iss)
+
+      // Cria registro em comissao_recebimentos para fonte única
+      await createComissaoRecebimento({
+        policy: policyId,
+        data_recebimento: today,
+        valor_bruto: valorBruto,
+        descontos_impostos: iss,
+        valor_liquido: valorLiquido,
+        aliquota_imposto: valorBruto > 0 ? Math.round((iss / valorBruto) * 100 * 10) / 10 : 0,
+        origem: 'Conciliação',
+        idempotency_key: `rec_conc_${policyId}_${Date.now()}`,
       })
+
       toast({
         title: 'Comissão baixada com sucesso!',
-        description: 'Comissão registrada como recebida hoje.',
+        description: 'Recebimento de comissão registrado com sucesso.',
       })
       await loadData()
     } catch (err: any) {

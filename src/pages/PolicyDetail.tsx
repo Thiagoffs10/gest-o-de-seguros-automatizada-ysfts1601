@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
-import { Plus, Pencil, RefreshCw, Trash2, Ban, AlertOctagon } from 'lucide-react'
+import { Link } from 'react-router-dom'
+import { Pencil, RefreshCw, Trash2, Ban, AlertOctagon, ArrowUpRight } from 'lucide-react'
 import {
   getPolicy,
   createPolicy,
@@ -19,7 +20,6 @@ import {
   getComissaoRecebimentosByPolicy,
   deleteComissaoRecebimento,
 } from '@/services/comissao-recebimentos'
-import { RegistrarRecebimentoModal } from '@/components/RegistrarRecebimentoModal'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs'
@@ -64,7 +64,6 @@ export default function PolicyDetail() {
   const [seguradoras, setSeguradoras] = useState<Seguradora[]>([])
   const [parceiros, setParceiros] = useState<Parceiro[]>([])
   const [isPayModalOpen, setIsPayModalOpen] = useState(false)
-  const [isRecebimentoModalOpen, setIsRecebimentoModalOpen] = useState(false)
   const [dialogMode, setDialogMode] = useState<DialogMode>(null)
   const [fieldErrors, setFieldErrors] = useState<FieldErrors>({})
   const [deleteOpen, setDeleteOpen] = useState(false)
@@ -298,36 +297,47 @@ export default function PolicyDetail() {
         </div>
       </div>
 
-      {/* BLOCO DE RECEBIMENTOS DE COMISSÃO (ETAPA 1) */}
+      {/* BLOCO DE RECEBIMENTOS DE COMISSÃO (PREVISÃO E CONSULTA) */}
       <Card className="border-blue-200 bg-gradient-to-br from-blue-50/40 via-white to-slate-50 shadow-sm">
         <CardHeader className="pb-3">
           <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
             <div>
               <CardTitle className="text-base font-bold text-slate-900 flex items-center gap-2">
-                <span>Controle de Recebimentos da Comissão</span>
+                <span>Previsão e Recebimentos da Comissão</span>
                 {saldoAReceber === 0 && comissaoPrevista > 0 && (
                   <Badge className="bg-emerald-600 text-white font-medium text-xs">
                     Quitada Integralmente
                   </Badge>
                 )}
-                {temDivergenciaExcesso && (
+                {saldoAReceber > 0 && jaRecebido > 0 && (
                   <Badge className="bg-amber-500 text-white font-medium text-xs">
+                    Parcialmente Recebida
+                  </Badge>
+                )}
+                {saldoAReceber > 0 && jaRecebido === 0 && (
+                  <Badge className="bg-slate-500 text-white font-medium text-xs">Pendente</Badge>
+                )}
+                {temDivergenciaExcesso && (
+                  <Badge className="bg-rose-500 text-white font-medium text-xs">
                     Acima do Previsto
                   </Badge>
                 )}
               </CardTitle>
               <p className="text-xs text-slate-500 mt-0.5">
-                Valores previstos, realizados e saldo pendente para a comissão desta apólice.
+                Consulta financeira da apólice: comissão prevista, já recebido, saldo e histórico.
+                Baixas devem ser realizadas pelo módulo Financeiro.
               </p>
             </div>
-            {can('policies', 'update') && (
-              <Button
-                onClick={() => setIsRecebimentoModalOpen(true)}
-                className="bg-emerald-600 hover:bg-emerald-700 text-white shrink-0"
-              >
-                <Plus className="w-4 h-4 mr-1.5" /> Registrar recebimento
-              </Button>
-            )}
+            <Button
+              asChild
+              variant="outline"
+              className="border-blue-300 text-blue-700 hover:bg-blue-50 shrink-0"
+            >
+              <Link to={`/financeiro?policy=${policy.policy_number}`}>
+                <ArrowUpRight className="w-4 h-4 mr-1.5" />
+                Registrar recebimento no Financeiro
+              </Link>
+            </Button>
           </div>
         </CardHeader>
         <CardContent className="space-y-4">
@@ -649,15 +659,6 @@ export default function PolicyDetail() {
         onOpenChange={setCancelOpen}
         onConfirm={handleCancelConfirm}
         policyNumber={policy.policy_number}
-      />
-
-      <RegistrarRecebimentoModal
-        open={isRecebimentoModalOpen}
-        onOpenChange={setIsRecebimentoModalOpen}
-        policy={policy}
-        seguradoras={seguradoras}
-        alreadyReceived={jaRecebido}
-        onSuccess={loadData}
       />
 
       <Dialog open={isPayModalOpen} onOpenChange={setIsPayModalOpen}>
