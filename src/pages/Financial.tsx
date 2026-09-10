@@ -9,6 +9,9 @@ import {
   Trash2,
   Pencil,
   AlertTriangle,
+  Building2,
+  ChevronRight,
+  ArrowLeft,
 } from 'lucide-react'
 import { getPolicies, updatePolicyFinancial } from '@/services/policies'
 import { getParceiros } from '@/services/parceiros'
@@ -86,9 +89,19 @@ export default function Financial() {
   const [editPolicy, setEditPolicy] = useState<Policy | null>(null)
   const [recebimentoPolicy, setRecebimentoPolicy] = useState<Policy | null>(null)
   const [historyPolicy, setHistoryPolicy] = useState<Policy | null>(null)
+  const [isEditRecebimentoOpen, setIsEditRecebimentoOpen] = useState(false)
   const [editingRecebimento, setEditingRecebimento] = useState<ComissaoRecebimento | null>(null)
+  const [isDeleteRecebimentoOpen, setIsDeleteRecebimentoOpen] = useState(false)
   const [deletingRecebimento, setDeletingRecebimento] = useState<ComissaoRecebimento | null>(null)
   const [deleteLoading, setDeleteLoading] = useState(false)
+
+  // Estados para modal de Detalhamento do Saldo a Receber por Seguradora
+  const [isSeguradorasModalOpen, setIsSeguradorasModalOpen] = useState(false)
+  const [selectedSeguradoraDetail, setSelectedSeguradoraDetail] = useState<{
+    id: string
+    nome: string
+  } | null>(null)
+
   const isOperationInProgressRef = useRef(false)
   const [saving, setSaving] = useState(false)
   const [loading, setLoading] = useState(true)
@@ -347,6 +360,67 @@ export default function Financial() {
       return inStart || inPaid
     })
 
+    // Apólices pendentes com saldo individual calculado com precisão de arredondamento em centavos
+    const pendingPoliciesList = periodStartPolicies
+      .map((p) => {
+        const previsto =
+          p.commission != null
+            ? Number(p.commission)
+            : Math.round(
+                (((p.valor_liquido || p.premium_amount || 0) * (p.commission_percent || 0)) / 100) *
+                  100,
+              ) / 100
+        const rec = receivedGrossByPolicy.get(p.id) ?? (p.comissao_recebida ? previsto : 0)
+        const saldo = Math.max(0, Math.round((previsto - rec) * 100) / 100)
+        return { policy: p, previsto, rec, saldo }
+      })
+      .filter((item) => item.saldo > 0)
+
+    // Agrupamento por seguradora
+    const seguradoraMap = new Map<
+      string,
+      {
+        id: string
+        nome: string
+        saldoTotal: number
+        policies: Array<{
+          policy: Policy
+          previsto: number
+          rec: number
+          saldo: number
+        }>
+      }
+    >()
+
+    for (const item of pendingPoliciesList) {
+      const segId = item.policy.seguradora || item.policy.insurance_company || 'nao_identificada'
+      const segNome =
+        seguradoras.find((s) => s.id === item.policy.seguradora)?.nome ||
+        item.policy.expand?.seguradora?.nome ||
+        item.policy.insurance_company ||
+        'Seguradora Não Identificada'
+
+      if (!seguradoraMap.has(segId)) {
+        seguradoraMap.set(segId, {
+          id: segId,
+          nome: segNome,
+          saldoTotal: 0,
+          policies: [],
+        })
+      }
+      const entry = seguradoraMap.get(segId)!
+      entry.saldoTotal = Math.round((entry.saldoTotal + item.saldo) * 100) / 100
+      entry.policies.push(item)
+    }
+
+    const seguradorasBreakdown = Array.from(seguradoraMap.values()).sort(
+      (a, b) => b.saldoTotal - a.saldoTotal,
+    )
+
+    // Total consolidado por seguradoras arredondado a 2 casas
+    const totalSeguradorasSaldo =
+      Math.round(seguradorasBreakdown.reduce((sum, s) => sum + s.saldoTotal, 0) * 100) / 100
+
     return {
       expectedCommissions,
       receivedCommissions,
@@ -358,8 +432,11 @@ export default function Financial() {
       expectedProfit,
       realProfit,
       partnerPols,
+      pendingPoliciesList,
+      seguradorasBreakdown,
+      totalSeguradorasSaldo,
     }
-  }, [matchingPolicies, custosFixos, period, recebimentos, receivedGrossByPolicy])
+  }, [matchingPolicies, custosFixos, period, recebimentos, receivedGrossByPolicy, seguradoras])
 
   const totalCommPages = Math.ceil(tablePolicies.length / ITEMS_PER_PAGE) || 1
   const paginatedCommPolicies = useMemo(() => {
@@ -383,14 +460,16 @@ export default function Financial() {
     const recId = deletingRecebimento.id
     const targetPolicyId = deletingRecebimento.policy
     setDeleteLoading(true)
+    setIsDeleteRecebimentoOpen(false)
     try {
       await deleteComissaoRecebimento(recId, targetPolicyId)
       toast({
         title: 'Recebimento excluído com sucesso!',
         description: 'Os valores financeiros e o status foram recalculados.',
       })
-      setDeletingRecebimento(null)
-      loadData()
+      setTimeout(() => {
+        loadData()
+      }, 50)
     } catch (err: any) {
       toast({
         title: 'Erro ao excluir recebimento',
@@ -460,6 +539,10 @@ export default function Financial() {
         expectedProfit={metrics.expectedProfit}
         realProfit={metrics.realProfit}
         periodLabel={period.label}
+        onSaldoAReceberClick={() => {
+          setSelectedSeguradoraDetail(null)
+          setIsSeguradorasModalOpen(true)
+        }}
       />
 
       <DevTrackingPanel
@@ -919,7 +1002,10 @@ export default function Financial() {
                                   size="sm"
                                   className="text-blue-600 h-7 px-2"
                                   title="Editar recebimento"
-                                  onClick={() => setEditingRecebimento(rec)}
+                                  onClick={() => {
+                                    setEditingRecebimento(rec)
+                                    setIsEditRecebimentoOpen(true)
+                                  }}
                                 >
                                   <Pencil className="w-3.5 h-3.5" />
                                 </Button>
@@ -930,7 +1016,10 @@ export default function Financial() {
                                   size="sm"
                                   className="text-red-600 h-7 px-2"
                                   title="Desfazer / Excluir"
-                                  onClick={() => setDeletingRecebimento(rec)}
+                                  onClick={() => {
+                                    setDeletingRecebimento(rec)
+                                    setIsDeleteRecebimentoOpen(true)
+                                  }}
                                 >
                                   <Trash2 className="w-3.5 h-3.5" />
                                 </Button>
@@ -955,8 +1044,10 @@ export default function Financial() {
 
       {/* Modal de Edição de Recebimento no Financeiro */}
       <EditRecebimentoModal
-        open={!!editingRecebimento}
-        onOpenChange={(open) => !open && setEditingRecebimento(null)}
+        open={isEditRecebimentoOpen}
+        onOpenChange={(open) => {
+          setIsEditRecebimentoOpen(open)
+        }}
         recebimento={editingRecebimento}
         comissaoPrevista={
           editingRecebimento
@@ -975,14 +1066,18 @@ export default function Financial() {
             : 0
         }
         onSuccess={() => {
-          loadData()
+          setTimeout(() => {
+            loadData()
+          }, 50)
         }}
       />
 
       {/* Diálogo de Confirmação para Desfazer Recebimento */}
       <Dialog
-        open={!!deletingRecebimento}
-        onOpenChange={(open) => !open && setDeletingRecebimento(null)}
+        open={isDeleteRecebimentoOpen}
+        onOpenChange={(open) => {
+          setIsDeleteRecebimentoOpen(open)
+        }}
       >
         <DialogContent className="sm:max-w-md">
           <DialogHeader>
@@ -1028,7 +1123,7 @@ export default function Financial() {
             <Button
               type="button"
               variant="outline"
-              onClick={() => setDeletingRecebimento(null)}
+              onClick={() => setIsDeleteRecebimentoOpen(false)}
               disabled={deleteLoading}
             >
               Cancelar
@@ -1040,6 +1135,271 @@ export default function Financial() {
               disabled={deleteLoading}
             >
               {deleteLoading ? 'Excluindo...' : 'Confirmar e Desfazer'}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Modal de Detalhamento do Saldo a Receber por Seguradora */}
+      <Dialog
+        open={isSeguradorasModalOpen}
+        onOpenChange={(open) => {
+          setIsSeguradorasModalOpen(open)
+          if (!open) setSelectedSeguradoraDetail(null)
+        }}
+      >
+        <DialogContent className="sm:max-w-3xl max-h-[85vh] overflow-y-auto">
+          <DialogHeader>
+            <div className="flex items-center gap-2">
+              {selectedSeguradoraDetail && (
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  className="h-7 w-7 p-0 mr-1"
+                  onClick={() => setSelectedSeguradoraDetail(null)}
+                  title="Voltar para todas as seguradoras"
+                >
+                  <ArrowLeft className="w-4 h-4" />
+                </Button>
+              )}
+              <div>
+                <DialogTitle className="flex items-center gap-2 text-slate-900">
+                  <Building2 className="w-5 h-5 text-amber-600" />
+                  <span>
+                    {selectedSeguradoraDetail
+                      ? `Apólices Pendentes — ${selectedSeguradoraDetail.nome}`
+                      : 'Composição do Saldo a Receber por Seguradora'}
+                  </span>
+                </DialogTitle>
+                <p className="text-xs text-slate-500 mt-0.5">
+                  Período: {period.label} • Saldo Geral a Receber: R${' '}
+                  {fmtMoney(metrics.pendingCommissions)}
+                </p>
+              </div>
+            </div>
+          </DialogHeader>
+
+          {!selectedSeguradoraDetail ? (
+            // VISÃO 1: LISTAGEM DAS SEGURADORAS
+            <div className="space-y-4 pt-2">
+              <div className="p-3 bg-amber-50/70 border border-amber-200 rounded-lg flex items-center justify-between text-xs">
+                <div>
+                  <span className="text-amber-800 font-semibold block">Total Geral Acumulado</span>
+                  <span className="text-amber-700">
+                    Soma exata das {metrics.seguradorasBreakdown.length} seguradora
+                    {metrics.seguradorasBreakdown.length !== 1 ? 's' : ''} com pendência
+                  </span>
+                </div>
+                <div className="text-right">
+                  <span className="text-lg font-bold text-amber-900">
+                    R$ {fmtMoney(metrics.totalSeguradorasSaldo)}
+                  </span>
+                  {Math.abs(metrics.totalSeguradorasSaldo - metrics.pendingCommissions) > 0.009 ? (
+                    <span className="block text-[11px] text-red-600 font-semibold">
+                      Divergência detectada
+                    </span>
+                  ) : (
+                    <span className="block text-[11px] text-emerald-700 font-medium">
+                      ✓ Bate 100% com o saldo geral
+                    </span>
+                  )}
+                </div>
+              </div>
+
+              {metrics.seguradorasBreakdown.length === 0 ? (
+                <div className="text-center py-8 text-slate-500 text-sm">
+                  Nenhuma apólice com saldo pendente de comissão no período selecionado.
+                </div>
+              ) : (
+                <div className="overflow-x-auto border rounded-lg bg-white">
+                  <table className="w-full text-left text-xs text-slate-700">
+                    <thead className="bg-slate-50 text-slate-600 font-semibold border-b">
+                      <tr>
+                        <th className="p-3">Seguradora</th>
+                        <th className="p-3 text-center">Apólices Pendentes</th>
+                        <th className="p-3 text-right">Saldo Bruto a Receber</th>
+                        <th className="p-3 text-right">Ação</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-slate-100">
+                      {metrics.seguradorasBreakdown.map((seg) => (
+                        <tr
+                          key={seg.id}
+                          className="hover:bg-amber-50/40 cursor-pointer transition-colors"
+                          onClick={() =>
+                            setSelectedSeguradoraDetail({ id: seg.id, nome: seg.nome })
+                          }
+                        >
+                          <td className="p-3 font-semibold text-slate-900 flex items-center gap-2">
+                            <Building2 className="w-4 h-4 text-slate-400" />
+                            {seg.nome}
+                          </td>
+                          <td className="p-3 text-center">
+                            <Badge variant="secondary" className="font-semibold text-xs">
+                              {seg.policies.length} apólice{seg.policies.length !== 1 ? 's' : ''}
+                            </Badge>
+                          </td>
+                          <td className="p-3 text-right font-bold text-amber-700 text-sm">
+                            R$ {fmtMoney(seg.saldoTotal)}
+                          </td>
+                          <td className="p-3 text-right">
+                            <Button
+                              variant="ghost"
+                              size="sm"
+                              className="h-7 text-xs text-blue-600 hover:text-blue-800"
+                              onClick={(e) => {
+                                e.stopPropagation()
+                                setSelectedSeguradoraDetail({ id: seg.id, nome: seg.nome })
+                              }}
+                            >
+                              Ver apólices <ChevronRight className="w-3.5 h-3.5 ml-1" />
+                            </Button>
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                    <tfoot className="bg-slate-50 font-bold border-t">
+                      <tr>
+                        <td className="p-3 text-slate-800">Total Consolidado</td>
+                        <td className="p-3 text-center text-slate-800">
+                          {metrics.pendingPoliciesList?.length || 0} apólices
+                        </td>
+                        <td className="p-3 text-right text-amber-800 text-sm">
+                          R$ {fmtMoney(metrics.totalSeguradorasSaldo)}
+                        </td>
+                        <td className="p-3"></td>
+                      </tr>
+                    </tfoot>
+                  </table>
+                </div>
+              )}
+            </div>
+          ) : (
+            // VISÃO 2: APÓLICES QUE COMPÕEM O SALDO DA SEGURADORA SELECIONADA
+            <div className="space-y-4 pt-2">
+              {(() => {
+                const segData = metrics.seguradorasBreakdown.find(
+                  (s) => s.id === selectedSeguradoraDetail.id,
+                )
+                if (!segData) {
+                  return (
+                    <div className="p-4 text-center text-slate-500">
+                      Nenhuma apólice encontrada para esta seguradora.
+                    </div>
+                  )
+                }
+
+                return (
+                  <>
+                    <div className="flex items-center justify-between p-3 bg-slate-50 rounded-lg border text-xs">
+                      <div>
+                        <span className="text-slate-500 block">Seguradora Selecionada</span>
+                        <strong className="text-slate-900 text-sm">{segData.nome}</strong>
+                      </div>
+                      <div className="text-center">
+                        <span className="text-slate-500 block">Quantidade</span>
+                        <strong className="text-slate-800 text-sm">
+                          {segData.policies.length} apólice
+                          {segData.policies.length !== 1 ? 's' : ''}
+                        </strong>
+                      </div>
+                      <div className="text-right">
+                        <span className="text-slate-500 block">Saldo Bruto a Receber</span>
+                        <strong className="text-amber-700 text-sm">
+                          R$ {fmtMoney(segData.saldoTotal)}
+                        </strong>
+                      </div>
+                    </div>
+
+                    <div className="overflow-x-auto border rounded-lg bg-white">
+                      <table className="w-full text-left text-xs text-slate-700">
+                        <thead className="bg-slate-50 text-slate-600 font-semibold border-b">
+                          <tr>
+                            <th className="p-2.5">Apólice</th>
+                            <th className="p-2.5">Cliente</th>
+                            <th className="p-2.5 text-right">Comissão Prevista</th>
+                            <th className="p-2.5 text-right">Já Recebido</th>
+                            <th className="p-2.5 text-right">Saldo a Receber</th>
+                            <th className="p-2.5 text-center">Status</th>
+                          </tr>
+                        </thead>
+                        <tbody className="divide-y divide-slate-100">
+                          {segData.policies.map(({ policy, previsto, rec, saldo }) => (
+                            <tr key={policy.id} className="hover:bg-slate-50">
+                              <td className="p-2.5 font-bold text-slate-900">
+                                {policy.policy_number}
+                              </td>
+                              <td className="p-2.5 font-medium">
+                                {policy.expand?.client?.name || 'Cliente'}
+                              </td>
+                              <td className="p-2.5 text-right text-slate-800">
+                                R$ {fmtMoney(previsto)}
+                              </td>
+                              <td className="p-2.5 text-right text-emerald-700 font-medium">
+                                R$ {fmtMoney(rec)}
+                              </td>
+                              <td className="p-2.5 text-right font-bold text-amber-700">
+                                R$ {fmtMoney(saldo)}
+                              </td>
+                              <td className="p-2.5 text-center">
+                                <Badge
+                                  className={
+                                    policy.status === 'Ativa'
+                                      ? 'bg-emerald-500'
+                                      : policy.status === 'Renovação Pendente'
+                                        ? 'bg-amber-500'
+                                        : 'bg-slate-500'
+                                  }
+                                >
+                                  {policy.status}
+                                </Badge>
+                              </td>
+                            </tr>
+                          ))}
+                        </tbody>
+                        <tfoot className="bg-slate-50 font-bold border-t">
+                          <tr>
+                            <td className="p-2.5 text-slate-800" colSpan={2}>
+                              Subtotal da Seguradora
+                            </td>
+                            <td className="p-2.5 text-right text-slate-800">
+                              R${' '}
+                              {fmtMoney(
+                                Math.round(
+                                  segData.policies.reduce((sum, p) => sum + p.previsto, 0) * 100,
+                                ) / 100,
+                              )}
+                            </td>
+                            <td className="p-2.5 text-right text-emerald-700">
+                              R${' '}
+                              {fmtMoney(
+                                Math.round(
+                                  segData.policies.reduce((sum, p) => sum + p.rec, 0) * 100,
+                                ) / 100,
+                              )}
+                            </td>
+                            <td className="p-2.5 text-right text-amber-700">
+                              R$ {fmtMoney(segData.saldoTotal)}
+                            </td>
+                            <td></td>
+                          </tr>
+                        </tfoot>
+                      </table>
+                    </div>
+                  </>
+                )
+              })()}
+            </div>
+          )}
+
+          <DialogFooter className="pt-2">
+            {selectedSeguradoraDetail ? (
+              <Button variant="outline" onClick={() => setSelectedSeguradoraDetail(null)}>
+                Voltar às Seguradoras
+              </Button>
+            ) : null}
+            <Button variant="outline" onClick={() => setIsSeguradorasModalOpen(false)}>
+              Fechar
             </Button>
           </DialogFooter>
         </DialogContent>

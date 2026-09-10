@@ -47,6 +47,9 @@ const DEFAULT_FORM = {
   valor_liquido: 0,
   forma_pagamento: '',
   parcelas: '',
+  forma_recebimento: '',
+  qtde_parcelas_esperadas: '',
+  obs_forma_recebimento: '',
   commission_percent: 0,
   commission: 0,
   iss: 0,
@@ -149,6 +152,10 @@ export function PolicyFormDialog({
         valor_liquido: vLiquido,
         forma_pagamento: initialData.forma_pagamento || '',
         parcelas: initialData.parcelas != null ? initialData.parcelas : '',
+        forma_recebimento: initialData.forma_recebimento || '',
+        qtde_parcelas_esperadas:
+          initialData.qtde_parcelas_esperadas != null ? initialData.qtde_parcelas_esperadas : '',
+        obs_forma_recebimento: initialData.obs_forma_recebimento || '',
         commission_percent: commPercent,
         commission: commVal,
         iss: issVal,
@@ -429,7 +436,7 @@ export function PolicyFormDialog({
               />
             </div>
             <div>
-              <Label className="text-xs font-semibold">Comissão Bruta (R$)</Label>
+              <Label className="text-xs font-semibold">Comissão Bruta Prevista (R$)</Label>
               <Input
                 type="number"
                 step="0.01"
@@ -441,7 +448,7 @@ export function PolicyFormDialog({
 
           <div className="grid grid-cols-2 gap-2">
             <div>
-              <Label className="text-xs font-semibold">ISS (R$)</Label>
+              <Label className="text-xs font-semibold">ISS Estimado (R$)</Label>
               <Input
                 type="number"
                 step="0.01"
@@ -453,13 +460,92 @@ export function PolicyFormDialog({
               )}
             </div>
             <div>
-              <Label className="text-xs font-semibold">Com. Líquida</Label>
+              <Label className="text-xs font-semibold">Com. Líquida Estimada</Label>
               <Input
                 disabled
                 value={`R$ ${formatCurrency(comissaoLiquida)}`}
                 className="bg-slate-100 font-bold"
               />
             </div>
+          </div>
+
+          {/* Forma de Recebimento da Comissão */}
+          <div className="p-3 bg-blue-50/50 border border-blue-100 rounded-lg space-y-2.5">
+            <div>
+              <Label className="text-xs font-semibold text-slate-800">
+                Forma de recebimento da comissão
+              </Label>
+              <p className="text-[11px] text-slate-500 mb-1.5">
+                Indica apenas como a comissão é esperada (baixas são feitas exclusivamente no
+                Financeiro).
+              </p>
+              <Select
+                value={form.forma_recebimento || 'none'}
+                onValueChange={(v) => {
+                  const val = v === 'none' ? '' : v
+                  set('forma_recebimento', val)
+                  if (val !== 'Parcelada') {
+                    set('qtde_parcelas_esperadas', '')
+                  }
+                  if (val !== 'Outra / Manual') {
+                    set('obs_forma_recebimento', '')
+                  }
+                }}
+              >
+                <SelectTrigger className="bg-white">
+                  <SelectValue placeholder="Selecione a forma esperada (opcional)" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="none">Não informado / Padrão</SelectItem>
+                  <SelectItem value="Total definido">Total definido</SelectItem>
+                  <SelectItem value="Parcelada">Parcelada</SelectItem>
+                  <SelectItem value="Recorrente">Recorrente</SelectItem>
+                  <SelectItem value="Por esgotamento">Por esgotamento</SelectItem>
+                  <SelectItem value="Outra / Manual">Outra / Manual</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+
+            {form.forma_recebimento === 'Parcelada' && (
+              <div>
+                <Label className="text-xs font-semibold">Quantidade esperada de parcelas</Label>
+                <Input
+                  type="number"
+                  min="1"
+                  step="1"
+                  placeholder="Ex: 4, 6, 10"
+                  className="bg-white mt-1"
+                  value={form.qtde_parcelas_esperadas ?? ''}
+                  onChange={(e) => {
+                    const val = e.target.value === '' ? '' : parseInt(e.target.value, 10)
+                    set('qtde_parcelas_esperadas', isNaN(val as number) ? '' : val)
+                  }}
+                />
+                <p className="text-[11px] text-slate-500 mt-0.5">
+                  Previsão da quantidade de vezes em que a comissão será creditada pela seguradora.
+                </p>
+              </div>
+            )}
+
+            {form.forma_recebimento === 'Recorrente' && (
+              <p className="text-[11px] text-blue-700 bg-blue-100/60 p-2 rounded">
+                Recebimento contínuo/mensal conforme vigência. Não exige quantidade final de
+                parcelas.
+              </p>
+            )}
+
+            {form.forma_recebimento === 'Outra / Manual' && (
+              <div>
+                <Label className="text-xs font-semibold">Observação da forma de recebimento</Label>
+                <Input
+                  type="text"
+                  placeholder="Descreva como será o recebimento da comissão..."
+                  className="bg-white mt-1"
+                  value={form.obs_forma_recebimento || ''}
+                  onChange={(e) => set('obs_forma_recebimento', e.target.value)}
+                />
+              </div>
+            )}
           </div>
 
           <div>

@@ -13,6 +13,7 @@ interface Props {
   expectedProfit: number
   realProfit: number
   periodLabel: string
+  onSaldoAReceberClick?: () => void
 }
 
 export function FinancialSummaryCards({
@@ -26,6 +27,7 @@ export function FinancialSummaryCards({
   expectedProfit,
   realProfit,
   periodLabel,
+  onSaldoAReceberClick,
 }: Props) {
   const groups = [
     {
@@ -48,6 +50,8 @@ export function FinancialSummaryCards({
           value: pendingCommissions,
           icon: Clock,
           color: 'text-amber-700',
+          clickable: true,
+          badge: 'Ver por seguradora',
         },
       ],
     },
@@ -89,15 +93,35 @@ export function FinancialSummaryCards({
               {group.title}
             </h3>
             <div className="space-y-2">
-              {group.cards.map((c) => {
+              {group.cards.map((c: any) => {
                 const Icon = c.icon
+                const isClickable = c.clickable && onSaldoAReceberClick
                 return (
-                  <Card key={c.label} className="shadow-sm">
+                  <Card
+                    key={c.label}
+                    onClick={isClickable ? onSaldoAReceberClick : undefined}
+                    className={`shadow-sm transition-all ${
+                      isClickable
+                        ? 'cursor-pointer hover:border-amber-400 hover:shadow-md border-amber-200/80 bg-amber-50/20 group'
+                        : ''
+                    }`}
+                  >
                     <CardHeader className="flex flex-row items-center justify-between pb-1.5 pt-3 px-4">
-                      <CardTitle className="text-xs font-medium text-slate-600">
-                        {c.label}
-                      </CardTitle>
-                      <Icon className={`w-4 h-4 ${c.color}`} />
+                      <div className="flex items-center gap-1.5">
+                        <CardTitle className="text-xs font-medium text-slate-600">
+                          {c.label}
+                        </CardTitle>
+                        {c.badge && (
+                          <span className="text-[10px] font-medium bg-amber-100 text-amber-800 px-1.5 py-0.5 rounded group-hover:bg-amber-200 transition-colors">
+                            {c.badge}
+                          </span>
+                        )}
+                      </div>
+                      <Icon
+                        className={`w-4 h-4 ${c.color} ${
+                          isClickable ? 'group-hover:scale-110 transition-transform' : ''
+                        }`}
+                      />
                     </CardHeader>
                     <CardContent className="px-4 pb-3">
                       <div className={`text-lg font-bold ${c.color}`}>

@@ -57,6 +57,20 @@ export function preparePolicyPayload(data: Partial<Policy> & Record<string, any>
     payload.parcelas = pNum && pNum > 0 ? pNum : null
   }
 
+  if ('forma_recebimento' in data) {
+    payload.forma_recebimento = data.forma_recebimento ? String(data.forma_recebimento).trim() : ''
+  }
+  if ('qtde_parcelas_esperadas' in data) {
+    const rawQtde = (data as Record<string, any>).qtde_parcelas_esperadas
+    const qNum = rawQtde != null && rawQtde !== '' ? Math.round(Number(rawQtde)) : null
+    payload.qtde_parcelas_esperadas = qNum && qNum > 0 ? qNum : null
+  }
+  if ('obs_forma_recebimento' in data) {
+    payload.obs_forma_recebimento = data.obs_forma_recebimento
+      ? String(data.obs_forma_recebimento).trim()
+      : ''
+  }
+
   if ('placa' in data) payload.placa = data.placa ? String(data.placa).trim() : ''
   if ('chassi' in data) payload.chassi = data.chassi ? String(data.chassi).trim() : ''
   if ('modelo_veiculo' in data)

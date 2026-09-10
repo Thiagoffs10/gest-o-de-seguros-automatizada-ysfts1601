@@ -83,7 +83,11 @@ export default function PolicyDetail() {
   const [relatedCount, setRelatedCount] = useState({ payments: 0, reminders: 0 })
 
   // Estados para edição e exclusão de recebimento com confirmação
+  // Separação de aberto/fechado de item selecionado para evitar desmontagem abrupta e flicker
+  const [isEditRecebimentoOpen, setIsEditRecebimentoOpen] = useState(false)
   const [editingRecebimento, setEditingRecebimento] = useState<ComissaoRecebimento | null>(null)
+
+  const [isDeleteRecebimentoOpen, setIsDeleteRecebimentoOpen] = useState(false)
   const [deletingRecebimento, setDeletingRecebimento] = useState<ComissaoRecebimento | null>(null)
   const [deleteRecebimentoLoading, setDeleteRecebimentoLoading] = useState(false)
   const isOperationInProgressRef = useRef(false)
@@ -235,14 +239,17 @@ export default function PolicyDetail() {
     if (!deletingRecebimento || !id || deleteRecebimentoLoading) return
     setDeleteRecebimentoLoading(true)
     isOperationInProgressRef.current = true
+    const recId = deletingRecebimento.id
     try {
-      const recId = deletingRecebimento.id
-      setDeletingRecebimento(null)
+      // 1. Fecha o diálogo primeiro para completar a transição de UI sem re-render prematuro
+      setIsDeleteRecebimentoOpen(false)
+      // 2. Executa a exclusão
       await deleteComissaoRecebimento(recId, id)
       toast({
         title: 'Recebimento excluído com sucesso!',
         description: 'Os saldos e o status da apólice foram recalculados.',
       })
+      // 3. Recarrega os dados APÓS o fechamento
       await loadData()
     } catch (err: any) {
       toast({
@@ -278,7 +285,7 @@ export default function PolicyDetail() {
             100,
         ) / 100
 
-  // Total BRUTO recebido
+  // Total BRUTO recebido (soma dos recebimentos brutos)
   const jaRecebido =
     recebimentos.length > 0
       ? Math.round(recebimentos.reduce((sum, r) => sum + (Number(r.valor_bruto) || 0), 0) * 100) /
@@ -287,14 +294,27 @@ export default function PolicyDetail() {
         ? comissaoPrevista
         : 0
 
-  // Total LÍQUIDO recebido (Receita líquida realizada)
+  // Total de Impostos/Descontos realizados
+  const impostosRealizados =
+    recebimentos.length > 0
+      ? Math.round(
+          recebimentos.reduce((sum, r) => sum + (Number(r.descontos_impostos) || 0), 0) * 100,
+        ) / 100
+      : policy.comissao_recebida
+        ? policy.iss || 0
+        : 0
+
+  // Total LÍQUIDO recebido (soma do líquido efetivamente recebido)
+  // Regra: NÃO usar líquido para reduzir o saldo bruto da comissão
   const receitaLiquidaRealizada =
     recebimentos.length > 0
       ? Math.round(
           recebimentos.reduce(
             (sum, r) =>
               sum +
-              (r.valor_liquido != null ? Number(r.valor_liquido) : Number(r.valor_bruto) || 0),
+              (r.valor_liquido != null
+                ? Number(r.valor_liquido)
+                : Math.max(0, (Number(r.valor_bruto) || 0) - (Number(r.descontos_impostos) || 0))),
             0,
           ) * 100,
         ) / 100
@@ -302,6 +322,7 @@ export default function PolicyDetail() {
         ? Math.max(0, comissaoPrevista - (policy.iss || 0))
         : 0
 
+  // Saldo = previsto bruto − realizado bruto (NÃO usar líquido para reduzir saldo)
   const saldoAReceber = Math.max(0, Math.round((comissaoPrevista - jaRecebido) * 100) / 100)
   const temDivergenciaExcesso = jaRecebido > comissaoPrevista && comissaoPrevista > 0
 
@@ -414,47 +435,54 @@ export default function PolicyDetail() {
             </div>
           )}
 
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
-            <div className="p-4 bg-white rounded-lg border shadow-xs text-center sm:text-left">
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-3">
+            <div className="p-3.5 bg-white rounded-lg border shadow-xs text-center sm:text-left">
               <span className="text-xs font-semibold uppercase tracking-wider text-slate-500">
-                Comissão prevista
+                Comissão prevista bruta
               </span>
-              <p className="text-2xl font-bold text-slate-900 mt-1">
+              <p className="text-xl font-bold text-slate-900 mt-1">
                 R$ {fmtMoney(comissaoPrevista)}
               </p>
               <span className="text-[11px] text-slate-400">
-                Bruto: {policy.commission_percent || 0}% do prêmio líquido
+                Bruto: {policy.commission_percent || 0}% do prêmio líq.
               </span>
             </div>
-            <div className="p-4 bg-emerald-50/70 rounded-lg border border-emerald-200 text-center sm:text-left">
+            <div className="p-3.5 bg-emerald-50/70 rounded-lg border border-emerald-200 text-center sm:text-left">
               <span className="text-xs font-semibold uppercase tracking-wider text-emerald-800">
-                Já recebido
+                Realizado bruto
               </span>
-              <p className="text-2xl font-bold text-emerald-700 mt-1">R$ {fmtMoney(jaRecebido)}</p>
+              <p className="text-xl font-bold text-emerald-700 mt-1">R$ {fmtMoney(jaRecebido)}</p>
               <span className="text-[11px] text-emerald-600">
-                Total bruto ({recebimentos.length} recebimento{recebimentos.length !== 1 ? 's' : ''}
-                )
+                {recebimentos.length} recebimento{recebimentos.length !== 1 ? 's' : ''} bruto
+                {recebimentos.length !== 1 ? 's' : ''}
               </span>
             </div>
-            <div className="p-4 bg-amber-50/70 rounded-lg border border-amber-200 text-center sm:text-left">
+            <div className="p-3.5 bg-amber-50/70 rounded-lg border border-amber-200 text-center sm:text-left">
               <span className="text-xs font-semibold uppercase tracking-wider text-amber-800">
-                Saldo a receber
+                Saldo bruto a receber
               </span>
-              <p className="text-2xl font-bold text-amber-700 mt-1">R$ {fmtMoney(saldoAReceber)}</p>
+              <p className="text-xl font-bold text-amber-700 mt-1">R$ {fmtMoney(saldoAReceber)}</p>
               <span className="text-[11px] text-amber-600">
-                {saldoAReceber === 0 ? 'Sem pendências' : 'Previsto − total bruto recebido'}
+                {saldoAReceber === 0 ? 'Sem pendências' : 'Previsto bruto − realizado bruto'}
               </span>
             </div>
-            <div className="p-4 bg-blue-50/70 rounded-lg border border-blue-200 text-center sm:text-left">
-              <span className="text-xs font-semibold uppercase tracking-wider text-blue-800">
-                Receita líquida realizada
+            <div className="p-3.5 bg-slate-50 rounded-lg border border-slate-200 text-center sm:text-left">
+              <span className="text-xs font-semibold uppercase tracking-wider text-slate-600">
+                Impostos / descontos
               </span>
-              <p className="text-2xl font-bold text-blue-700 mt-1">
+              <p className="text-xl font-bold text-slate-700 mt-1">
+                R$ {fmtMoney(impostosRealizados)}
+              </p>
+              <span className="text-[11px] text-slate-500">Deduções realizadas</span>
+            </div>
+            <div className="p-3.5 bg-blue-50/70 rounded-lg border border-blue-200 text-center sm:text-left">
+              <span className="text-xs font-semibold uppercase tracking-wider text-blue-800">
+                Líquido realizado
+              </span>
+              <p className="text-xl font-bold text-blue-700 mt-1">
                 R$ {fmtMoney(receitaLiquidaRealizada)}
               </p>
-              <span className="text-[11px] text-blue-600">
-                Efetivamente creditado (com descontos)
-              </span>
+              <span className="text-[11px] text-blue-600">Soma líquida creditada</span>
             </div>
           </div>
 
@@ -508,7 +536,10 @@ export default function PolicyDetail() {
                                 variant="ghost"
                                 size="sm"
                                 className="text-blue-600 hover:text-blue-800 hover:bg-blue-50 h-7 px-2"
-                                onClick={() => setEditingRecebimento(rec)}
+                                onClick={() => {
+                                  setEditingRecebimento(rec)
+                                  setIsEditRecebimentoOpen(true)
+                                }}
                                 title="Editar recebimento"
                               >
                                 <Pencil className="w-3.5 h-3.5" />
@@ -519,7 +550,10 @@ export default function PolicyDetail() {
                                 variant="ghost"
                                 size="sm"
                                 className="text-red-500 hover:text-red-700 hover:bg-red-50 h-7 px-2"
-                                onClick={() => setDeletingRecebimento(rec)}
+                                onClick={() => {
+                                  setDeletingRecebimento(rec)
+                                  setIsDeleteRecebimentoOpen(true)
+                                }}
                                 title="Desfazer / Excluir recebimento"
                               >
                                 <Trash2 className="w-3.5 h-3.5" />
@@ -648,6 +682,18 @@ export default function PolicyDetail() {
             </p>
           </div>
           <div>
+            <p className="text-xs text-slate-500">Forma de Recebimento da Comissão</p>
+            <p className="font-semibold text-slate-900">
+              {policy.forma_recebimento || 'Não informada'}
+              {policy.forma_recebimento === 'Parcelada' && policy.qtde_parcelas_esperadas
+                ? ` (${policy.qtde_parcelas_esperadas} parcelas esperadas)`
+                : ''}
+              {policy.forma_recebimento === 'Outra / Manual' && policy.obs_forma_recebimento
+                ? ` — ${policy.obs_forma_recebimento}`
+                : ''}
+            </p>
+          </div>
+          <div>
             <p className="text-xs text-slate-500">Data Início</p>
             <p className="font-semibold">{formatDateDisplay(policy.start_date)}</p>
           </div>
@@ -749,8 +795,10 @@ export default function PolicyDetail() {
 
       {/* Modal de Edição de Recebimento */}
       <EditRecebimentoModal
-        open={!!editingRecebimento}
-        onOpenChange={(open) => !open && setEditingRecebimento(null)}
+        open={isEditRecebimentoOpen}
+        onOpenChange={(open) => {
+          setIsEditRecebimentoOpen(open)
+        }}
         recebimento={editingRecebimento}
         comissaoPrevista={comissaoPrevista}
         totalOutrosRecebimentosBrutos={
@@ -763,14 +811,19 @@ export default function PolicyDetail() {
             : 0
         }
         onSuccess={() => {
-          loadData()
+          // Recarregar os dados de forma assíncrona após fechamento
+          setTimeout(() => {
+            loadData()
+          }, 50)
         }}
       />
 
       {/* Diálogo de Confirmação para Desfazer / Excluir Recebimento */}
       <Dialog
-        open={!!deletingRecebimento}
-        onOpenChange={(open) => !open && setDeletingRecebimento(null)}
+        open={isDeleteRecebimentoOpen}
+        onOpenChange={(open) => {
+          setIsDeleteRecebimentoOpen(open)
+        }}
       >
         <DialogContent className="sm:max-w-md">
           <DialogHeader>
@@ -833,7 +886,7 @@ export default function PolicyDetail() {
             <Button
               type="button"
               variant="outline"
-              onClick={() => setDeletingRecebimento(null)}
+              onClick={() => setIsDeleteRecebimentoOpen(false)}
               disabled={deleteRecebimentoLoading}
             >
               Cancelar

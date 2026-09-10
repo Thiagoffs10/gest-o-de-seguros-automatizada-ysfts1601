@@ -77,6 +77,15 @@ export interface Policy {
   valor_liquido?: number
   forma_pagamento?: 'Crédito' | 'Débito em conta' | 'Boleto' | string
   parcelas?: number
+  forma_recebimento?:
+    | 'Total definido'
+    | 'Parcelada'
+    | 'Recorrente'
+    | 'Por esgotamento'
+    | 'Outra / Manual'
+    | string
+  qtde_parcelas_esperadas?: number
+  obs_forma_recebimento?: string
   placa?: string
   chassi?: string
   modelo_veiculo?: string

@@ -1,5 +1,5 @@
 {
-  "generatedAt": "2026-09-10T22:53:59.503Z",
+  "generatedAt": "2026-09-10T23:05:33.479Z",
   "collections": [
     {
       "name": "users",
@@ -437,6 +437,31 @@
         {
           "name": "parcelas",
           "type": "number",
+          "required": false,
+          "system": false
+        },
+        {
+          "name": "forma_recebimento",
+          "type": "select",
+          "required": false,
+          "system": false,
+          "selectValues": [
+            "Total definido",
+            "Parcelada",
+            "Recorrente",
+            "Por esgotamento",
+            "Outra / Manual"
+          ]
+        },
+        {
+          "name": "qtde_parcelas_esperadas",
+          "type": "number",
+          "required": false,
+          "system": false
+        },
+        {
+          "name": "obs_forma_recebimento",
+          "type": "text",
           "required": false,
           "system": false
         }

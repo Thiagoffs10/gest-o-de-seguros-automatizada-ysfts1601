@@ -143,7 +143,7 @@ export function EditRecebimentoModal({
         description: 'Os saldos e indicadores financeiros foram recalculados automaticamente.',
       })
 
-      // Fecha o modal antes de chamar o callback de sucesso para prevenir conflito de re-render
+      // Fecha o modal antes e aciona o onSuccess
       onOpenChange(false)
       onSuccess?.()
     } catch (err) {
@@ -156,7 +156,6 @@ export function EditRecebimentoModal({
       setIsSubmitting(false)
     }
   }
-  if (!recebimento) return null
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
