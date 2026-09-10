@@ -1,8 +1,9 @@
 import { useEffect, useState, useCallback, useMemo } from 'react'
-import { Plus, UserCheck, Search, UserPlus, X, Download, User } from 'lucide-react'
+import { Plus, UserCheck, Search, UserPlus, X, Download, User, Sparkles } from 'lucide-react'
 import { getClients } from '@/services/clients'
 import { getPolicies } from '@/services/policies'
 import { Client, Policy, FilterState } from '@/types'
+import { evaluateClientCrossSell } from '@/services/cross-sell'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { ClientCard } from '@/components/ClientCard'
@@ -33,6 +34,7 @@ export default function Clients() {
   const [loading, setLoading] = useState(true)
   const [page, setPage] = useState(1)
   const [filters, setFilters] = useState<FilterState>({})
+  const [onlyWithOpportunities, setOnlyWithOpportunities] = useState(false)
 
   const loadClients = useCallback(async () => {
     try {
@@ -58,11 +60,33 @@ export default function Clients() {
   useRealtime('clients', () => loadClients())
   useRealtime('policies', () => loadClients())
 
-  const totalPages = Math.max(1, Math.ceil(clients.length / ITEMS_PER_PAGE))
+  // Mapa de oportunidades por cliente
+  const clientOppsCount = useMemo(() => {
+    const polsByClient: Record<string, Policy[]> = {}
+    for (const p of policies) {
+      if (!polsByClient[p.client]) polsByClient[p.client] = []
+      polsByClient[p.client].push(p)
+    }
+
+    const map: Record<string, number> = {}
+    for (const c of clients) {
+      const cPols = polsByClient[c.id] || []
+      const opps = evaluateClientCrossSell(c, cPols)
+      map[c.id] = opps.length
+    }
+    return map
+  }, [clients, policies])
+
+  const filteredClientsList = useMemo(() => {
+    if (!onlyWithOpportunities) return clients
+    return clients.filter((c) => (clientOppsCount[c.id] || 0) > 0)
+  }, [clients, onlyWithOpportunities, clientOppsCount])
+
+  const totalPages = Math.max(1, Math.ceil(filteredClientsList.length / ITEMS_PER_PAGE))
   const paginatedClients = useMemo(() => {
     const start = (page - 1) * ITEMS_PER_PAGE
-    return clients.slice(start, start + ITEMS_PER_PAGE)
-  }, [clients, page])
+    return filteredClientsList.slice(start, start + ITEMS_PER_PAGE)
+  }, [filteredClientsList, page])
 
   const totalClients = clients.length
   const activeClients = useMemo(() => {
@@ -173,46 +197,66 @@ export default function Clients() {
         </div>
       </div>
 
-      <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 max-w-2xl">
-        <div className="relative">
-          <User className="w-4 h-4 absolute left-3 top-3 text-slate-400" />
-          <Input
-            placeholder="Pesquisar por Nome do Cliente..."
-            className="pl-9 pr-9"
-            value={nameSearch}
-            onChange={(e) => setNameSearch(e.target.value)}
-          />
-          {nameSearch && (
-            <button
-              type="button"
-              onClick={() => setNameSearch('')}
-              className="absolute right-3 top-3 text-slate-400 hover:text-slate-600"
-              aria-label="Limpar busca por nome"
-            >
-              <X className="w-4 h-4" />
-            </button>
-          )}
+      <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-3">
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 max-w-2xl flex-1">
+          <div className="relative">
+            <User className="w-4 h-4 absolute left-3 top-3 text-slate-400" />
+            <Input
+              placeholder="Pesquisar por Nome do Cliente..."
+              className="pl-9 pr-9"
+              value={nameSearch}
+              onChange={(e) => setNameSearch(e.target.value)}
+            />
+            {nameSearch && (
+              <button
+                type="button"
+                onClick={() => setNameSearch('')}
+                className="absolute right-3 top-3 text-slate-400 hover:text-slate-600"
+                aria-label="Limpar busca por nome"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            )}
+          </div>
+
+          <div className="relative">
+            <Search className="w-4 h-4 absolute left-3 top-3 text-slate-400" />
+            <Input
+              placeholder="Buscar por CPF ou CNPJ..."
+              className="pl-9 pr-9"
+              value={search}
+              onChange={(e) => setSearch(e.target.value)}
+            />
+            {search && (
+              <button
+                type="button"
+                onClick={() => setSearch('')}
+                className="absolute right-3 top-3 text-slate-400 hover:text-slate-600"
+                aria-label="Limpar busca por CPF/CNPJ"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            )}
+          </div>
         </div>
 
-        <div className="relative">
-          <Search className="w-4 h-4 absolute left-3 top-3 text-slate-400" />
-          <Input
-            placeholder="Buscar por CPF ou CNPJ..."
-            className="pl-9 pr-9"
-            value={search}
-            onChange={(e) => setSearch(e.target.value)}
-          />
-          {search && (
-            <button
-              type="button"
-              onClick={() => setSearch('')}
-              className="absolute right-3 top-3 text-slate-400 hover:text-slate-600"
-              aria-label="Limpar busca por CPF/CNPJ"
-            >
-              <X className="w-4 h-4" />
-            </button>
-          )}
-        </div>
+        <Button
+          type="button"
+          variant={onlyWithOpportunities ? 'default' : 'outline'}
+          size="sm"
+          className={
+            onlyWithOpportunities
+              ? 'bg-blue-600 hover:bg-blue-700 text-xs shrink-0'
+              : 'text-xs text-slate-700 shrink-0'
+          }
+          onClick={() => {
+            setOnlyWithOpportunities((v) => !v)
+            setPage(1)
+          }}
+        >
+          <Sparkles className="w-3.5 h-3.5 mr-1 text-amber-400" />
+          {onlyWithOpportunities ? 'Mostrando c/ Oportunidades' : 'Filtrar c/ Oportunidades'}
+        </Button>
       </div>
 
       {loading ? (
@@ -228,11 +272,13 @@ export default function Clients() {
             {paginatedClients.map((client) => {
               const clientPolicies = policies.filter((p) => p.client === client.id)
               const activeCount = clientPolicies.filter((p) => p.status === 'Ativa').length
+              const oppsCount = clientOppsCount[client.id] || 0
               return (
                 <ClientCard
                   key={client.id}
                   client={client}
                   activePoliciesCount={activeCount}
+                  hasOpportunities={oppsCount > 0}
                   onEdit={(c) => {
                     setEditingClient(c)
                     setIsModalOpen(true)

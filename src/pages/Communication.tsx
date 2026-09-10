@@ -1,4 +1,5 @@
 import { useEffect, useState, useCallback } from 'react'
+import { useLocation, useSearchParams } from 'react-router-dom'
 import { FileSpreadsheet } from 'lucide-react'
 import { getClients } from '@/services/clients'
 import { getPolicies } from '@/services/policies'
@@ -25,6 +26,18 @@ import { EmailTemplatesManager } from '@/components/comunicacao/EmailTemplatesMa
 import { useRealtime } from '@/hooks/use-realtime'
 
 export default function Communication() {
+  const location = useLocation()
+  const [searchParams] = useSearchParams()
+
+  const queryClientId = searchParams.get('clientId') || (location.state as any)?.clientId || ''
+  const queryChannel = (searchParams.get('canal') || (location.state as any)?.canal || 'Email') as
+    | 'WhatsApp'
+    | 'Email'
+  const querySubject = searchParams.get('assunto') || (location.state as any)?.assunto || ''
+  const queryBody = searchParams.get('corpo') || (location.state as any)?.corpo || ''
+  const initialTab = searchParams.get('tab') || (location.state as any)?.tab || 'individual'
+
+  const [activeTab, setActiveTab] = useState(initialTab)
   const [clients, setClients] = useState<Client[]>([])
   const [policies, setPolicies] = useState<Policy[]>([])
   const [seguradoras, setSeguradoras] = useState<Seguradora[]>([])
@@ -90,7 +103,7 @@ export default function Communication() {
         </Button>
       </div>
 
-      <Tabs defaultValue="individual" className="w-full">
+      <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
         <TabsList className="grid w-full max-w-lg grid-cols-3">
           <TabsTrigger value="individual">Comunicação Individual</TabsTrigger>
           <TabsTrigger value="campanhas">Campanhas</TabsTrigger>
@@ -102,6 +115,10 @@ export default function Communication() {
             clients={clients}
             policies={policies}
             templates={templates}
+            initialClientId={queryClientId}
+            initialChannel={queryChannel}
+            initialSubject={querySubject}
+            initialBody={queryBody}
             onSuccess={loadData}
           />
         </TabsContent>

@@ -25,20 +25,49 @@ interface Props {
   clients: Client[]
   policies: Policy[]
   templates?: EmailTemplate[]
+  initialClientId?: string
+  initialChannel?: 'WhatsApp' | 'Email'
+  initialSubject?: string
+  initialBody?: string
   onSuccess: () => void
 }
 
-export function IndividualTab({ clients, policies, templates = [], onSuccess }: Props) {
+export function IndividualTab({
+  clients,
+  policies,
+  templates = [],
+  initialClientId,
+  initialChannel,
+  initialSubject,
+  initialBody,
+  onSuccess,
+}: Props) {
   const { toast } = useToast()
   const { can } = usePermissions()
-  const [type, setType] = useState<'WhatsApp' | 'Email'>('WhatsApp')
+  const [type, setType] = useState<'WhatsApp' | 'Email'>(initialChannel || 'WhatsApp')
   const [search, setSearch] = useState('')
-  const [selectedClientId, setSelectedClientId] = useState('')
+  const [selectedClientId, setSelectedClientId] = useState(initialClientId || '')
   const [selectedTemplateId, setSelectedTemplateId] = useState<string>('custom')
-  const [subject, setSubject] = useState('')
-  const [body, setBody] = useState('')
+  const [subject, setSubject] = useState(initialSubject || '')
+  const [body, setBody] = useState(initialBody || '')
   const [attachedImage, setAttachedImage] = useState<AttachedImage | null>(null)
   const [sending, setSending] = useState(false)
+
+  // Sincronizar caso initialClientId ou initialChannel mudem via navegação
+  useState(() => {
+    if (initialClientId) {
+      setSelectedClientId(initialClientId)
+    }
+    if (initialChannel) {
+      setType(initialChannel)
+    }
+    if (initialSubject) {
+      setSubject(initialSubject)
+    }
+    if (initialBody) {
+      setBody(initialBody)
+    }
+  })
 
   const filteredClients = useMemo(() => {
     if (!search.trim()) return clients

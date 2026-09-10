@@ -1,4 +1,8 @@
 import { useState, useEffect, useRef } from 'react'
+import { Plus } from 'lucide-react'
+import { ClientFormDialog } from '@/components/ClientFormDialog'
+import { createClient } from '@/services/clients'
+import { useToast } from '@/hooks/use-toast'
 import {
   Dialog,
   DialogContent,
@@ -80,7 +84,7 @@ export function PolicyFormDialog({
   open,
   onOpenChange,
   onSubmit,
-  clients,
+  clients: initialClients,
   seguradoras,
   parceiros,
   initialData,
@@ -88,7 +92,14 @@ export function PolicyFormDialog({
   fieldErrors = {},
   submitLabel = 'Salvar Apólice',
 }: Props) {
+  const { toast } = useToast()
+  const [clientsList, setClientsList] = useState<Client[]>(initialClients)
+  const [isNewClientOpen, setIsNewClientOpen] = useState(false)
   const [form, setForm] = useState<any>({ ...DEFAULT_FORM })
+
+  useEffect(() => {
+    setClientsList(initialClients)
+  }, [initialClients])
   const [loading, setLoading] = useState(false)
   const [validationErrors, setValidationErrors] = useState<Record<string, string>>({})
   const skipAuto = useRef(true)
@@ -252,9 +263,18 @@ export function PolicyFormDialog({
         </DialogHeader>
         <form onSubmit={handleSubmit} className="space-y-3">
           <div>
-            <Label className="text-xs font-semibold">Cliente *</Label>
+            <div className="flex items-center justify-between mb-1">
+              <Label className="text-xs font-semibold">Cliente *</Label>
+              <button
+                type="button"
+                onClick={() => setIsNewClientOpen(true)}
+                className="text-[11px] text-blue-600 hover:text-blue-800 font-medium flex items-center gap-0.5"
+              >
+                <Plus className="w-3 h-3" /> Novo Cliente
+              </button>
+            </div>
             <ClientAutocomplete
-              clients={clients}
+              clients={clientsList}
               value={form.client}
               onChange={(v: string) => set('client', v)}
               placeholder="Buscar cliente por nome..."
@@ -585,6 +605,27 @@ export function PolicyFormDialog({
           </DialogFooter>
         </form>
       </DialogContent>
+
+      <ClientFormDialog
+        open={isNewClientOpen}
+        onOpenChange={setIsNewClientOpen}
+        title="Cadastrar Novo Cliente"
+        onSubmit={async (newClientData) => {
+          try {
+            const created = await createClient(newClientData)
+            setClientsList((prev) => [created, ...prev])
+            set('client', created.id)
+            toast({ title: 'Cliente criado com sucesso!' })
+            setIsNewClientOpen(false)
+          } catch (e: any) {
+            toast({
+              title: 'Erro ao cadastrar cliente',
+              description: e?.message,
+              variant: 'destructive',
+            })
+          }
+        }}
+      />
     </Dialog>
   )
 }

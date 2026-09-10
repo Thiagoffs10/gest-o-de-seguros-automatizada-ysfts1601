@@ -16,13 +16,15 @@ import { getClients } from '@/services/clients'
 import { getPolicies } from '@/services/policies'
 import { getPayments } from '@/services/payments'
 import { getCustosFixos } from '@/services/custos-fixos'
-import { Client, Policy, Payment, CustoFixo, FilterState } from '@/types'
+import { getTiposSeguro } from '@/services/tipos-seguro'
+import { Client, Policy, Payment, CustoFixo, FilterState, TipoSeguro } from '@/types'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { SecretsGuideDialog } from '@/components/SecretsGuideDialog'
 import { GlobalFilters } from '@/components/GlobalFilters'
 import { DevTrackingPanel } from '@/components/DevTrackingPanel'
 import { PendenciasPanel } from '@/components/PendenciasPanel'
+import { PortfolioOpportunitiesCard } from '@/components/PortfolioOpportunitiesCard'
 import { useRealtime } from '@/hooks/use-realtime'
 import { usePermissions } from '@/hooks/use-permissions'
 import { formatCurrency } from '@/lib/utils'
@@ -78,6 +80,7 @@ export default function Dashboard() {
   const [policies, setPolicies] = useState<Policy[]>([])
   const [payments, setPayments] = useState<Payment[]>([])
   const [custosFixos, setCustosFixos] = useState<CustoFixo[]>([])
+  const [tiposSeguro, setTiposSeguro] = useState<TipoSeguro[]>([])
   const [filters, setFilters] = useState<FilterState>({
     year: String(new Date().getFullYear()),
     month: String(new Date().getMonth() + 1),
@@ -91,16 +94,18 @@ export default function Dashboard() {
 
   const loadData = async () => {
     try {
-      const [cls, pols, pays, custos] = await Promise.all([
+      const [cls, pols, pays, custos, tps] = await Promise.all([
         getClients(),
         getPolicies(),
         getPayments(),
         getCustosFixos(),
+        getTiposSeguro().catch(() => []),
       ])
       setClients(cls)
       setPolicies(pols)
       setPayments(pays)
       setCustosFixos(custos)
+      setTiposSeguro(tps)
     } catch {
       /* intentionally ignored */
     }
@@ -291,6 +296,9 @@ export default function Dashboard() {
           </CardContent>
         </Card>
       </div>
+
+      {/* Resumo compacto de Oportunidades da Carteira com drill-down */}
+      <PortfolioOpportunitiesCard clients={clients} policies={policies} tiposSeguro={tiposSeguro} />
 
       <PendenciasPanel policies={policies} />
 

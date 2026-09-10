@@ -1,15 +1,44 @@
 import { useEffect, useState, useCallback } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
-import { User, Phone, Mail, MapPin, FileText, Plus, Edit, Hash, Building2 } from 'lucide-react'
+import {
+  User,
+  Phone,
+  Mail,
+  MapPin,
+  FileText,
+  Plus,
+  Edit,
+  Hash,
+  Building2,
+  Calendar,
+  Clock,
+  Send,
+  ShieldCheck,
+  AlertTriangle,
+  History,
+  CheckCircle2,
+  ExternalLink,
+} from 'lucide-react'
 import { getClient, updateClient } from '@/services/clients'
 import { getPolicies, createPolicy } from '@/services/policies'
 import { getSeguradoras } from '@/services/seguradoras'
 import { getPayments } from '@/services/payments'
 import { getCommunications } from '@/services/communications'
 import { getReminders } from '@/services/reminders'
+import { getTiposSeguro } from '@/services/tipos-seguro'
 import { formatDocumentLabel } from '@/lib/document-validators'
-import { Client, Policy, Seguradora, Payment, Communication as CommType, Reminder } from '@/types'
+import {
+  Client,
+  Policy,
+  Seguradora,
+  Payment,
+  Communication as CommType,
+  Reminder,
+  TipoSeguro,
+} from '@/types'
 import { formatDateDisplay, todayLocalDate, toLocalDate, formatDateTimeDisplay } from '@/lib/utils'
+import { ClientOpportunitiesCard } from '@/components/ClientOpportunitiesCard'
+import { normalizeProduct } from '@/services/cross-sell'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs'
@@ -45,6 +74,7 @@ export default function ClientDetail() {
   const [payments, setPayments] = useState<Payment[]>([])
   const [comms, setComms] = useState<CommType[]>([])
   const [reminders, setReminders] = useState<Reminder[]>([])
+  const [tiposSeguro, setTiposSeguro] = useState<TipoSeguro[]>([])
   const [isEditOpen, setIsEditOpen] = useState(false)
   const [isNewPolicyOpen, setIsNewPolicyOpen] = useState(false)
   const [newPolicy, setNewPolicy] = useState({
@@ -62,9 +92,14 @@ export default function ClientDetail() {
     try {
       const c = await getClient(id)
       setClient(c)
-      const [pols, segs] = await Promise.all([getPolicies(`client = "${id}"`), getSeguradoras()])
+      const [pols, segs, tps] = await Promise.all([
+        getPolicies(`client = "${id}"`),
+        getSeguradoras(),
+        getTiposSeguro().catch(() => []),
+      ])
       setPolicies(pols)
       setSeguradoras(segs)
+      setTiposSeguro(tps)
       const paymentFilter =
         pols.length > 0 ? pols.map((p) => `policy = "${p.id}"`).join(' || ') : 'id = ""'
       const [pays, cms, rems] = await Promise.all([
@@ -127,23 +162,57 @@ export default function ClientDetail() {
   if (!client)
     return <div className="p-8 text-center text-slate-500">Carregando dados do segurado...</div>
 
+  // Classificação de apólices e status
+  const activePolicies = policies.filter((p) => p.status === 'Ativa')
+  const historyPolicies = policies.filter((p) => p.status !== 'Ativa')
+
+  const now = new Date()
+  const todayStr = now.toISOString().split('T')[0]
+  const in30Days = new Date(now.getTime() + 30 * 86400000).toISOString().split('T')[0]
+
+  const upcomingRenewals = policies.filter((p) => {
+    if (p.status === 'Renovação Pendente') return true
+    if (p.status === 'Ativa' && p.end_date) {
+      const endClean = p.end_date.split('T')[0].split(' ')[0]
+      return endClean >= todayStr && endClean <= in30Days
+    }
+    return false
+  })
+
+  // Ramos que o cliente possui
+  const clientProducts = Array.from(
+    new Set(policies.map((p) => normalizeProduct(p.tipo_de_seguro || p.coverage_type || 'Outros'))),
+  )
+
+  // Último contato realizado
+  const lastComm = comms.length > 0 ? comms[0] : null // sorted or created
+
+  const handleOpenEmail = () => {
+    navigate(`/comunicacao?clientId=${encodeURIComponent(client.id)}&canal=Email`)
+  }
+
+  const handleOpenNewPolicyWithTipo = (tipo?: string) => {
+    if (tipo) {
+      setNewPolicy((prev) => ({ ...prev, tipo_de_seguro: tipo }))
+    }
+    setIsNewPolicyOpen(true)
+  }
+
   return (
     <div className="space-y-6">
-      <div className="flex justify-between items-center">
+      {/* Topo / Header da Ficha 360º */}
+      <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4 bg-white p-5 rounded-xl border border-slate-200 shadow-sm">
         <div>
           <Button
-            variant="outline"
+            variant="ghost"
             size="sm"
             onClick={() => navigate('/clientes')}
-            className="mb-2"
+            className="mb-2 text-slate-500 hover:text-slate-800 -ml-2 h-7 px-2"
           >
-            ← Voltar
+            ← Voltar para Carteira
           </Button>
-          <h1 className="text-2xl font-bold text-slate-900">{client.name}</h1>
-          <div className="flex items-center gap-3 mt-1">
-            <p className="text-sm text-slate-500 flex items-center gap-1">
-              <Hash className="w-3 h-3" /> Código: {client.client_code || 'N/A'}
-            </p>
+          <div className="flex flex-wrap items-center gap-2">
+            <h1 className="text-2xl font-bold text-slate-900">{client.name}</h1>
             <span className="inline-flex items-center gap-1 text-xs font-semibold px-2 py-0.5 rounded-full bg-slate-100 text-slate-700">
               {client.tipo_pessoa === 'PJ' ? (
                 <>
@@ -155,22 +224,335 @@ export default function ClientDetail() {
                 </>
               )}
             </span>
+            <Badge
+              className={
+                activePolicies.length > 0
+                  ? 'bg-emerald-100 text-emerald-800 border-emerald-300'
+                  : 'bg-slate-100 text-slate-600'
+              }
+            >
+              {activePolicies.length > 0
+                ? `${activePolicies.length} apólice(s) ativa(s)`
+                : 'Sem apólice ativa'}
+            </Badge>
+          </div>
+
+          <div className="flex flex-wrap items-center gap-4 text-xs text-slate-500 mt-2">
+            <span className="flex items-center gap-1">
+              <Hash className="w-3.5 h-3.5" /> Código:{' '}
+              <strong>{client.client_code || 'N/A'}</strong>
+            </span>
+            {client.email && (
+              <span className="flex items-center gap-1">
+                <Mail className="w-3.5 h-3.5" /> {client.email}
+              </span>
+            )}
+            {client.phone && (
+              <span className="flex items-center gap-1">
+                <Phone className="w-3.5 h-3.5" /> {client.phone}
+              </span>
+            )}
+            {lastComm && (
+              <span className="flex items-center gap-1 text-blue-600 font-medium">
+                <Clock className="w-3.5 h-3.5" /> Último contato:{' '}
+                {formatDateTimeDisplay(lastComm.created)} ({lastComm.type})
+              </span>
+            )}
           </div>
         </div>
-        <div className="flex gap-2">
-          <Button variant="outline" onClick={() => setIsEditOpen(true)}>
-            <Edit className="w-4 h-4 mr-2" /> Editar
+
+        {/* Ações Rápidas Obrigatórias: Editar cliente | Abrir apólice | Nova apólice | Enviar e-mail */}
+        <div className="flex flex-wrap items-center gap-2 w-full md:w-auto">
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={() => setIsEditOpen(true)}
+            className="flex-1 md:flex-initial"
+          >
+            <Edit className="w-4 h-4 mr-1.5" /> Editar Cliente
           </Button>
           <Button
-            className="bg-blue-600 hover:bg-blue-700"
-            onClick={() => setIsNewPolicyOpen(true)}
+            variant="outline"
+            size="sm"
+            onClick={handleOpenEmail}
+            className="text-blue-600 border-blue-200 hover:bg-blue-50 flex-1 md:flex-initial"
           >
-            <Plus className="w-4 h-4 mr-2" /> Nova Apólice
+            <Send className="w-4 h-4 mr-1.5" /> Enviar E-mail
+          </Button>
+          <Button
+            size="sm"
+            className="bg-blue-600 hover:bg-blue-700 flex-1 md:flex-initial"
+            onClick={() => handleOpenNewPolicyWithTipo()}
+          >
+            <Plus className="w-4 h-4 mr-1.5" /> Nova Apólice
           </Button>
         </div>
       </div>
 
+      {/* Seção Inteligente de Cross-sell & Oportunidades do Cliente */}
+      <ClientOpportunitiesCard
+        client={client}
+        policies={policies}
+        tiposSeguro={tiposSeguro}
+        onOpenNewPolicy={(tipo) => handleOpenNewPolicyWithTipo(tipo)}
+      />
+
+      {/* Alerta de Renovações/Vencimentos Próximos */}
+      {upcomingRenewals.length > 0 && (
+        <Card className="border-amber-300 bg-amber-50/50 shadow-sm">
+          <CardContent className="p-4 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3">
+            <div className="flex items-center gap-3">
+              <div className="p-2 bg-amber-100 rounded-lg text-amber-700">
+                <AlertTriangle className="w-5 h-5" />
+              </div>
+              <div>
+                <p className="font-bold text-amber-900 text-sm">
+                  Renovações / Vencimentos Próximos ({upcomingRenewals.length})
+                </p>
+                <p className="text-xs text-amber-700">
+                  {upcomingRenewals
+                    .map(
+                      (p) =>
+                        `${p.policy_number} (${p.tipo_de_seguro || p.coverage_type}) vence em ${formatDateDisplay(p.end_date)}`,
+                    )
+                    .join(' | ')}
+                </p>
+              </div>
+            </div>
+            <Button
+              size="sm"
+              variant="outline"
+              className="border-amber-400 text-amber-800 hover:bg-amber-100 shrink-0"
+              onClick={handleOpenEmail}
+            >
+              <Send className="w-3.5 h-3.5 mr-1" /> Notificar Renovação
+            </Button>
+          </CardContent>
+        </Card>
+      )}
+
+      {/* Tabs detalhadas da Ficha 360º */}
       <Tabs defaultValue="dados">
+        <TabsList className="grid w-full grid-cols-2 md:grid-cols-6">
+          <TabsTrigger value="dados">Dados Cadastrais</TabsTrigger>
+          <TabsTrigger value="ativas">Apólices Ativas ({activePolicies.length})</TabsTrigger>
+          <TabsTrigger value="historico">Histórico ({historyPolicies.length})</TabsTrigger>
+          <TabsTrigger value="pagamentos">Pagamentos ({payments.length})</TabsTrigger>
+          <TabsTrigger value="comunicacoes">Comunicações ({comms.length})</TabsTrigger>
+          <TabsTrigger value="lembretes">Lembretes ({reminders.length})</TabsTrigger>
+        </TabsList>
+
+        <TabsContent value="dados">
+          <Card className="shadow-sm">
+            <CardHeader className="pb-3 border-b">
+              <CardTitle className="text-base font-bold text-slate-800">
+                Informações Pessoais & Contato
+              </CardTitle>
+            </CardHeader>
+            <CardContent className="grid grid-cols-1 md:grid-cols-3 gap-5 text-sm text-slate-700 pt-5">
+              <div className="flex items-center gap-3 p-3 rounded-lg bg-slate-50 border">
+                <Mail className="w-5 h-5 text-blue-600 shrink-0" />
+                <div className="min-w-0">
+                  <p className="text-xs text-slate-500 font-medium">E-mail de Contato</p>
+                  <p className="font-semibold truncate">{client.email || 'Não informado'}</p>
+                </div>
+              </div>
+              <div className="flex items-center gap-3 p-3 rounded-lg bg-slate-50 border">
+                <Phone className="w-5 h-5 text-emerald-600 shrink-0" />
+                <div>
+                  <p className="text-xs text-slate-500 font-medium">Telefone / WhatsApp</p>
+                  <p className="font-semibold">{client.phone || 'Não informado'}</p>
+                </div>
+              </div>
+              <div className="flex items-center gap-3 p-3 rounded-lg bg-slate-50 border">
+                <User className="w-5 h-5 text-purple-600 shrink-0" />
+                <div>
+                  <p className="text-xs text-slate-500 font-medium">Documento Principal</p>
+                  <p className="font-semibold">{formatDocumentLabel(client)}</p>
+                </div>
+              </div>
+              <div className="flex items-center gap-3 p-3 rounded-lg bg-slate-50 border">
+                <MapPin className="w-5 h-5 text-rose-600 shrink-0" />
+                <div>
+                  <p className="text-xs text-slate-500 font-medium">CEP</p>
+                  <p className="font-semibold">{client.cep || 'Não informado'}</p>
+                </div>
+              </div>
+              <div className="flex items-center gap-3 p-3 rounded-lg bg-slate-50 border col-span-1 md:col-span-2">
+                <MapPin className="w-5 h-5 text-slate-500 shrink-0" />
+                <div className="min-w-0">
+                  <p className="text-xs text-slate-500 font-medium">Endereço Completo</p>
+                  <p className="font-semibold truncate">
+                    {[client.rua, client.numero, client.bairro].filter(Boolean).join(', ') ||
+                      client.address ||
+                      'Não informado'}
+                  </p>
+                </div>
+              </div>
+              <div className="flex items-center gap-3 p-3 rounded-lg bg-slate-50 border">
+                <MapPin className="w-5 h-5 text-indigo-600 shrink-0" />
+                <div>
+                  <p className="text-xs text-slate-500 font-medium">Cidade / Estado</p>
+                  <p className="font-semibold">
+                    {[client.cidade, client.estado].filter(Boolean).join('/') || 'Não informado'}
+                  </p>
+                </div>
+              </div>
+              {client.tipo_pessoa !== 'PJ' && client.birth_date && (
+                <div className="flex items-center gap-3 p-3 rounded-lg bg-slate-50 border">
+                  <Calendar className="w-5 h-5 text-amber-600 shrink-0" />
+                  <div>
+                    <p className="text-xs text-slate-500 font-medium">Data de Nascimento</p>
+                    <p className="font-semibold">{formatDateDisplay(client.birth_date)}</p>
+                  </div>
+                </div>
+              )}
+              {client.notes && (
+                <div className="col-span-1 md:col-span-3 p-3 rounded-lg bg-slate-50 border">
+                  <p className="text-xs text-slate-500 font-medium mb-1">Observações Cadastrais</p>
+                  <p className="text-xs text-slate-700 whitespace-pre-wrap">{client.notes}</p>
+                </div>
+              )}
+            </CardContent>
+          </Card>
+        </TabsContent>
+
+        <TabsContent value="ativas">
+          <Card className="shadow-sm">
+            <CardHeader className="pb-3 border-b flex flex-row items-center justify-between">
+              <div>
+                <CardTitle className="text-base font-bold text-slate-800">
+                  Apólices Ativas ({activePolicies.length})
+                </CardTitle>
+                <p className="text-xs text-slate-500">Contratos em vigor com vigência ativa.</p>
+              </div>
+              <Button
+                size="sm"
+                className="bg-blue-600 hover:bg-blue-700"
+                onClick={() => handleOpenNewPolicyWithTipo()}
+              >
+                <Plus className="w-4 h-4 mr-1.5" /> Nova Apólice
+              </Button>
+            </CardHeader>
+            <CardContent className="pt-4 space-y-3">
+              {activePolicies.length === 0 ? (
+                <div className="py-8 text-center">
+                  <p className="text-sm text-slate-500 mb-3">Nenhuma apólice ativa no momento.</p>
+                  <Button size="sm" variant="outline" onClick={() => handleOpenNewPolicyWithTipo()}>
+                    + Vincular Primeira Apólice
+                  </Button>
+                </div>
+              ) : (
+                activePolicies.map((pol) => (
+                  <div
+                    key={pol.id}
+                    className="p-4 border rounded-lg bg-slate-50 hover:bg-blue-50/40 transition-colors flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3"
+                  >
+                    <div>
+                      <div className="flex items-center gap-2">
+                        <span className="font-bold text-slate-900 text-sm">
+                          {pol.policy_number}
+                        </span>
+                        <Badge className="bg-emerald-100 text-emerald-800 border-emerald-300">
+                          {pol.status}
+                        </Badge>
+                        <Badge variant="outline">{pol.tipo_de_seguro || pol.coverage_type}</Badge>
+                      </div>
+                      <p className="text-xs text-slate-600 mt-1">
+                        Seguradora:{' '}
+                        <strong>
+                          {pol.expand?.seguradora?.nome || pol.insurance_company || 'Não informada'}
+                        </strong>{' '}
+                        | Vigência: {formatDateDisplay(pol.start_date)} a{' '}
+                        {formatDateDisplay(pol.end_date)}
+                      </p>
+                    </div>
+                    <div className="flex items-center gap-4 w-full sm:w-auto justify-between sm:justify-end">
+                      <div className="text-right">
+                        <p className="text-xs text-slate-500">Prêmio Líquido</p>
+                        <p className="font-bold text-slate-900 text-sm">
+                          R$ {(pol.valor_liquido || pol.premium_amount)?.toLocaleString('pt-BR')}
+                        </p>
+                      </div>
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        className="text-blue-600"
+                        onClick={() => navigate(`/apolices/${pol.id}`)}
+                      >
+                        Abrir Apólice →
+                      </Button>
+                    </div>
+                  </div>
+                ))
+              )}
+            </CardContent>
+          </Card>
+        </TabsContent>
+
+        <TabsContent value="historico">
+          <Card className="shadow-sm">
+            <CardHeader className="pb-3 border-b">
+              <CardTitle className="text-base font-bold text-slate-800">
+                Histórico Geral de Apólices ({policies.length})
+              </CardTitle>
+              <p className="text-xs text-slate-500">
+                Inclui renovadas, vencidas, expiradas e canceladas.
+              </p>
+            </CardHeader>
+            <CardContent className="pt-4 space-y-3">
+              {policies.length === 0 ? (
+                <p className="text-sm text-slate-500 text-center py-6">
+                  Nenhuma apólice encontrada no histórico.
+                </p>
+              ) : (
+                policies.map((pol) => (
+                  <div
+                    key={pol.id}
+                    className="p-3 border rounded-lg bg-white flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 text-sm"
+                  >
+                    <div>
+                      <div className="flex items-center gap-2">
+                        <span className="font-semibold text-slate-900">{pol.policy_number}</span>
+                        <Badge
+                          className={
+                            pol.status === 'Ativa'
+                              ? 'bg-emerald-100 text-emerald-800'
+                              : pol.status === 'Cancelada'
+                                ? 'bg-rose-100 text-rose-800'
+                                : pol.status === 'Renovação Pendente'
+                                  ? 'bg-amber-100 text-amber-800'
+                                  : 'bg-slate-100 text-slate-700'
+                          }
+                        >
+                          {pol.status}
+                        </Badge>
+                        <span className="text-xs text-slate-500">
+                          {pol.tipo_de_seguro || pol.coverage_type}
+                        </span>
+                      </div>
+                      <p className="text-xs text-slate-500 mt-1">
+                        Seguradora: {pol.expand?.seguradora?.nome || pol.insurance_company || '-'} |
+                        Vigência: {formatDateDisplay(pol.start_date)} a{' '}
+                        {formatDateDisplay(pol.end_date)}
+                      </p>
+                    </div>
+                    <div className="flex items-center gap-3">
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        className="text-blue-600 h-8 text-xs"
+                        onClick={() => navigate(`/apolices/${pol.id}`)}
+                      >
+                        Ver Detalhes →
+                      </Button>
+                    </div>
+                  </div>
+                ))
+              )}
+            </CardContent>
+          </Card>
+        </TabsContent>
         <TabsList className="grid w-full grid-cols-2 md:grid-cols-5">
           <TabsTrigger value="dados">Dados</TabsTrigger>
           <TabsTrigger value="apolices">Apólices ({policies.length})</TabsTrigger>
@@ -337,29 +719,61 @@ export default function ClientDetail() {
 
         <TabsContent value="comunicacoes">
           <Card className="shadow-sm overflow-hidden">
-            <CardContent className="pt-6 overflow-x-auto">
-              {comms.length === 0 ? (
-                <p className="text-sm text-slate-500 text-center py-4">
-                  Nenhuma comunicação registrada.
+            <CardHeader className="pb-3 border-b flex flex-row items-center justify-between">
+              <div>
+                <CardTitle className="text-base font-bold text-slate-800">
+                  Histórico de Comunicações ({comms.length})
+                </CardTitle>
+                <p className="text-xs text-slate-500">
+                  Todos os e-mails e mensagens disparados para este segurado.
                 </p>
+              </div>
+              <Button
+                size="sm"
+                variant="outline"
+                className="text-blue-600 border-blue-200 hover:bg-blue-50"
+                onClick={handleOpenEmail}
+              >
+                <Send className="w-3.5 h-3.5 mr-1" /> Nova Mensagem
+              </Button>
+            </CardHeader>
+            <CardContent className="pt-4 overflow-x-auto">
+              {comms.length === 0 ? (
+                <div className="text-center py-8">
+                  <p className="text-sm text-slate-500 mb-2">
+                    Nenhuma comunicação registrada para este cliente.
+                  </p>
+                  <Button size="sm" variant="outline" onClick={handleOpenEmail}>
+                    <Send className="w-3.5 h-3.5 mr-1" /> Enviar Primeiro E-mail
+                  </Button>
+                </div>
               ) : (
                 <table className="w-full text-left text-sm text-slate-700">
                   <thead className="bg-slate-100 text-slate-600 font-semibold border-b">
                     <tr>
-                      <th className="p-2">Tipo</th>
-                      <th className="p-2">Assunto</th>
-                      <th className="p-2">Data</th>
-                      <th className="p-2">Status</th>
+                      <th className="p-2.5">Tipo</th>
+                      <th className="p-2.5">Assunto / Prévia</th>
+                      <th className="p-2.5">Destinatário</th>
+                      <th className="p-2.5">Data / Hora</th>
+                      <th className="p-2.5">Status</th>
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-slate-100">
                     {comms.map((cm) => (
-                      <tr key={cm.id}>
-                        <td className="p-2 font-bold">{cm.type}</td>
-                        <td className="p-2 max-w-xs truncate">{cm.subject || cm.body}</td>
-                        <td className="p-2">{formatDateTimeDisplay(cm.created)}</td>
-                        <td className="p-2">
-                          <Badge variant="outline">{cm.status}</Badge>
+                      <tr key={cm.id} className="hover:bg-slate-50">
+                        <td className="p-2.5 font-bold">{cm.type}</td>
+                        <td className="p-2.5 max-w-xs truncate">{cm.subject || cm.body}</td>
+                        <td className="p-2.5 text-xs text-slate-500">
+                          {cm.recipient_email || cm.recipient_phone || '-'}
+                        </td>
+                        <td className="p-2.5 text-xs">{formatDateTimeDisplay(cm.created)}</td>
+                        <td className="p-2.5">
+                          <Badge
+                            variant={cm.status === 'Enviado' ? 'default' : 'outline'}
+                            className={cm.status === 'Enviado' ? 'bg-emerald-600' : ''}
+                          >
+                            {cm.status}
+                          </Badge>
                         </td>
                       </tr>
                     ))}
