@@ -58,6 +58,79 @@ export function IndividualTab({ clients, policies, templates = [], onSuccess }: 
   const selectedClient = clients.find((c) => c.id === selectedClientId)
   const hasEmail = Boolean(selectedClient?.email && selectedClient.email.trim().length > 0)
 
+  const getClientVars = (clientId: string): Record<string, string> => {
+    const client = clients.find((c) => c.id === clientId)
+    const clientPols = policies.filter((p) => p.client === clientId)
+    const activePol = clientPols.find((p) => p.status === 'Ativa')
+    const lastPol = activePol || clientPols[0]
+
+    return {
+      nome_cliente: client?.name || '[Nome do Cliente]',
+      numero_apolice: lastPol?.policy_number || '[Número da Apólice]',
+      seguradora: lastPol?.expand?.seguradora?.nome || lastPol?.insurance_company || '[Seguradora]',
+    }
+  }
+
+  const renderContentForClient = (
+    rawSubject: string,
+    rawBody: string,
+    clientId: string,
+    prevClientId?: string,
+  ) => {
+    const currentVars = getClientVars(clientId)
+
+    // Se temos o cliente anterior e estamos no modo customizado ou template alterado,
+    // substituímos os valores antigos pelos novos caso o usuário tenha trocado o cliente
+    let newSubject = rawSubject
+    let newBody = rawBody
+
+    if (prevClientId && prevClientId !== clientId) {
+      const prevVars = getClientVars(prevClientId)
+
+      // Substituir dados do cliente anterior pelos dados do novo cliente
+      if (prevVars.nome_cliente && prevVars.nome_cliente !== '[Nome do Cliente]') {
+        newSubject = newSubject.split(prevVars.nome_cliente).join(currentVars.nome_cliente)
+        newBody = newBody.split(prevVars.nome_cliente).join(currentVars.nome_cliente)
+      }
+      if (prevVars.numero_apolice && prevVars.numero_apolice !== '[Número da Apólice]') {
+        newSubject = newSubject.split(prevVars.numero_apolice).join(currentVars.numero_apolice)
+        newBody = newBody.split(prevVars.numero_apolice).join(currentVars.numero_apolice)
+      }
+      if (prevVars.seguradora && prevVars.seguradora !== '[Seguradora]') {
+        newSubject = newSubject.split(prevVars.seguradora).join(currentVars.seguradora)
+        newBody = newBody.split(prevVars.seguradora).join(currentVars.seguradora)
+      }
+    }
+
+    // Também aplicar interpolação de tags {nome_cliente}, {numero_apolice}, {seguradora} etc.
+    newSubject = personalizeTemplate(newSubject, currentVars)
+    newBody = personalizeTemplate(newBody, currentVars)
+
+    return { subject: newSubject, body: newBody }
+  }
+
+  const handleClientChange = (newClientId: string) => {
+    const prevClientId = selectedClientId
+    setSelectedClientId(newClientId)
+
+    if (!newClientId) return
+
+    if (selectedTemplateId !== 'custom') {
+      const t = templates.find((item) => item.id === selectedTemplateId)
+      if (t) {
+        const vars = getClientVars(newClientId)
+        setSubject(personalizeTemplate(t.subject, vars))
+        setBody(personalizeTemplate(t.body, vars))
+        return
+      }
+    }
+
+    // Se é texto customizado ou modelo modificado, recalcula/substitui os dados do cliente anterior para o novo
+    const updated = renderContentForClient(subject, body, newClientId, prevClientId)
+    setSubject(updated.subject)
+    setBody(updated.body)
+  }
+
   const handleTemplateChange = (templateId: string) => {
     setSelectedTemplateId(templateId)
     if (templateId === 'custom') {
@@ -67,13 +140,7 @@ export function IndividualTab({ clients, policies, templates = [], onSuccess }: 
     const t = templates.find((item) => item.id === templateId)
     if (!t) return
 
-    const lastPol = policies.find((p) => p.client === selectedClientId)
-    const vars: Record<string, string> = {
-      nome_cliente: selectedClient?.name || '[Nome do Cliente]',
-      numero_apolice: lastPol?.policy_number || '[Número da Apólice]',
-      seguradora: lastPol?.expand?.seguradora?.nome || lastPol?.insurance_company || '[Seguradora]',
-    }
-
+    const vars = getClientVars(selectedClientId)
     setSubject(personalizeTemplate(t.subject, vars))
     setBody(personalizeTemplate(t.body, vars))
   }
@@ -94,6 +161,31 @@ export function IndividualTab({ clients, policies, templates = [], onSuccess }: 
       return
     }
 
+    // Re-renderizar no momento do disparo para garantir que os dados pertencem ao cliente selecionado
+    let finalSubject = subject
+    let finalBody = body
+
+    if (selectedTemplateId !== 'custom') {
+      const t = templates.find((item) => item.id === selectedTemplateId)
+      if (t) {
+        const vars = getClientVars(selectedClientId)
+        finalSubject = personalizeTemplate(t.subject, vars)
+        finalBody = personalizeTemplate(t.body, vars)
+      } else {
+        const rendered = renderContentForClient(subject, body, selectedClientId)
+        finalSubject = rendered.subject
+        finalBody = rendered.body
+      }
+    } else {
+      const rendered = renderContentForClient(subject, body, selectedClientId)
+      finalSubject = rendered.subject
+      finalBody = rendered.body
+    }
+
+    // Manter a tela sincronizada com o texto final recalculado
+    setSubject(finalSubject)
+    setBody(finalBody)
+
     if (type === 'Email') {
       setSending(true)
       try {
@@ -108,8 +200,8 @@ export function IndividualTab({ clients, policies, templates = [], onSuccess }: 
         const res = await sendSingleEmail({
           to: selectedClient.email!,
           client_id: selectedClientId,
-          subject,
-          body,
+          subject: finalSubject,
+          body: finalBody,
           attachment: attachmentPayload,
         })
         if (res.success) {
@@ -133,14 +225,14 @@ export function IndividualTab({ clients, policies, templates = [], onSuccess }: 
       }
     } else {
       const cleanPhone = (selectedClient.phone || '').replace(/\D/g, '')
-      window.open(`https://wa.me/55${cleanPhone}?text=${encodeURIComponent(body)}`)
+      window.open(`https://wa.me/55${cleanPhone}?text=${encodeURIComponent(finalBody)}`)
 
       try {
         await createCommunication({
           type,
           client: selectedClientId,
           subject: 'WhatsApp Direct',
-          body,
+          body: finalBody,
           recipient_email: selectedClient.email,
           recipient_phone: selectedClient.phone,
           status: 'Rascunho',
@@ -189,7 +281,7 @@ export function IndividualTab({ clients, policies, templates = [], onSuccess }: 
                 onChange={(e) => setSearch(e.target.value)}
                 className="text-xs bg-white"
               />
-              <Select value={selectedClientId} onValueChange={setSelectedClientId}>
+              <Select value={selectedClientId} onValueChange={handleClientChange}>
                 <SelectTrigger>
                   <SelectValue placeholder="Escolha um cliente..." />
                 </SelectTrigger>

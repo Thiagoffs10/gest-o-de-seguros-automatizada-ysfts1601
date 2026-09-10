@@ -61,6 +61,8 @@ export function CampanhasTab({
     import.meta.env.VITE_SENDER_EMAIL || 'CRED10MIX <noreply@cred10mix.com.br>',
   )
   const [selectedClientIds, setSelectedClientIds] = useState<string[]>([])
+  // Armazena clientes desmarcados manualmente pelo usuário para preservar entre alterações de filtros
+  const [unselectedClientIds, setUnselectedClientIds] = useState<string[]>([])
   const [showConfirm, setShowConfirm] = useState(false)
   const [sending, setSending] = useState(false)
   const [results, setResults] = useState<{ sent: number; failed: number; total: number } | null>(
@@ -152,9 +154,12 @@ export function CampanhasTab({
     })
   }, [clients, policies, filters])
 
+  // Ao recalcular filteredClients (ex: filtros alterados), mantém desmarcados os clientes que o usuário desmarcou manualmente
   useEffect(() => {
-    setSelectedClientIds(filteredClients.map((c) => c.id))
-  }, [filteredClients])
+    setSelectedClientIds(
+      filteredClients.map((c) => c.id).filter((id) => !unselectedClientIds.includes(id)),
+    )
+  }, [filteredClients, unselectedClientIds])
 
   const selectedClients = useMemo(() => {
     return filteredClients.filter((c) => selectedClientIds.includes(c.id))
@@ -164,14 +169,31 @@ export function CampanhasTab({
     filteredClients.length > 0 && selectedClientIds.length === filteredClients.length
 
   const toggleSelectAll = () => {
-    if (isAllSelected) setSelectedClientIds([])
-    else setSelectedClientIds(filteredClients.map((c) => c.id))
+    if (isAllSelected) {
+      // Desmarca todos da listagem atual
+      setSelectedClientIds([])
+      setUnselectedClientIds((prev) => {
+        const combined = new Set([...prev, ...filteredClients.map((c) => c.id)])
+        return Array.from(combined)
+      })
+    } else {
+      // Seleciona todos da listagem atual e remove-os de unselectedClientIds
+      const currentFilteredIds = filteredClients.map((c) => c.id)
+      setSelectedClientIds(currentFilteredIds)
+      setUnselectedClientIds((prev) => prev.filter((id) => !currentFilteredIds.includes(id)))
+    }
   }
 
   const toggleSelectClient = (id: string) => {
-    setSelectedClientIds((prev) =>
-      prev.includes(id) ? prev.filter((i) => i !== id) : [...prev, id],
-    )
+    if (selectedClientIds.includes(id)) {
+      // Desmarcando manualmente: remover dos selecionados e adicionar aos desmarcados
+      setSelectedClientIds((prev) => prev.filter((i) => i !== id))
+      setUnselectedClientIds((prev) => (prev.includes(id) ? prev : [...prev, id]))
+    } else {
+      // Marcando manualmente: adicionar aos selecionados e remover dos desmarcados
+      setSelectedClientIds((prev) => [...prev, id])
+      setUnselectedClientIds((prev) => prev.filter((i) => i !== id))
+    }
   }
 
   // Auto-selecionar o primeiro template do banco se existir e ainda for custom
@@ -200,15 +222,29 @@ export function CampanhasTab({
   }
 
   const getPersonalizedData = (client: Client) => {
-    const clientPolicy = policies.find((p) => p.client === client.id)
+    const clientPols = policies.filter((p) => p.client === client.id)
+    const activePol = clientPols.find((p) => p.status === 'Ativa')
+    const clientPolicy = activePol || clientPols[0]
+
+    let subjectTemplate = customSubject
+    let bodyTemplate = customBody
+
+    if (selectedTemplateId !== 'custom') {
+      const found = templates.find((t) => t.id === selectedTemplateId)
+      if (found) {
+        subjectTemplate = found.subject
+        bodyTemplate = found.body
+      }
+    }
+
     const vars: Record<string, string> = {
       nome_cliente: client.name || '',
       numero_apolice: clientPolicy?.policy_number || '',
       seguradora: clientPolicy?.expand?.seguradora?.nome || clientPolicy?.insurance_company || '',
     }
     return {
-      subject: personalizeTemplate(customSubject, vars),
-      body: personalizeTemplate(customBody, vars),
+      subject: personalizeTemplate(subjectTemplate, vars),
+      body: personalizeTemplate(bodyTemplate, vars),
     }
   }
 
