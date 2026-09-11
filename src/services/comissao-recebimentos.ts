@@ -113,6 +113,45 @@ export const recalcularStatusApolice = async (policyId: string) => {
         : null,
     })
 
+    // Sincronizar status das comissões previstas vinculadas (Pendente, Parcial, Recebida)
+    try {
+      const prevs = await pb.collection('comissoes_previstas').getFullList({
+        filter: `policy = "${policyId}"`,
+      })
+      if (prevs.length > 0) {
+        for (const p of prevs) {
+          // Soma de recebimentos associados a esta previsão (por id ou competência)
+          const recsDaPrevisao = allRecs.filter(
+            (r) =>
+              r.comissao_prevista === p.id ||
+              (r.competencia && p.competencia && r.competencia === p.competencia),
+          )
+          const brutoPrevisao =
+            Math.round(
+              recsDaPrevisao.reduce((acc, r) => acc + (Number(r.valor_bruto) || 0), 0) * 100,
+            ) / 100
+          const vPrevisto = Number(p.valor_previsto) || 0
+
+          let novoStatus: 'Pendente' | 'Parcial' | 'Recebida' | 'Cancelada' = 'Pendente'
+          if (p.status === 'Cancelada') {
+            novoStatus = 'Cancelada'
+          } else if (brutoPrevisao >= vPrevisto - 0.009 && vPrevisto > 0) {
+            novoStatus = 'Recebida'
+          } else if (brutoPrevisao > 0) {
+            novoStatus = 'Parcial'
+          } else {
+            novoStatus = 'Pendente'
+          }
+
+          if (p.status !== novoStatus) {
+            await pb.collection('comissoes_previstas').update(p.id, { status: novoStatus })
+          }
+        }
+      }
+    } catch (_) {
+      /* intentionally ignored */
+    }
+
     return { totalBrutoRecebido, totalLiquidoRecebido, quitada }
   } catch (err) {
     console.warn('Aviso: erro ao recalcular status da apolice', err)

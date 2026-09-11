@@ -18,7 +18,20 @@ import { getParceiros } from '@/services/parceiros'
 import { getSeguradoras } from '@/services/seguradoras'
 import { getCustosFixos } from '@/services/custos-fixos'
 import { getComissaoRecebimentos } from '@/services/comissao-recebimentos'
-import { Policy, Parceiro, Seguradora, CustoFixo, FilterState, ComissaoRecebimento } from '@/types'
+import {
+  getComissoesPrevistasPaginated,
+  ComissoesPrevistasPaginatedResult,
+} from '@/services/modelos-comissao'
+import { getProdutos } from '@/services/produtos'
+import {
+  Policy,
+  Parceiro,
+  Seguradora,
+  CustoFixo,
+  FilterState,
+  ComissaoRecebimento,
+  Produto,
+} from '@/types'
 import { Card, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
@@ -90,6 +103,9 @@ export default function Financial() {
   const [policySearchFilter, setPolicySearchFilter] = useState('')
   const [editPolicy, setEditPolicy] = useState<Policy | null>(null)
   const [recebimentoPolicy, setRecebimentoPolicy] = useState<Policy | null>(null)
+  const [recebimentoInitialComp, setRecebimentoInitialComp] = useState<string | undefined>(
+    undefined,
+  )
   const [historyPolicy, setHistoryPolicy] = useState<Policy | null>(null)
   const [isEditRecebimentoOpen, setIsEditRecebimentoOpen] = useState(false)
   const [editingRecebimento, setEditingRecebimento] = useState<ComissaoRecebimento | null>(null)
@@ -113,13 +129,34 @@ export default function Financial() {
   const [loading, setLoading] = useState(true)
   const [commPage, setCommPage] = useState(1)
   const [repassePage, setRepassePage] = useState(1)
+  const [produtos, setProdutos] = useState<Produto[]>([])
+
+  // ETAPA 2B — ITEM 7: Sub-aba ou visão de comissões por competência/previsões com filtros server-side
+  const [commViewTab, setCommViewTab] = useState<'apolices' | 'competencias'>('apolices')
+  const [prevStatusFilter, setPrevStatusFilter] = useState<string>('ALL')
+  const [prevSeguradoraFilter, setPrevSeguradoraFilter] = useState<string>('ALL')
+  const [prevProdutoFilter, setPrevProdutoFilter] = useState<string>('ALL')
+  const [prevPage, setPrevPage] = useState(1)
+  const [prevPaginatedData, setPrevPaginatedData] = useState<ComissoesPrevistasPaginatedResult>({
+    items: [],
+    page: 1,
+    perPage: 15,
+    totalItems: 0,
+    totalPages: 1,
+  })
+  const [prevLoading, setPrevLoading] = useState(false)
+
   const ITEMS_PER_PAGE = 10
 
-  // Lê eventual ?policy= da URL (quando redirecionado de PolicyDetail)
+  // Lê eventual ?policy= e ?competencia= da URL (quando redirecionado de PolicyDetail)
   useEffect(() => {
     const urlPolicy = searchParams.get('policy')
+    const urlComp = searchParams.get('competencia')
     if (urlPolicy) {
       setPolicySearchFilter(urlPolicy)
+    }
+    if (urlComp) {
+      setRecebimentoInitialComp(urlComp)
     }
   }, [searchParams])
 
@@ -131,23 +168,50 @@ export default function Financial() {
   const loadData = useCallback(async () => {
     setLoading(true)
     try {
-      const [pols, pars, segs, custos, recs] = await Promise.all([
+      const [pols, pars, segs, custos, recs, prods] = await Promise.all([
         getPolicies(),
         getParceiros(),
         getSeguradoras(),
         getCustosFixos(),
         getComissaoRecebimentos().catch(() => []),
+        getProdutos().catch(() => []),
       ])
       setAllPolicies(pols)
       setParceiros(pars)
       setSeguradoras(segs)
       setCustosFixos(custos)
       setRecebimentos(recs)
+      setProdutos(prods)
     } catch {
       /* ignored */
     }
     setLoading(false)
   }, [])
+
+  // ETAPA 2B — ITEM 7: Carregar previsões por competência com paginação e filtros no servidor
+  const loadPrevisoesServerSide = useCallback(async () => {
+    setPrevLoading(true)
+    try {
+      const periodRange = computePeriodFromFilters(filters)
+      const res = await getComissoesPrevistasPaginated({
+        page: prevPage,
+        perPage: 15,
+        status: prevStatusFilter,
+        seguradoraId: prevSeguradoraFilter,
+        produtoId: prevProdutoFilter,
+        periodStart: periodRange?.start || undefined,
+        periodEnd: periodRange?.end || undefined,
+      })
+      setPrevPaginatedData(res)
+    } catch {
+      /* ignored */
+    }
+    setPrevLoading(false)
+  }, [prevPage, prevStatusFilter, prevSeguradoraFilter, prevProdutoFilter, filters])
+
+  useEffect(() => {
+    loadPrevisoesServerSide()
+  }, [loadPrevisoesServerSide])
 
   useEffect(() => {
     loadData()
@@ -165,6 +229,12 @@ export default function Financial() {
   useRealtime('comissao_recebimentos', () => {
     if (!isOperationInProgressRef.current) {
       loadData()
+      loadPrevisoesServerSide()
+    }
+  })
+  useRealtime('comissoes_previstas', () => {
+    if (!isOperationInProgressRef.current) {
+      loadPrevisoesServerSide()
     }
   })
 
@@ -457,8 +527,9 @@ export default function Financial() {
     return partnerPols.slice(start, start + ITEMS_PER_PAGE)
   }, [metrics?.partnerPols, repassePage])
 
-  const handleOpenRegistrarRecebimento = (policy: Policy) => {
+  const handleOpenRegistrarRecebimento = (policy: Policy, competenciaPreenchida?: string) => {
     setRecebimentoPolicy(policy)
+    setRecebimentoInitialComp(competenciaPreenchida || undefined)
   }
 
   const handleConfirmDeleteRecebimento = async () => {
@@ -622,183 +693,453 @@ export default function Financial() {
         </div>
       </div>
 
+      {/* ETAPA 2B — ITEM 7: GESTÃO E VISÃO GERAL DE COMISSÕES */}
       <Card className="shadow-sm overflow-hidden border">
-        <CardHeader>
-          <CardTitle className="text-base font-bold">Gestão de Comissões</CardTitle>
+        <CardHeader className="bg-slate-50/70 border-b pb-3">
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+            <div>
+              <CardTitle className="text-base font-bold text-slate-900">
+                Gestão e Visão Geral de Comissões
+              </CardTitle>
+              <p className="text-xs text-slate-500 mt-0.5">
+                Acompanhamento consolidado por contrato ou detalhado por competência/parcela
+                prevista
+              </p>
+            </div>
+            <div className="flex items-center gap-1.5 bg-slate-200/80 p-1 rounded-lg text-xs font-semibold">
+              <button
+                type="button"
+                onClick={() => setCommViewTab('apolices')}
+                className={`px-3 py-1 rounded-md transition-colors ${
+                  commViewTab === 'apolices'
+                    ? 'bg-white text-slate-900 shadow-xs'
+                    : 'text-slate-600 hover:text-slate-900'
+                }`}
+              >
+                Por Apólice
+              </button>
+              <button
+                type="button"
+                onClick={() => setCommViewTab('competencias')}
+                className={`px-3 py-1 rounded-md transition-colors ${
+                  commViewTab === 'competencias'
+                    ? 'bg-blue-600 text-white shadow-xs'
+                    : 'text-slate-600 hover:text-slate-900'
+                }`}
+              >
+                Por Competência (Previsões)
+              </button>
+            </div>
+          </div>
         </CardHeader>
-        <div className="overflow-x-auto">
-          <table className="w-full text-left text-sm text-slate-700">
-            <thead className="bg-slate-100 text-slate-600 font-semibold border-b">
-              <tr>
-                <th className="p-3">Apólice</th>
-                <th className="p-3">Cliente</th>
-                <th className="p-3">Seguradora</th>
-                <th className="p-3">Tipo</th>
-                <th className="p-3 text-right">Prêmio Líq.</th>
-                <th className="p-3 text-right">Comissão Prevista</th>
-                <th className="p-3 text-right">Já Recebido</th>
-                <th className="p-3 text-right">Saldo a Receber</th>
-                <th className="p-3 text-center">Status</th>
-                <th className="p-3 text-right">Ações</th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-slate-100">
-              {tablePolicies.length === 0 ? (
-                <tr>
-                  <td colSpan={10} className="text-center p-6 text-slate-500">
-                    Nenhuma apólice encontrada.
-                  </td>
-                </tr>
-              ) : (
-                paginatedCommPolicies.map((p) => {
-                  const previsto =
-                    p.commission != null
-                      ? Number(p.commission)
-                      : Math.round(
-                          (((p.valor_liquido || p.premium_amount || 0) *
-                            (p.commission_percent || 0)) /
-                            100) *
-                            100,
-                        ) / 100
-                  // REGRA CORRETA:
-                  // - Já recebido = soma dos BRUTOS
-                  // - Saldo a receber = previsto - bruto
-                  // - Líquido recebido = receita líquida realizada
-                  const recBrutoTotal =
-                    receivedGrossByPolicy.get(p.id) ?? (p.comissao_recebida ? previsto : 0)
-                  const recLiquidoTotal =
-                    receivedNetByPolicy.get(p.id) ??
-                    (p.comissao_recebida ? Math.max(0, previsto - (p.iss || 0)) : 0)
-                  const saldo = Math.max(0, Math.round((previsto - recBrutoTotal) * 100) / 100)
-                  const quitada =
-                    p.comissao_recebida || (previsto > 0 && recBrutoTotal >= previsto - 0.009)
-                  const parcial = !quitada && recBrutoTotal > 0
-                  const acima = previsto > 0 && recBrutoTotal > previsto
-                  const policyRecCount = recebimentos.filter((r) => r.policy === p.id).length
 
-                  return (
-                    <tr key={p.id} className="hover:bg-slate-50/80">
-                      <td className="p-3 font-bold text-slate-900">{p.policy_number}</td>
-                      <td className="p-3">{p.expand?.client?.name || '-'}</td>
-                      <td className="p-3">
-                        {p.expand?.seguradora?.nome || p.insurance_company || '-'}
-                      </td>
-                      <td className="p-3">{p.tipo_de_seguro || p.coverage_type}</td>
-                      <td className="p-3 text-right font-medium">
-                        R$ {fmtMoney(p.valor_liquido || p.premium_amount || 0)}
-                      </td>
-                      <td className="p-3 text-right font-bold text-slate-900">
-                        R$ {fmtMoney(previsto)}
-                      </td>
-                      <td className="p-3 text-right">
-                        <span className="font-semibold text-emerald-700 block">
-                          R$ {fmtMoney(recBrutoTotal)}
-                        </span>
-                        {recLiquidoTotal > 0 && (
-                          <span
-                            className="text-[11px] text-blue-600 block"
-                            title="Receita líquida creditada"
-                          >
-                            Líq: R$ {fmtMoney(recLiquidoTotal)}
-                          </span>
-                        )}
-                      </td>
-                      <td className="p-3 text-right font-bold text-amber-700">
-                        R$ {fmtMoney(saldo)}
-                      </td>
-                      <td className="p-3 text-center">
-                        {quitada ? (
-                          <Badge className="bg-emerald-600 hover:bg-emerald-600 text-white font-medium">
-                            {acima ? 'Recebida (Acima)' : 'Recebida'}
-                          </Badge>
-                        ) : parcial ? (
-                          <Badge className="bg-blue-600 hover:bg-blue-600 text-white font-medium">
-                            Parcial
-                          </Badge>
-                        ) : (
-                          <Badge className="bg-amber-500 hover:bg-amber-500 text-white font-medium">
-                            Pendente
-                          </Badge>
-                        )}
-                      </td>
-                      <td className="p-3 text-right">
-                        <div className="flex items-center justify-end gap-1">
-                          {can('policies', 'update') && (
-                            <Button
-                              size="sm"
-                              className={
-                                quitada
-                                  ? 'bg-slate-100 hover:bg-slate-200 text-slate-700 border text-xs h-8 px-2'
-                                  : 'bg-emerald-600 hover:bg-emerald-700 text-white text-xs h-8 px-2 shadow-sm'
-                              }
-                              title="Registrar recebimento de comissão"
-                              onClick={() => handleOpenRegistrarRecebimento(p)}
-                            >
-                              <ArrowDownCircle className="w-3.5 h-3.5 mr-1" />
-                              Registrar recebimento
-                            </Button>
-                          )}
-                          {policyRecCount > 0 && (
-                            <Button
-                              size="sm"
-                              variant="ghost"
-                              className="text-slate-600 hover:text-slate-900 h-8 px-2"
-                              title={`Ver/Editar histórico de recebimentos (${policyRecCount})`}
-                              onClick={() => setHistoryPolicy(p)}
-                            >
-                              <History className="w-3.5 h-3.5 mr-1" />
-                              <span className="text-xs">{policyRecCount}</span>
-                            </Button>
-                          )}
-                          {can('policies', 'update') && (
-                            <Button
-                              size="sm"
-                              variant="ghost"
-                              title="Editar Repasse Parceiro"
-                              onClick={() => setEditPolicy(p)}
-                            >
-                              <Edit2 className="w-3.5 h-3.5" />
-                            </Button>
-                          )}
-                        </div>
+        {commViewTab === 'competencias' ? (
+          <div>
+            {/* Filtros server-side para competências */}
+            <div className="p-3 bg-slate-50/50 border-b flex flex-wrap items-center gap-2">
+              <Select
+                value={prevStatusFilter}
+                onValueChange={(val) => {
+                  setPrevStatusFilter(val)
+                  setPrevPage(1)
+                }}
+              >
+                <SelectTrigger className="w-[150px] bg-white h-8 text-xs">
+                  <SelectValue placeholder="Status" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="ALL">Todos os Status</SelectItem>
+                  <SelectItem value="Pendente">Pendentes</SelectItem>
+                  <SelectItem value="Parcial">Parciais</SelectItem>
+                  <SelectItem value="Recebida">Recebidas</SelectItem>
+                  <SelectItem value="Cancelada">Canceladas</SelectItem>
+                </SelectContent>
+              </Select>
+
+              <Select
+                value={prevSeguradoraFilter}
+                onValueChange={(val) => {
+                  setPrevSeguradoraFilter(val)
+                  setPrevPage(1)
+                }}
+              >
+                <SelectTrigger className="w-[180px] bg-white h-8 text-xs">
+                  <SelectValue placeholder="Seguradora" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="ALL">Todas as Seguradoras</SelectItem>
+                  {seguradoras.map((s) => (
+                    <SelectItem key={s.id} value={s.id}>
+                      {s.nome}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+
+              <Select
+                value={prevProdutoFilter}
+                onValueChange={(val) => {
+                  setPrevProdutoFilter(val)
+                  setPrevPage(1)
+                }}
+              >
+                <SelectTrigger className="w-[180px] bg-white h-8 text-xs">
+                  <SelectValue placeholder="Produto" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="ALL">Todos os Produtos</SelectItem>
+                  {produtos.map((p) => (
+                    <SelectItem key={p.id} value={p.id}>
+                      {p.nome}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+
+              <Button
+                variant="outline"
+                size="sm"
+                className="h-8 text-xs px-2.5"
+                onClick={() => {
+                  setPrevStatusFilter('ALL')
+                  setPrevSeguradoraFilter('ALL')
+                  setPrevProdutoFilter('ALL')
+                  setPrevPage(1)
+                }}
+              >
+                Limpar
+              </Button>
+            </div>
+
+            {/* Tabela de Previsões por Competência (ITEM 7) */}
+            <div className="overflow-x-auto">
+              <table className="w-full text-left text-xs text-slate-700">
+                <thead className="bg-slate-100 text-slate-600 font-semibold border-b">
+                  <tr>
+                    <th className="p-3">Cliente</th>
+                    <th className="p-3">Seguradora</th>
+                    <th className="p-3">Produto</th>
+                    <th className="p-3">Competência</th>
+                    <th className="p-3 text-right">Previsto</th>
+                    <th className="p-3 text-right">Recebido</th>
+                    <th className="p-3 text-right">Saldo</th>
+                    <th className="p-3 text-center">Status</th>
+                    <th className="p-3 text-right">Ação</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-slate-100">
+                  {prevLoading ? (
+                    <tr>
+                      <td colSpan={9} className="text-center p-8 text-slate-500">
+                        Carregando previsões...
                       </td>
                     </tr>
-                  )
-                })
-              )}
-            </tbody>
-          </table>
-        </div>
-        <div className="p-3 border-t flex flex-col sm:flex-row items-center justify-between gap-2 bg-slate-50 text-xs text-slate-600">
-          <span>
-            Exibindo {tablePolicies.length === 0 ? 0 : (commPage - 1) * ITEMS_PER_PAGE + 1} a{' '}
-            {Math.min(commPage * ITEMS_PER_PAGE, tablePolicies.length)} de {tablePolicies.length}{' '}
-            registros
-          </span>
-          <div className="flex items-center gap-2">
-            <Button
-              variant="outline"
-              size="sm"
-              className="h-8 px-2.5 text-xs"
-              disabled={commPage <= 1}
-              onClick={() => setCommPage((p) => Math.max(1, p - 1))}
-            >
-              Anterior
-            </Button>
-            <span className="font-semibold px-1">
-              Página {commPage} de {totalCommPages}
-            </span>
-            <Button
-              variant="outline"
-              size="sm"
-              className="h-8 px-2.5 text-xs"
-              disabled={commPage >= totalCommPages}
-              onClick={() => setCommPage((p) => Math.min(totalCommPages, p + 1))}
-            >
-              Próxima
-            </Button>
+                  ) : prevPaginatedData.items.length === 0 ? (
+                    <tr>
+                      <td colSpan={9} className="text-center p-8 text-slate-500">
+                        Nenhuma comissão prevista encontrada para os filtros selecionados.
+                      </td>
+                    </tr>
+                  ) : (
+                    prevPaginatedData.items.map((prev) => {
+                      const recsDesta = recebimentos.filter(
+                        (r) =>
+                          r.comissao_prevista === prev.id ||
+                          (r.policy === prev.policy &&
+                            r.competencia &&
+                            prev.competencia &&
+                            r.competencia === prev.competencia),
+                      )
+                      const recBrutoDesta =
+                        Math.round(
+                          recsDesta.reduce((acc, r) => acc + (Number(r.valor_bruto) || 0), 0) * 100,
+                        ) / 100
+                      const vPrev = Number(prev.valor_previsto) || 0
+                      const saldoDesta = Math.max(
+                        0,
+                        Math.round((vPrev - recBrutoDesta) * 100) / 100,
+                      )
+                      const targetPolicy =
+                        (prev as any).expand?.policy ||
+                        allPolicies.find((p) => p.id === prev.policy)
+
+                      const clientName =
+                        (prev as any).expand?.policy?.expand?.client?.name ||
+                        targetPolicy?.expand?.client?.name ||
+                        '-'
+                      const segNome =
+                        (prev as any).expand?.policy?.expand?.seguradora?.nome ||
+                        targetPolicy?.expand?.seguradora?.nome ||
+                        targetPolicy?.insurance_company ||
+                        '-'
+                      const prodNome =
+                        (prev as any).expand?.policy?.expand?.produto?.nome ||
+                        targetPolicy?.expand?.produto?.nome ||
+                        targetPolicy?.tipo_de_seguro ||
+                        '-'
+
+                      return (
+                        <tr key={prev.id} className="hover:bg-slate-50/80">
+                          <td className="p-3 font-semibold text-slate-900">{clientName}</td>
+                          <td className="p-3">{segNome}</td>
+                          <td className="p-3">{prodNome}</td>
+                          <td className="p-3 font-bold text-slate-800">
+                            {prev.competencia || `Parc. ${prev.parcela_numero}`}
+                          </td>
+                          <td className="p-3 text-right font-medium text-slate-900">
+                            R$ {fmtMoney(vPrev)}
+                          </td>
+                          <td className="p-3 text-right font-semibold text-emerald-700">
+                            R$ {fmtMoney(recBrutoDesta)}
+                          </td>
+                          <td className="p-3 text-right font-bold text-amber-700">
+                            R$ {fmtMoney(saldoDesta)}
+                          </td>
+                          <td className="p-3 text-center">
+                            <Badge
+                              className={
+                                prev.status === 'Recebida' || saldoDesta === 0
+                                  ? 'bg-emerald-600 text-white'
+                                  : prev.status === 'Parcial' || recBrutoDesta > 0
+                                    ? 'bg-blue-600 text-white'
+                                    : prev.status === 'Cancelada'
+                                      ? 'bg-red-500 text-white'
+                                      : 'bg-amber-500 text-white'
+                              }
+                            >
+                              {saldoDesta === 0 && vPrev > 0
+                                ? 'Recebida'
+                                : recBrutoDesta > 0
+                                  ? 'Parcial'
+                                  : prev.status || 'Pendente'}
+                            </Badge>
+                          </td>
+                          <td className="p-3 text-right">
+                            {targetPolicy && (
+                              <Button
+                                size="sm"
+                                className="bg-emerald-600 hover:bg-emerald-700 text-white text-xs h-7 px-2 shadow-xs"
+                                onClick={() =>
+                                  handleOpenRegistrarRecebimento(targetPolicy, prev.competencia)
+                                }
+                              >
+                                <ArrowDownCircle className="w-3.5 h-3.5 mr-1" />
+                                Receber
+                              </Button>
+                            )}
+                          </td>
+                        </tr>
+                      )
+                    })
+                  )}
+                </tbody>
+              </table>
+            </div>
+
+            {/* Paginação server-side das previsões */}
+            <div className="p-3 border-t flex flex-col sm:flex-row items-center justify-between gap-2 bg-slate-50 text-xs text-slate-600">
+              <span>
+                Página {prevPaginatedData.page} de {prevPaginatedData.totalPages} (
+                {prevPaginatedData.totalItems} previsões no total)
+              </span>
+              <div className="flex items-center gap-2">
+                <Button
+                  variant="outline"
+                  size="sm"
+                  className="h-8 px-2.5 text-xs"
+                  disabled={prevPage <= 1 || prevLoading}
+                  onClick={() => setPrevPage((p) => Math.max(1, p - 1))}
+                >
+                  Anterior
+                </Button>
+                <span className="font-semibold px-1">
+                  {prevPage} / {prevPaginatedData.totalPages || 1}
+                </span>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  className="h-8 px-2.5 text-xs"
+                  disabled={prevPage >= prevPaginatedData.totalPages || prevLoading}
+                  onClick={() => setPrevPage((p) => Math.min(prevPaginatedData.totalPages, p + 1))}
+                >
+                  Próxima
+                </Button>
+              </div>
+            </div>
           </div>
-        </div>
+        ) : (
+          <>
+            <div className="overflow-x-auto">
+              <table className="w-full text-left text-sm text-slate-700">
+                <thead className="bg-slate-100 text-slate-600 font-semibold border-b">
+                  <tr>
+                    <th className="p-3">Apólice</th>
+                    <th className="p-3">Cliente</th>
+                    <th className="p-3">Seguradora</th>
+                    <th className="p-3">Tipo</th>
+                    <th className="p-3 text-right">Prêmio Líq.</th>
+                    <th className="p-3 text-right">Comissão Prevista</th>
+                    <th className="p-3 text-right">Já Recebido</th>
+                    <th className="p-3 text-right">Saldo a Receber</th>
+                    <th className="p-3 text-center">Status</th>
+                    <th className="p-3 text-right">Ações</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-slate-100">
+                  {tablePolicies.length === 0 ? (
+                    <tr>
+                      <td colSpan={10} className="text-center p-6 text-slate-500">
+                        Nenhuma apólice encontrada.
+                      </td>
+                    </tr>
+                  ) : (
+                    paginatedCommPolicies.map((p) => {
+                      const previsto =
+                        p.commission != null
+                          ? Number(p.commission)
+                          : Math.round(
+                              (((p.valor_liquido || p.premium_amount || 0) *
+                                (p.commission_percent || 0)) /
+                                100) *
+                                100,
+                            ) / 100
+                      const recBrutoTotal =
+                        receivedGrossByPolicy.get(p.id) ?? (p.comissao_recebida ? previsto : 0)
+                      const recLiquidoTotal =
+                        receivedNetByPolicy.get(p.id) ??
+                        (p.comissao_recebida ? Math.max(0, previsto - (p.iss || 0)) : 0)
+                      const saldo = Math.max(0, Math.round((previsto - recBrutoTotal) * 100) / 100)
+                      const quitada =
+                        p.comissao_recebida || (previsto > 0 && recBrutoTotal >= previsto - 0.009)
+                      const parcial = !quitada && recBrutoTotal > 0
+                      const acima = previsto > 0 && recBrutoTotal > previsto
+                      const policyRecCount = recebimentos.filter((r) => r.policy === p.id).length
+
+                      return (
+                        <tr key={p.id} className="hover:bg-slate-50/80">
+                          <td className="p-3 font-bold text-slate-900">{p.policy_number}</td>
+                          <td className="p-3">{p.expand?.client?.name || '-'}</td>
+                          <td className="p-3">
+                            {p.expand?.seguradora?.nome || p.insurance_company || '-'}
+                          </td>
+                          <td className="p-3">{p.tipo_de_seguro || p.coverage_type}</td>
+                          <td className="p-3 text-right font-medium">
+                            R$ {fmtMoney(p.valor_liquido || p.premium_amount || 0)}
+                          </td>
+                          <td className="p-3 text-right font-bold text-slate-900">
+                            R$ {fmtMoney(previsto)}
+                          </td>
+                          <td className="p-3 text-right">
+                            <span className="font-semibold text-emerald-700 block">
+                              R$ {fmtMoney(recBrutoTotal)}
+                            </span>
+                            {recLiquidoTotal > 0 && (
+                              <span
+                                className="text-[11px] text-blue-600 block"
+                                title="Receita líquida creditada"
+                              >
+                                Líq: R$ {fmtMoney(recLiquidoTotal)}
+                              </span>
+                            )}
+                          </td>
+                          <td className="p-3 text-right font-bold text-amber-700">
+                            R$ {fmtMoney(saldo)}
+                          </td>
+                          <td className="p-3 text-center">
+                            {quitada ? (
+                              <Badge className="bg-emerald-600 hover:bg-emerald-600 text-white font-medium">
+                                {acima ? 'Recebida (Acima)' : 'Recebida'}
+                              </Badge>
+                            ) : parcial ? (
+                              <Badge className="bg-blue-600 hover:bg-blue-600 text-white font-medium">
+                                Parcial
+                              </Badge>
+                            ) : (
+                              <Badge className="bg-amber-500 hover:bg-amber-500 text-white font-medium">
+                                Pendente
+                              </Badge>
+                            )}
+                          </td>
+                          <td className="p-3 text-right">
+                            <div className="flex items-center justify-end gap-1">
+                              {can('policies', 'update') && (
+                                <Button
+                                  size="sm"
+                                  className={
+                                    quitada
+                                      ? 'bg-slate-100 hover:bg-slate-200 text-slate-700 border text-xs h-8 px-2'
+                                      : 'bg-emerald-600 hover:bg-emerald-700 text-white text-xs h-8 px-2 shadow-sm'
+                                  }
+                                  title="Registrar recebimento de comissão"
+                                  onClick={() => handleOpenRegistrarRecebimento(p)}
+                                >
+                                  <ArrowDownCircle className="w-3.5 h-3.5 mr-1" />
+                                  Registrar recebimento
+                                </Button>
+                              )}
+                              {policyRecCount > 0 && (
+                                <Button
+                                  size="sm"
+                                  variant="ghost"
+                                  className="text-slate-600 hover:text-slate-900 h-8 px-2"
+                                  title={`Ver/Editar histórico de recebimentos (${policyRecCount})`}
+                                  onClick={() => setHistoryPolicy(p)}
+                                >
+                                  <History className="w-3.5 h-3.5 mr-1" />
+                                  <span className="text-xs">{policyRecCount}</span>
+                                </Button>
+                              )}
+                              {can('policies', 'update') && (
+                                <Button
+                                  size="sm"
+                                  variant="ghost"
+                                  title="Editar Repasse Parceiro"
+                                  onClick={() => setEditPolicy(p)}
+                                >
+                                  <Edit2 className="w-3.5 h-3.5" />
+                                </Button>
+                              )}
+                            </div>
+                          </td>
+                        </tr>
+                      )
+                    })
+                  )}
+                </tbody>
+              </table>
+            </div>
+            <div className="p-3 border-t flex flex-col sm:flex-row items-center justify-between gap-2 bg-slate-50 text-xs text-slate-600">
+              <span>
+                Exibindo {tablePolicies.length === 0 ? 0 : (commPage - 1) * ITEMS_PER_PAGE + 1} a{' '}
+                {Math.min(commPage * ITEMS_PER_PAGE, tablePolicies.length)} de{' '}
+                {tablePolicies.length} registros
+              </span>
+              <div className="flex items-center gap-2">
+                <Button
+                  variant="outline"
+                  size="sm"
+                  className="h-8 px-2.5 text-xs"
+                  disabled={commPage <= 1}
+                  onClick={() => setCommPage((p) => Math.max(1, p - 1))}
+                >
+                  Anterior
+                </Button>
+                <span className="font-semibold px-1">
+                  Página {commPage} de {totalCommPages}
+                </span>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  className="h-8 px-2.5 text-xs"
+                  disabled={commPage >= totalCommPages}
+                  onClick={() => setCommPage((p) => Math.min(totalCommPages, p + 1))}
+                >
+                  Próxima
+                </Button>
+              </div>
+            </div>
+          </>
+        )}
       </Card>
 
       <Card className="shadow-sm overflow-hidden border">
@@ -914,9 +1255,15 @@ export default function Financial() {
 
       <RegistrarRecebimentoModal
         open={!!recebimentoPolicy}
-        onOpenChange={(open) => !open && setRecebimentoPolicy(null)}
+        onOpenChange={(open) => {
+          if (!open) {
+            setRecebimentoPolicy(null)
+            setRecebimentoInitialComp(undefined)
+          }
+        }}
         policy={recebimentoPolicy}
         seguradoras={seguradoras}
+        initialCompetencia={recebimentoInitialComp}
         alreadyReceived={
           recebimentoPolicy
             ? (receivedGrossByPolicy.get(recebimentoPolicy.id) ??

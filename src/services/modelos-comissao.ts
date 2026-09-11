@@ -159,6 +159,76 @@ export const findSuggestedModelo = async (
 /**
  * Obtém comissões previstas por apólice
  */
+export interface ComissaoPrevistaFilterParams {
+  periodStart?: string
+  periodEnd?: string
+  seguradoraId?: string
+  produtoId?: string
+  status?: string
+  page?: number
+  perPage?: number
+}
+
+export interface ComissoesPrevistasPaginatedResult {
+  items: ComissaoPrevista[]
+  page: number
+  perPage: number
+  totalItems: number
+  totalPages: number
+}
+
+export const getComissoesPrevistasPaginated = async (
+  params: ComissaoPrevistaFilterParams = {},
+): Promise<ComissoesPrevistasPaginatedResult> => {
+  const page = params.page || 1
+  const perPage = params.perPage || 15
+  const filters: string[] = []
+
+  if (params.status && params.status !== 'ALL') {
+    filters.push(`status = "${params.status}"`)
+  }
+  if (params.seguradoraId && params.seguradoraId !== 'ALL') {
+    filters.push(`policy.seguradora = "${params.seguradoraId}"`)
+  }
+  if (params.produtoId && params.produtoId !== 'ALL') {
+    filters.push(`policy.produto = "${params.produtoId}"`)
+  }
+  if (params.periodStart) {
+    filters.push(`data_prevista >= "${params.periodStart}"`)
+  }
+  if (params.periodEnd) {
+    filters.push(`data_prevista <= "${params.periodEnd}"`)
+  }
+
+  const filterStr = filters.join(' && ')
+
+  try {
+    const res = await pb
+      .collection('comissoes_previstas')
+      .getList<ComissaoPrevista>(page, perPage, {
+        filter: filterStr || undefined,
+        sort: 'data_prevista,parcela_numero',
+        expand: 'policy,policy.client,policy.seguradora,policy.produto,modelo_comissao',
+      })
+    return {
+      items: res.items,
+      page: res.page,
+      perPage: res.perPage,
+      totalItems: res.totalItems,
+      totalPages: res.totalPages,
+    }
+  } catch (err: any) {
+    console.error('Erro ao buscar comissoes_previstas paginadas:', err)
+    return {
+      items: [],
+      page: 1,
+      perPage,
+      totalItems: 0,
+      totalPages: 1,
+    }
+  }
+}
+
 export const getComissoesPrevistasByPolicy = async (
   policyId: string,
 ): Promise<ComissaoPrevista[]> => {

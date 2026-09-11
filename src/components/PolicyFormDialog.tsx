@@ -557,32 +557,30 @@ export function PolicyFormDialog({
             </div>
           </div>
 
-          {/* Modelo de Recebimento de Comissão (ETAPA 2A) */}
-          <div className="p-3 bg-blue-50/60 border border-blue-200 rounded-lg space-y-2.5">
+          {/* Modelo de Recebimento de Comissão (ETAPA 2B — ITEM 2) */}
+          <div className="p-3 bg-blue-50/70 border border-blue-200 rounded-lg space-y-2.5">
             <div className="flex items-center justify-between">
-              <Label className="text-xs font-bold text-slate-900">
-                Modelo de Recebimento de Comissão
-              </Label>
+              <Label className="text-xs font-bold text-slate-900">Modelo de Recebimento</Label>
               <div className="flex items-center gap-1.5 text-xs">
                 <button
                   type="button"
                   onClick={() => {
                     set('comissao_personalizada', false)
                   }}
-                  className={`px-2 py-0.5 rounded text-[11px] font-semibold transition-colors ${
+                  className={`px-2.5 py-1 rounded text-[11px] font-semibold transition-colors ${
                     !form.comissao_personalizada
                       ? 'bg-blue-600 text-white shadow-xs'
                       : 'bg-white text-slate-600 hover:bg-slate-100 border'
                   }`}
                 >
-                  Usar modelo padrão
+                  Usar modelo sugerido
                 </button>
                 <button
                   type="button"
                   onClick={() => {
                     set('comissao_personalizada', true)
                   }}
-                  className={`px-2 py-0.5 rounded text-[11px] font-semibold transition-colors ${
+                  className={`px-2.5 py-1 rounded text-[11px] font-semibold transition-colors ${
                     form.comissao_personalizada
                       ? 'bg-amber-600 text-white shadow-xs'
                       : 'bg-white text-slate-600 hover:bg-slate-100 border'
@@ -594,7 +592,20 @@ export function PolicyFormDialog({
             </div>
 
             {!form.comissao_personalizada ? (
-              <div>
+              <div className="space-y-1.5">
+                <div className="flex items-center justify-between text-xs">
+                  <span className="text-slate-600 font-medium">Modelo de recebimento:</span>
+                  {modeloAtivo ? (
+                    <span className="font-bold text-blue-700 bg-blue-100/80 px-2 py-0.5 rounded text-xs">
+                      {modeloAtivo.nome} ({modeloAtivo.tipo_modelo})
+                    </span>
+                  ) : (
+                    <span className="text-slate-500 italic">
+                      Nenhum modelo específico sugerido (À vista padrão)
+                    </span>
+                  )}
+                </div>
+
                 <Select
                   value={form.modelo_comissao || 'none'}
                   onValueChange={(v) => {
@@ -607,39 +618,37 @@ export function PolicyFormDialog({
                     }
                   }}
                 >
-                  <SelectTrigger className="bg-white">
-                    <SelectValue placeholder="Selecione o modelo de comissão" />
+                  <SelectTrigger className="bg-white h-9 text-xs">
+                    <SelectValue placeholder="Trocar ou selecionar outro modelo..." />
                   </SelectTrigger>
                   <SelectContent>
-                    <SelectItem value="none">
-                      Sem modelo pré-definido (Manual / À vista padrão)
-                    </SelectItem>
+                    <SelectItem value="none">Sem modelo específico (À vista padrão)</SelectItem>
                     {modelosList.map((m) => (
                       <SelectItem key={m.id} value={m.id}>
                         {m.nome} ({m.tipo_modelo})
+                        {m.percentual_padrao ? ` — ${m.percentual_padrao}%` : ''}
                       </SelectItem>
                     ))}
                   </SelectContent>
                 </Select>
+
                 {modeloAtivo && (
-                  <p className="text-[11px] text-blue-700 mt-1">
-                    ✓ Modelo ativo: <strong>{modeloAtivo.nome}</strong> — tipo{' '}
-                    {modeloAtivo.tipo_modelo}
+                  <p className="text-[11px] text-emerald-700 flex items-center gap-1">
+                    ✓ Modelo pronto: nenhuma configuração adicional necessária.
                   </p>
                 )}
               </div>
             ) : (
-              <div className="space-y-2 p-2.5 bg-amber-50/70 border border-amber-200 rounded text-xs">
+              <div className="space-y-2 p-2.5 bg-amber-50 border border-amber-200 rounded text-xs">
                 <p className="text-[11px] font-medium text-amber-900">
-                  ⚠️ Negociação exclusiva desta apólice. Não alterará o modelo padrão das demais
-                  apólices.
+                  Condição exclusiva desta apólice. Não alterará os modelos cadastrados no sistema.
                 </p>
                 <div>
                   <Label className="text-[11px] font-semibold text-slate-700">
-                    Motivo da personalização *
+                    Motivo da personalização (opcional)
                   </Label>
                   <Input
-                    placeholder="Ex: Negociação especial 25% pelo volume ou condição de fase diferente"
+                    placeholder="Ex: Condição comercial negociada para este contrato"
                     className="bg-white text-xs h-8 mt-0.5"
                     value={form.motivo_personalizacao || ''}
                     onChange={(e) => set('motivo_personalizacao', e.target.value)}

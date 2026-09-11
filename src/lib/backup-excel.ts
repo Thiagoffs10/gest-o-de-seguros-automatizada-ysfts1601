@@ -20,6 +20,9 @@ const COLLECTION_TITLES: Record<string, string> = {
   email_templates: 'Modelos de E-mail',
   password_resets: 'Tokens de Recuperação',
   comissao_recebimentos: 'Recebimentos de Comissão',
+  modelos_comissao: 'Modelos de Recebimento',
+  comissoes_previstas: 'Comissões Previstas',
+  produtos: 'Produtos Comerciais',
 }
 
 const FIELD_LABELS: Record<string, string> = {
@@ -127,6 +130,17 @@ const FIELD_LABELS: Record<string, string> = {
   token: 'Token',
   expires_at: 'Data de Expiração',
   used: 'Utilizado?',
+  tipo_modelo: 'Tipo do Modelo',
+  percentual_padrao: 'Percentual Padrão (%)',
+  valido_a_partir_de: 'Válido a Partir De',
+  versao: 'Versão',
+  data_prevista: 'Data Prevista',
+  valor_previsto: 'Valor Previsto (R$)',
+  parcela_numero: 'Nº da Parcela',
+  origem_modelo: 'Origem do Modelo',
+  competencia: 'Competência',
+  codigo_comercial: 'Código Comercial',
+  ramo: 'Ramo',
   created: 'Criado em',
   updated: 'Atualizado em',
 }
@@ -140,9 +154,15 @@ const CURRENCY_FIELDS = new Set([
   'iss',
   'amount',
   'valor',
+  'valor_previsto',
 ])
 
-const PERCENT_FIELDS = new Set(['commission_percent', 'percentual_repasse', 'imposto_percentual'])
+const PERCENT_FIELDS = new Set([
+  'commission_percent',
+  'percentual_repasse',
+  'imposto_percentual',
+  'percentual_padrao',
+])
 
 const DATE_FIELDS = new Set([
   'start_date',
@@ -160,6 +180,9 @@ const DATE_FIELDS = new Set([
   'data_fechamento',
   'birth_date',
   'expires_at',
+  'valido_a_partir_de',
+  'data_prevista',
+  'data_recebimento',
 ])
 
 export function exportBackupToExcel(data: BackupData, filename: string): void {

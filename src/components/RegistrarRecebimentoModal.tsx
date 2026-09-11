@@ -22,6 +22,9 @@ interface Props {
   policy: Policy | null
   seguradoras: Seguradora[]
   alreadyReceived: number
+  initialCompetencia?: string
+  initialValorBruto?: number
+  comissaoPrevistaId?: string
   onSuccess: () => void
 }
 
@@ -31,6 +34,9 @@ export function RegistrarRecebimentoModal({
   policy,
   seguradoras,
   alreadyReceived,
+  initialCompetencia,
+  initialValorBruto,
+  comissaoPrevistaId,
   onSuccess,
 }: Props) {
   const { toast } = useToast()
@@ -79,7 +85,13 @@ export function RegistrarRecebimentoModal({
       setAliquotaImposto(defaultAliquota)
 
       // Sugere o saldo restante se for > 0, senão a comissão total
-      const initialBruto = saldoAtual > 0 ? saldoAtual : comissaoPrevista || 0
+      // Se tiver initialValorBruto explícito (ex: da parcela de previsão), priorizá-lo!
+      const initialBruto =
+        initialValorBruto != null && initialValorBruto > 0
+          ? initialValorBruto
+          : saldoAtual > 0
+            ? saldoAtual
+            : comissaoPrevista || 0
       setValorBruto(initialBruto > 0 ? initialBruto : '')
 
       const initialImposto = Math.round(((initialBruto * defaultAliquota) / 100) * 100) / 100
@@ -87,11 +99,19 @@ export function RegistrarRecebimentoModal({
       setValorLiquido(Math.round((initialBruto - initialImposto) * 100) / 100)
 
       setParcela('')
-      setCompetencia('')
+      setCompetencia(initialCompetencia || '')
       setObservacao('')
       setIsSubmitting(false)
     }
-  }, [open, policy, policySeguradora, saldoAtual, comissaoPrevista])
+  }, [
+    open,
+    policy,
+    policySeguradora,
+    saldoAtual,
+    comissaoPrevista,
+    initialCompetencia,
+    initialValorBruto,
+  ])
 
   // Recalcula imposto e líquido ao alterar valor bruto ou alíquota
   const handleBrutoChange = (brutoVal: number | '') => {
@@ -159,6 +179,7 @@ export function RegistrarRecebimentoModal({
         observacao: observacao.trim() || undefined,
         parcela: parcela !== '' ? Number(parcela) : undefined,
         competencia: competencia.trim() || undefined,
+        comissao_prevista: comissaoPrevistaId || undefined,
         idempotency_key: idempotencyKey,
       })
 

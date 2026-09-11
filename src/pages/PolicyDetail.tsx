@@ -24,11 +24,20 @@ import { getReminders } from '@/services/reminders'
 import { getClients } from '@/services/clients'
 import { getSeguradoras } from '@/services/seguradoras'
 import { getParceiros } from '@/services/parceiros'
-import { Policy, Payment, Client, Seguradora, Parceiro, ComissaoRecebimento } from '@/types'
+import {
+  Policy,
+  Payment,
+  Client,
+  Seguradora,
+  Parceiro,
+  ComissaoRecebimento,
+  ComissaoPrevista,
+} from '@/types'
 import {
   getComissaoRecebimentosByPolicy,
   deleteComissaoRecebimento,
 } from '@/services/comissao-recebimentos'
+import { getComissoesPrevistasByPolicy } from '@/services/modelos-comissao'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs'
@@ -72,6 +81,7 @@ export default function PolicyDetail() {
   const [policy, setPolicy] = useState<Policy | null>(null)
   const [payments, setPayments] = useState<Payment[]>([])
   const [recebimentos, setRecebimentos] = useState<ComissaoRecebimento[]>([])
+  const [previsoes, setPrevisoes] = useState<ComissaoPrevista[]>([])
   const [clients, setClients] = useState<Client[]>([])
   const [seguradoras, setSeguradoras] = useState<Seguradora[]>([])
   const [parceiros, setParceiros] = useState<Parceiro[]>([])
@@ -110,15 +120,17 @@ export default function PolicyDetail() {
     try {
       const p = await getPolicy(id)
       setPolicy(p)
-      const [pays, recs, cls, segs, pars] = await Promise.all([
+      const [pays, recs, prevList, cls, segs, pars] = await Promise.all([
         getPayments(`policy = "${id}"`),
         getComissaoRecebimentosByPolicy(id),
+        getComissoesPrevistasByPolicy(id).catch(() => []),
         getClients(),
         getSeguradoras(),
         getParceiros(),
       ])
       setPayments(pays)
       setRecebimentos(recs)
+      setPrevisoes(prevList)
       setClients(cls)
       setSeguradoras(segs)
       setParceiros(pars)
@@ -142,6 +154,11 @@ export default function PolicyDetail() {
     }
   })
   useRealtime('comissao_recebimentos', () => {
+    if (!isOperationInProgressRef.current) {
+      loadData()
+    }
+  })
+  useRealtime('comissoes_previstas', () => {
     if (!isOperationInProgressRef.current) {
       loadData()
     }
@@ -332,6 +349,21 @@ export default function PolicyDetail() {
   const saldoAReceber = Math.max(0, Math.round((comissaoPrevista - jaRecebido) * 100) / 100)
   const temDivergenciaExcesso = jaRecebido > comissaoPrevista && comissaoPrevista > 0
 
+  // Total estornado e recebido para exibição simplificada
+  const totalRecebimentosNormais =
+    Math.round(
+      recebimentos
+        .filter((r) => !r.is_estorno && (Number(r.valor_bruto) || 0) > 0)
+        .reduce((sum, r) => sum + (Number(r.valor_bruto) || 0), 0) * 100,
+    ) / 100
+
+  const totalEstornos =
+    Math.round(
+      recebimentos
+        .filter((r) => r.is_estorno || (Number(r.valor_bruto) || 0) < 0)
+        .reduce((sum, r) => sum + Math.abs(Number(r.valor_bruto) || 0), 0) * 100,
+    ) / 100
+
   return (
     <div className="space-y-6">
       <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
@@ -392,22 +424,18 @@ export default function PolicyDetail() {
         </div>
       </div>
 
-      {/* BLOCO DE RECEBIMENTOS DE COMISSÃO (PREVISÃO E CONSULTA) */}
-      <Card className="border-blue-200 bg-gradient-to-br from-blue-50/40 via-white to-slate-50 shadow-sm">
-        <CardHeader className="pb-3">
+      {/* ETAPA 2B — ITEM 6: ÁREA CONSOLIDADA E LIMPA DE COMISSÕES */}
+      <Card className="border-blue-200 bg-white shadow-sm overflow-hidden">
+        <CardHeader className="bg-slate-50/70 border-b pb-3.5 pt-4">
           <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
             <div>
-              <CardTitle className="text-base font-bold text-slate-900 flex items-center gap-2">
-                <span>Previsão e Recebimentos da Comissão</span>
+              <div className="flex items-center gap-2">
+                <CardTitle className="text-base font-bold text-slate-900">Comissões</CardTitle>
                 {saldoAReceber === 0 && comissaoPrevista > 0 && (
-                  <Badge className="bg-emerald-600 text-white font-medium text-xs">
-                    Quitada Integralmente
-                  </Badge>
+                  <Badge className="bg-emerald-600 text-white font-medium text-xs">Recebida</Badge>
                 )}
                 {saldoAReceber > 0 && jaRecebido > 0 && (
-                  <Badge className="bg-amber-500 text-white font-medium text-xs">
-                    Parcialmente Recebida
-                  </Badge>
+                  <Badge className="bg-amber-500 text-white font-medium text-xs">Parcial</Badge>
                 )}
                 {saldoAReceber > 0 && jaRecebido === 0 && (
                   <Badge className="bg-slate-500 text-white font-medium text-xs">Pendente</Badge>
@@ -417,102 +445,225 @@ export default function PolicyDetail() {
                     Acima do Previsto
                   </Badge>
                 )}
-              </CardTitle>
+              </div>
               <p className="text-xs text-slate-500 mt-0.5">
-                Consulta financeira da apólice: comissão prevista, já recebido, saldo e histórico.
-                Baixas devem ser realizadas pelo módulo Financeiro.
+                Modelo utilizado:{' '}
+                <strong className="text-slate-700">
+                  {policy.comissao_personalizada
+                    ? 'Personalizado nesta apólice'
+                    : (policy as any).expand?.modelo_comissao?.nome
+                      ? `${(policy as any).expand.modelo_comissao.nome} (${(policy as any).expand.modelo_comissao.tipo_modelo})`
+                      : policy.forma_recebimento || 'À Vista / Padrão'}
+                </strong>
               </p>
             </div>
-            <Button
-              asChild
-              variant="outline"
-              className="border-blue-300 text-blue-700 hover:bg-blue-50 shrink-0"
-            >
-              <Link to={`/financeiro?policy=${policy.policy_number}`}>
+            <Button asChild className="bg-blue-600 hover:bg-blue-700 text-white shrink-0 h-9">
+              <Link
+                to={`/financeiro?policy=${policy.policy_number || policy.numero_proposta || ''}`}
+              >
                 <ArrowUpRight className="w-4 h-4 mr-1.5" />
-                Registrar recebimento no Financeiro
+                Registrar recebimento
               </Link>
             </Button>
           </div>
         </CardHeader>
-        <CardContent className="space-y-4">
+        <CardContent className="p-4 sm:p-5 space-y-5">
           {temDivergenciaExcesso && (
             <div className="p-3 bg-amber-50 border border-amber-200 rounded-md flex items-center gap-2 text-xs text-amber-800">
               <AlertOctagon className="w-4 h-4 text-amber-600 shrink-0" />
               <span>
-                <strong>Aviso de divergência:</strong> O total já recebido (R${' '}
-                {fmtMoney(jaRecebido)}) supera a comissão prevista (R$ {fmtMoney(comissaoPrevista)})
-                em R$ {fmtMoney(jaRecebido - comissaoPrevista)}.
+                <strong>Aviso:</strong> O total já recebido (R$ {fmtMoney(jaRecebido)}) supera a
+                comissão prevista (R$ {fmtMoney(comissaoPrevista)}) em R${' '}
+                {fmtMoney(jaRecebido - comissaoPrevista)}.
               </span>
             </div>
           )}
 
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-3">
-            <div className="p-3.5 bg-white rounded-lg border shadow-xs text-center sm:text-left">
+          {/* ITEM 3 & ITEM 6: 3 CARDS ESSENCIAIS: Total Previsto | Recebido | Saldo a receber */}
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+            <div className="p-3.5 bg-slate-50/80 rounded-lg border border-slate-200 text-center sm:text-left">
               <span className="text-xs font-semibold uppercase tracking-wider text-slate-500">
-                Comissão prevista bruta
+                Total Previsto
               </span>
-              <p className="text-xl font-bold text-slate-900 mt-1">
+              <p className="text-2xl font-bold text-slate-900 mt-1">
                 R$ {fmtMoney(comissaoPrevista)}
               </p>
-              <span className="text-[11px] text-slate-400">
-                Bruto: {policy.commission_percent || 0}% do prêmio líq.
+              <span className="text-[11px] text-slate-500">
+                {policy.commission_percent || 0}% do prêmio líquido
               </span>
             </div>
+
             <div className="p-3.5 bg-emerald-50/70 rounded-lg border border-emerald-200 text-center sm:text-left">
               <span className="text-xs font-semibold uppercase tracking-wider text-emerald-800">
-                Realizado bruto
+                Recebido
               </span>
-              <p className="text-xl font-bold text-emerald-700 mt-1">R$ {fmtMoney(jaRecebido)}</p>
+              <p className="text-2xl font-bold text-emerald-700 mt-1">R$ {fmtMoney(jaRecebido)}</p>
               <span className="text-[11px] text-emerald-600">
-                {recebimentos.length} recebimento{recebimentos.length !== 1 ? 's' : ''} bruto
+                {recebimentos.length} recebimento{recebimentos.length !== 1 ? 's' : ''} registrado
                 {recebimentos.length !== 1 ? 's' : ''}
               </span>
             </div>
+
             <div className="p-3.5 bg-amber-50/70 rounded-lg border border-amber-200 text-center sm:text-left">
               <span className="text-xs font-semibold uppercase tracking-wider text-amber-800">
-                Saldo bruto a receber
+                Saldo a Receber
               </span>
-              <p className="text-xl font-bold text-amber-700 mt-1">R$ {fmtMoney(saldoAReceber)}</p>
+              <p className="text-2xl font-bold text-amber-700 mt-1">R$ {fmtMoney(saldoAReceber)}</p>
               <span className="text-[11px] text-amber-600">
-                {saldoAReceber === 0 ? 'Sem pendências' : 'Previsto bruto − realizado bruto'}
+                {saldoAReceber === 0 ? 'Quitado integralmente' : 'Pendente de recebimento'}
               </span>
-            </div>
-            <div className="p-3.5 bg-slate-50 rounded-lg border border-slate-200 text-center sm:text-left">
-              <span className="text-xs font-semibold uppercase tracking-wider text-slate-600">
-                Impostos / descontos
-              </span>
-              <p className="text-xl font-bold text-slate-700 mt-1">
-                R$ {fmtMoney(impostosRealizados)}
-              </p>
-              <span className="text-[11px] text-slate-500">Deduções realizadas</span>
-            </div>
-            <div className="p-3.5 bg-blue-50/70 rounded-lg border border-blue-200 text-center sm:text-left">
-              <span className="text-xs font-semibold uppercase tracking-wider text-blue-800">
-                Líquido realizado
-              </span>
-              <p className="text-xl font-bold text-blue-700 mt-1">
-                R$ {fmtMoney(receitaLiquidaRealizada)}
-              </p>
-              <span className="text-[11px] text-blue-600">Soma líquida creditada</span>
             </div>
           </div>
 
-          {/* Histórico detalhado de recebimentos desta apólice */}
-          {recebimentos.length > 0 && (
-            <div className="pt-2">
-              <h4 className="text-xs font-bold text-slate-700 uppercase tracking-wider mb-2">
-                Histórico de Recebimentos da Apólice
-              </h4>
+          {/* ITEM 5: RESUMO DE ESTORNOS (quando houver estorno) */}
+          {totalEstornos > 0 && (
+            <div className="p-3 bg-rose-50/80 border border-rose-200 rounded-lg flex flex-wrap items-center justify-between gap-2 text-xs">
+              <div className="flex items-center gap-2">
+                <RotateCcw className="w-4 h-4 text-rose-600 shrink-0" />
+                <span className="font-semibold text-rose-900">Histórico de Estornos:</span>
+                <span className="text-slate-700">
+                  Recebimento bruto: <strong>+R$ {fmtMoney(totalRecebimentosNormais)}</strong>
+                </span>
+                <span className="text-rose-700 font-semibold">
+                  / Estorno: <strong>-R$ {fmtMoney(totalEstornos)}</strong>
+                </span>
+                <span className="text-slate-900 font-bold">
+                  / Líquido recebido: <strong>R$ {fmtMoney(jaRecebido)}</strong>
+                </span>
+              </div>
+            </div>
+          )}
+
+          {/* ITEM 3: TABELA DE COMPETÊNCIAS / PREVISÕES */}
+          {previsoes.length > 0 && (
+            <div className="space-y-2 pt-1">
+              <div className="flex items-center justify-between">
+                <h4 className="text-xs font-bold text-slate-800 uppercase tracking-wider">
+                  Previsão por Competência
+                </h4>
+                <span className="text-[11px] text-slate-500">
+                  {previsoes.length} parcela{previsoes.length > 1 ? 's' : ''} programada
+                  {previsoes.length > 1 ? 's' : ''}
+                </span>
+              </div>
               <div className="overflow-x-auto border rounded-lg bg-white">
                 <table className="w-full text-left text-xs text-slate-700">
                   <thead className="bg-slate-50 text-slate-600 font-semibold border-b">
                     <tr>
-                      <th className="p-2.5">Data Efetiva</th>
+                      <th className="p-2.5">Competência</th>
+                      <th className="p-2.5">Data Prevista</th>
+                      <th className="p-2.5">Previsto</th>
+                      <th className="p-2.5">Recebido</th>
+                      <th className="p-2.5">Saldo</th>
+                      <th className="p-2.5">Status</th>
+                      <th className="p-2.5 text-right">Ação</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-slate-100">
+                    {previsoes.map((prev) => {
+                      // Calcula o recebido para esta previsão específica
+                      const recsDesta = recebimentos.filter(
+                        (r) =>
+                          r.comissao_prevista === prev.id ||
+                          (r.competencia && prev.competencia && r.competencia === prev.competencia),
+                      )
+                      const recBrutoDesta =
+                        Math.round(
+                          recsDesta.reduce((acc, r) => acc + (Number(r.valor_bruto) || 0), 0) * 100,
+                        ) / 100
+                      const vPrev = Number(prev.valor_previsto) || 0
+                      const saldoDesta = Math.max(
+                        0,
+                        Math.round((vPrev - recBrutoDesta) * 100) / 100,
+                      )
+
+                      return (
+                        <tr key={prev.id} className="hover:bg-slate-50/80">
+                          <td className="p-2.5 font-bold text-slate-900">
+                            {prev.competencia || `Parcela ${prev.parcela_numero}`}
+                          </td>
+                          <td className="p-2.5 text-slate-600">
+                            {formatDateDisplay(prev.data_prevista)}
+                          </td>
+                          <td className="p-2.5 font-medium text-slate-800">R$ {fmtMoney(vPrev)}</td>
+                          <td className="p-2.5 font-semibold text-emerald-700">
+                            R$ {fmtMoney(recBrutoDesta)}
+                          </td>
+                          <td className="p-2.5 font-semibold text-amber-700">
+                            R$ {fmtMoney(saldoDesta)}
+                          </td>
+                          <td className="p-2.5">
+                            <Badge
+                              className={
+                                prev.status === 'Recebida' || saldoDesta === 0
+                                  ? 'bg-emerald-600 text-white'
+                                  : prev.status === 'Parcial' || recBrutoDesta > 0
+                                    ? 'bg-amber-500 text-white'
+                                    : prev.status === 'Cancelada'
+                                      ? 'bg-red-500 text-white'
+                                      : 'bg-slate-400 text-white'
+                              }
+                            >
+                              {saldoDesta === 0 && vPrev > 0
+                                ? 'Recebida'
+                                : recBrutoDesta > 0
+                                  ? 'Parcial'
+                                  : prev.status || 'Pendente'}
+                            </Badge>
+                          </td>
+                          <td className="p-2.5 text-right">
+                            {saldoDesta > 0 && (
+                              <Button
+                                asChild
+                                variant="ghost"
+                                size="sm"
+                                className="h-7 text-xs text-blue-600 hover:text-blue-800 hover:bg-blue-50 px-2"
+                              >
+                                <Link
+                                  to={`/financeiro?policy=${policy.policy_number || policy.numero_proposta || ''}&competencia=${encodeURIComponent(prev.competencia || '')}`}
+                                >
+                                  Receber
+                                </Link>
+                              </Button>
+                            )}
+                          </td>
+                        </tr>
+                      )
+                    })}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          )}
+
+          {/* ITEM 4, 5 & 6: RECEBIMENTOS E ESTORNOS REGISTRADOS */}
+          <div className="space-y-2 pt-1">
+            <div className="flex items-center justify-between">
+              <h4 className="text-xs font-bold text-slate-800 uppercase tracking-wider">
+                Recebimentos e Estornos
+              </h4>
+              {recebimentos.length > 0 && (
+                <span className="text-[11px] text-slate-500">
+                  {recebimentos.length} lançamento{recebimentos.length > 1 ? 's' : ''}
+                </span>
+              )}
+            </div>
+
+            {recebimentos.length === 0 ? (
+              <div className="p-4 bg-slate-50 border rounded-lg text-center text-xs text-slate-500">
+                Nenhum recebimento registrado para esta apólice ainda.
+              </div>
+            ) : (
+              <div className="overflow-x-auto border rounded-lg bg-white">
+                <table className="w-full text-left text-xs text-slate-700">
+                  <thead className="bg-slate-50 text-slate-600 font-semibold border-b">
+                    <tr>
+                      <th className="p-2.5">Data</th>
+                      <th className="p-2.5">Competência</th>
                       <th className="p-2.5">Valor Bruto</th>
-                      <th className="p-2.5">Impostos / Descontos</th>
+                      <th className="p-2.5">Impostos</th>
                       <th className="p-2.5">Valor Líquido</th>
-                      <th className="p-2.5">Origem / Observação</th>
+                      <th className="p-2.5">Observação</th>
                       <th className="p-2.5 text-right">Ações</th>
                     </tr>
                   </thead>
@@ -521,6 +672,9 @@ export default function PolicyDetail() {
                       <tr key={rec.id} className="hover:bg-slate-50/80">
                         <td className="p-2.5 font-medium">
                           {formatDateDisplay(rec.data_recebimento)}
+                        </td>
+                        <td className="p-2.5 font-medium text-slate-900">
+                          {rec.competencia || (rec.parcela ? `Parc. ${rec.parcela}` : '-')}
                         </td>
                         <td
                           className={`p-2.5 ${rec.is_estorno || rec.valor_bruto < 0 ? 'text-rose-600 font-bold' : 'font-medium'}`}
@@ -540,25 +694,18 @@ export default function PolicyDetail() {
                             : `R$ ${fmtMoney(rec.valor_liquido)}`}
                         </td>
                         <td className="p-2.5">
-                          <div className="flex flex-col">
-                            <div className="flex items-center gap-1.5">
-                              {rec.is_estorno && (
-                                <Badge
-                                  variant="outline"
-                                  className="text-[10px] bg-rose-50 text-rose-700 border-rose-200"
-                                >
-                                  Estorno
-                                </Badge>
-                              )}
-                              <span className="font-medium text-slate-800">
-                                {rec.origem || 'Manual'}
-                                {rec.competencia && ` • Comp: ${rec.competencia}`}
-                                {rec.parcela ? ` • Parc: ${rec.parcela}` : ''}
-                              </span>
-                            </div>
-                            {rec.observacao && (
-                              <span className="text-slate-500 text-[11px]">{rec.observacao}</span>
+                          <div className="flex items-center gap-1.5">
+                            {rec.is_estorno && (
+                              <Badge
+                                variant="outline"
+                                className="text-[10px] bg-rose-50 text-rose-700 border-rose-200"
+                              >
+                                Estorno
+                              </Badge>
                             )}
+                            <span className="text-slate-600 text-[11px]">
+                              {rec.observacao || rec.motivo_estorno || rec.origem || '-'}
+                            </span>
                           </div>
                         </td>
                         <td className="p-2.5 text-right">
@@ -572,7 +719,7 @@ export default function PolicyDetail() {
                                   setEstornandoRecebimento(rec)
                                   setIsEstornoOpen(true)
                                 }}
-                                title="Estornar recebimento"
+                                title="Registrar estorno"
                               >
                                 <RotateCcw className="w-3.5 h-3.5 mr-1" /> Estornar
                               </Button>
@@ -600,7 +747,7 @@ export default function PolicyDetail() {
                                   setDeletingRecebimento(rec)
                                   setIsDeleteRecebimentoOpen(true)
                                 }}
-                                title="Desfazer / Excluir recebimento"
+                                title="Excluir recebimento"
                               >
                                 <Trash2 className="w-3.5 h-3.5" />
                               </Button>
@@ -612,8 +759,8 @@ export default function PolicyDetail() {
                   </tbody>
                 </table>
               </div>
-            </div>
-          )}
+            )}
+          </div>
         </CardContent>
       </Card>
 
