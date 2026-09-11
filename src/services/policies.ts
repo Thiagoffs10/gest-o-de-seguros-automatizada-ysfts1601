@@ -3,6 +3,10 @@ import { Policy } from '@/types'
 
 import { formatDateForInput, todayLocalDate, toLocalDate } from '@/lib/utils'
 
+/**
+ * Prepara payload para CRIAÇÃO de uma nova apólice.
+ * Preenche valores default apenas quando não fornecidos, garantindo consistência inicial.
+ */
 export function preparePolicyPayload(data: Partial<Policy> & Record<string, any>) {
   const tipoSeguro = data.tipo_de_seguro || data.coverage_type || 'Auto'
   const validCoverageTypes = ['Auto', 'Vida', 'Residencial', 'Empresarial', 'Saúde', 'Outros']
@@ -275,16 +279,112 @@ export const getPolicy = async (id: string) => {
   })
 }
 
+/**
+ * Prepara payload para ATUALIZAÇÃO PARCIAL de apólice existente.
+ * REGRA CRÍTICA DE SANEAMENTO:
+ * Uma atualização parcial NUNCA pode inventar, zerar ou preencher campos que NÃO foram enviados no payload.
+ * Trata zero como número válido (diferenciando de null/undefined).
+ */
+export function preparePolicyUpdatePayload(data: Partial<Policy> & Record<string, any>) {
+  const payload: Record<string, any> = {}
+
+  // Copia estritamente os campos presentes em `data`
+  for (const key of Object.keys(data)) {
+    if (['id', 'created', 'updated', 'policy_code', 'expand'].includes(key)) continue
+    // Não permitir sobrescrita arbitrária de comissão_recebida via update genérico
+    if (key === 'comissao_recebida') continue
+
+    const val = (data as Record<string, any>)[key]
+
+    // Formatação de valores numéricos explícitos (zero é preservado!)
+    if (
+      [
+        'valor_bruto',
+        'valor_liquido',
+        'premium_amount',
+        'commission_percent',
+        'commission',
+        'iss',
+        'percentual_repasse',
+        'valor_repasse',
+      ].includes(key)
+    ) {
+      if (val !== undefined && val !== null && val !== '') {
+        payload[key] = Math.round(Number(val) * 100) / 100
+      }
+      continue
+    }
+
+    if (key === 'parcelas' || key === 'qtde_parcelas_esperadas') {
+      if (val !== undefined) {
+        payload[key] = val != null && val !== '' ? Math.round(Number(val)) : null
+      }
+      continue
+    }
+
+    // Datas: formatação limpa se enviadas
+    if (
+      [
+        'start_date',
+        'end_date',
+        'renewal_date',
+        'data_pagamento_parceiro',
+        'data_recebimento_comissao',
+        'data_cancelamento',
+      ].includes(key)
+    ) {
+      if (val !== undefined) {
+        payload[key] = val ? formatDateForInput(val) : null
+      }
+      continue
+    }
+
+    // Relacionamentos: evitar string vazia ""
+    if (['client', 'seguradora', 'parceiro', 'previous_policy'].includes(key)) {
+      if (val !== undefined) {
+        payload[key] = typeof val === 'string' && val.trim() === '' ? null : val
+      }
+      continue
+    }
+
+    // Strings de texto
+    if (typeof val === 'string') {
+      payload[key] = val.trim()
+      continue
+    }
+
+    // Outros tipos primitivos (booleanos, objetos, etc.)
+    if (val !== undefined) {
+      payload[key] = val
+    }
+  }
+
+  // Se tipo_de_seguro foi enviado, ajustar coverage_type correspondente apenas se não enviado
+  if ('tipo_de_seguro' in data && !('coverage_type' in payload)) {
+    const validCoverageTypes = ['Auto', 'Vida', 'Residencial', 'Empresarial', 'Saúde', 'Outros']
+    payload.coverage_type = validCoverageTypes.includes(data.tipo_de_seguro!)
+      ? data.tipo_de_seguro
+      : 'Outros'
+  }
+
+  return payload
+}
+
 export const createPolicy = async (data: Partial<Policy>) => {
   const cleanData = preparePolicyPayload(data)
   return pb.collection('policies').create<Policy>(cleanData)
 }
 
 export const updatePolicy = async (id: string, data: Partial<Policy>) => {
-  const cleanData = preparePolicyPayload(data)
+  const cleanData = preparePolicyUpdatePayload(data)
   return pb.collection('policies').update<Policy>(id, cleanData)
 }
 
+/**
+ * Cancelamento dedicado de apólice.
+ * Altera EXCLUSIVAMENTE status, data_cancelamento e motivo_cancelamento.
+ * Todo o restante da apólice (valores financeiros, seguradora, parceiro, vigências, ramo) permanece intacto.
+ */
 export const cancelPolicy = async (
   id: string,
   data: { data_cancelamento: string; motivo_cancelamento: string },
@@ -302,8 +402,13 @@ export const updatePolicyFinancial = async (
     pago_parceiro?: boolean
     data_pagamento_parceiro?: string | null
     forma_pagamento_repasse?: string | null
+    comissao_recebida?: boolean
+    data_recebimento_comissao?: string | null
   },
 ) => {
+  if (data.comissao_recebida === true && !data.data_recebimento_comissao) {
+    throw new Error('A data de recebimento é obrigatória ao marcar a comissão como recebida.')
+  }
   return pb.collection('policies').update<Policy>(id, data)
 }
 

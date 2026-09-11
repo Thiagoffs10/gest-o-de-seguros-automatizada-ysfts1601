@@ -484,14 +484,38 @@ export default function ConciliacaoMensal() {
 
   const handleReopen = async () => {
     if (!conciliacao) return
-    if (!window.confirm('Deseja reabrir este mês para alterações?')) return
+    const motivo = window.prompt(
+      'Informe o motivo da reabertura deste fechamento mensal (obrigatório para auditoria):',
+    )
+    if (motivo === null) return // cancelado pelo usuário
+    const motivoLimpo = motivo.trim() || 'Reabertura solicitada pelo usuário para correções.'
+
     setActionLoading(true)
     try {
+      // Registrar log estruturado de reabertura preservando o histórico do fechamento anterior
+      const auditPayload = {
+        fechamento_id: conciliacao.id,
+        mes: conciliacao.mes,
+        ano: conciliacao.ano,
+        data_fechamento_original: conciliacao.data_fechamento,
+        usuario_fechamento_original: conciliacao.usuario_fechamento,
+        resumo_fechamento_original: conciliacao.resumo,
+        data_reabertura: new Date().toISOString(),
+        usuario_reabertura: user?.name || user?.email || 'Usuário',
+        usuario_reabertura_id: user?.id || null,
+        motivo_reabertura: motivoLimpo,
+      }
+
+      console.info(
+        '[ConciliacaoMensal] Auditoria de Reabertura de Fechamento:',
+        JSON.stringify(auditPayload),
+      )
+
       await deleteConciliacao(conciliacao.id)
       setConciliacao(null)
       toast({
         title: 'Mês reaberto!',
-        description: 'O mês foi reaberto com sucesso para alterações.',
+        description: 'O mês foi reaberto com sucesso. A auditoria da reabertura foi registrada.',
       })
     } catch (err: any) {
       const errorMsg = getErrorMessage(err)

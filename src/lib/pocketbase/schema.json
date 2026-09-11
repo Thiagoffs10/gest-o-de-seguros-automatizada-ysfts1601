@@ -1,5 +1,5 @@
 {
-  "generatedAt": "2026-09-10T23:05:33.479Z",
+  "generatedAt": "2026-09-11T02:37:33.700Z",
   "collections": [
     {
       "name": "users",
@@ -813,11 +813,11 @@
       "name": "custos_fixos",
       "type": "base",
       "apiRules": {
-        "list": "@request.auth.role = 'Admin' || @request.auth.role = 'Administrador' || @request.auth.role = 'Gerente'",
-        "view": "@request.auth.role = 'Admin' || @request.auth.role = 'Administrador' || @request.auth.role = 'Gerente'",
+        "list": "@request.auth.id != ''",
+        "view": "@request.auth.id != ''",
         "create": "@request.auth.role = 'Admin' || @request.auth.role = 'Administrador' || @request.auth.role = 'Gerente'",
         "update": "@request.auth.role = 'Admin' || @request.auth.role = 'Administrador' || @request.auth.role = 'Gerente'",
-        "delete": "@request.auth.role = 'Admin' || @request.auth.role = 'Administrador' || @request.auth.role = 'Gerente'"
+        "delete": "@request.auth.role = 'Admin' || @request.auth.role = 'Administrador'"
       },
       "fields": [
         {
@@ -962,10 +962,10 @@
       "name": "conciliacoes",
       "type": "base",
       "apiRules": {
-        "list": "@request.auth.role = 'Admin' || @request.auth.role = 'Administrador' || @request.auth.role = 'Gerente'",
-        "view": "@request.auth.role = 'Admin' || @request.auth.role = 'Administrador' || @request.auth.role = 'Gerente'",
-        "create": "@request.auth.role = 'Admin' || @request.auth.role = 'Administrador'",
-        "update": "@request.auth.role = 'Admin' || @request.auth.role = 'Administrador'",
+        "list": "@request.auth.id != ''",
+        "view": "@request.auth.id != ''",
+        "create": "@request.auth.role = 'Admin' || @request.auth.role = 'Administrador' || @request.auth.role = 'Gerente'",
+        "update": "@request.auth.role = 'Admin' || @request.auth.role = 'Administrador' || @request.auth.role = 'Gerente'",
         "delete": "@request.auth.role = 'Admin' || @request.auth.role = 'Administrador'"
       },
       "fields": [
@@ -1424,9 +1424,9 @@
       "apiRules": {
         "list": "@request.auth.id != ''",
         "view": "@request.auth.id != ''",
-        "create": "@request.auth.id != ''",
-        "update": "@request.auth.id != ''",
-        "delete": "@request.auth.id != ''"
+        "create": "@request.auth.role = 'Admin' || @request.auth.role = 'Administrador' || @request.auth.role = 'Gerente'",
+        "update": "@request.auth.role = 'Admin' || @request.auth.role = 'Administrador' || @request.auth.role = 'Gerente'",
+        "delete": "@request.auth.role = 'Admin' || @request.auth.role = 'Administrador'"
       },
       "fields": [
         {

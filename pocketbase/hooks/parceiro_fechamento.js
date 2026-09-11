@@ -39,26 +39,30 @@ routerAdd(
     try {
       $app.runInTransaction((txApp) => {
         // 1. Buscar apólices com repasse pendente para este parceiro
+        // Regra de segurança: apenas apólices estritamente PENDENTES (pago_parceiro != true)
         // Regra de segurança: se valor_repasse for 0.00 explícito, não recalcular!
         var policies = txApp.findRecordsByFilter(
           'policies',
           'parceiro = {:parceiroId} && (pago_parceiro = false || pago_parceiro = null)',
           '-start_date',
-          500,
+          1000,
           0,
           { parceiroId: parceiroId },
         )
 
-        // Se houver filtro específico de apólices no payload, podemos respeitar
+        // Se houver filtro específico de apólices no payload, respeitar APENAS as que estão efetivamente pendentes
         var policyIdsFilter = body.policy_ids || []
         if (policyIdsFilter.length > 0) {
           policies = policies.filter(function (p) {
-            return policyIdsFilter.indexOf(p.id) !== -1
+            return policyIdsFilter.indexOf(p.id) !== -1 && !p.getBool('pago_parceiro')
           })
         }
 
+        // Validação estrita: impedir criação de pagamento quando não houver NENHUM item realmente pendente
         if (policies.length === 0) {
-          throw new Error('Nenhum repasse pendente encontrado para este parceiro.')
+          throw new Error(
+            'Nenhum repasse pendente encontrado para este parceiro. Itens já pagos não podem compor novo pagamento.',
+          )
         }
 
         var totalComissoes = 0
@@ -66,11 +70,19 @@ routerAdd(
 
         for (var i = 0; i < policies.length; i++) {
           var pol = policies[i]
+          // Defesa dupla: garantir que não está pago
+          if (pol.getBool('pago_parceiro')) {
+            continue
+          }
           var rep = pol.getNumber('valor_repasse')
-          // Se repasse for 0, continua 0 e nunca recalcula
+          // Se repasse for 0, continua 0 e nunca recalcula (preservar 0 explícito)
           if (rep < 0) rep = 0
           totalComissoes += rep
           paidPolicyIds.push(pol.id)
+        }
+
+        if (paidPolicyIds.length === 0) {
+          throw new Error('Nenhum item pendente elegível para inclusão neste pagamento.')
         }
 
         totalComissoes = Math.round(totalComissoes * 100) / 100
@@ -107,6 +119,10 @@ routerAdd(
           if (dInput.id) {
             try {
               existingDebito = txApp.findRecordById('parceiro_debitos', dInput.id)
+              // Se o débito já estiver 'Pago', ele NÃO pode compor o novo pagamento!
+              if (existingDebito.getString('status') === 'Pago') {
+                continue
+              }
             } catch (_) {}
           }
 

@@ -119,12 +119,33 @@ export const recalcularStatusApolice = async (policyId: string) => {
 export const createComissaoRecebimento = async (
   data: CreateComissaoRecebimentoPayload,
 ): Promise<ComissaoRecebimento> => {
+  // Regra crítica 6: Para novos recebimentos manuais, exigir data de recebimento válida
+  if (!data.data_recebimento || String(data.data_recebimento).trim() === '') {
+    throw new Error('A data de recebimento é obrigatória para registrar a comissão.')
+  }
+
   const bruto = Math.round(Number(data.valor_bruto) * 100) / 100
+  if (isNaN(bruto) || bruto <= 0) {
+    throw new Error('O valor bruto da comissão deve ser maior que zero.')
+  }
+
   const descontos = Math.round(Number(data.descontos_impostos || 0) * 100) / 100
   const liquido =
     data.valor_liquido !== undefined
       ? Math.round(Number(data.valor_liquido) * 100) / 100
       : Math.round(Math.max(0, bruto - descontos) * 100) / 100
+
+  // Auditoria do usuário responsável e data/hora da ação
+  const currentUser = pb.authStore.record
+  const userAuditoria = currentUser
+    ? `${currentUser.name || currentUser.email || currentUser.id}`
+    : 'Sistema'
+  const auditoriaTag = `[Recebido em ${new Date().toLocaleString('pt-BR')} por ${userAuditoria}]`
+
+  let obs = data.observacao ? String(data.observacao).trim() : ''
+  if (!obs.includes(auditoriaTag)) {
+    obs = obs ? `${obs} ${auditoriaTag}` : auditoriaTag
+  }
 
   const payload: Record<string, any> = {
     policy: data.policy,
@@ -133,7 +154,7 @@ export const createComissaoRecebimento = async (
     descontos_impostos: descontos,
     valor_liquido: liquido,
     origem: data.origem || 'Manual',
-    observacao: data.observacao ? String(data.observacao).trim() : '',
+    observacao: obs,
   }
 
   if (data.aliquota_imposto !== undefined && data.aliquota_imposto !== null) {
@@ -167,6 +188,9 @@ export const updateComissaoRecebimento = async (
   const payload: Record<string, any> = {}
 
   if (data.data_recebimento !== undefined) {
+    if (!data.data_recebimento || String(data.data_recebimento).trim() === '') {
+      throw new Error('A data de recebimento não pode ser vazia.')
+    }
     payload.data_recebimento = formatDateForInput(data.data_recebimento)
   }
 

@@ -287,6 +287,7 @@ export default function PartnerReport() {
     .reduce((s, e) => s + e.valorRepasse, 0)
 
   // Apólices pendentes de repasse para o parceiro selecionado no fechamento
+  // Proteção: estritamente itens pendentes (pago_parceiro != true)
   const pendingPoliciesToPay = useMemo(() => {
     return filteredPolicies.filter((p) => !p.pago_parceiro)
   }, [filteredPolicies])
@@ -466,7 +467,19 @@ export default function PartnerReport() {
 
     setIsSavingPagamento(true)
     try {
-      const policyIdsToPay = pendingPoliciesToPay.map((p) => p.id)
+      const policyIdsToPay = pendingPoliciesToPay.filter((p) => !p.pago_parceiro).map((p) => p.id)
+
+      if (policyIdsToPay.length === 0) {
+        toast({
+          title: 'Nenhum repasse pendente',
+          description:
+            'Não existem apólices com repasse pendente para liquidar. Itens já pagos não podem compor um novo pagamento.',
+          variant: 'destructive',
+        })
+        setIsMarkPaidConfirmOpen(false)
+        setIsSavingPagamento(false)
+        return
+      }
 
       // Chamada transacional ao endpoint seguro no servidor
       // Garante atomicidade: se falhar, nada é gravado.

@@ -94,31 +94,69 @@ export const liquidarDebitosPagamento = async (
   debitos: ParceiroDebitoItem[],
   parceiroId: string,
   pagamentoId: string,
+  totalRepasseDisponivel?: number,
 ) => {
+  let repasseRestante =
+    totalRepasseDisponivel !== undefined ? Math.max(0, totalRepasseDisponivel) : Infinity
+
   for (const deb of debitos) {
+    const val = Number(deb.valor) || 0
+    if (val <= 0) continue
+
     if (deb.id) {
       try {
-        await pb.collection('parceiro_debitos').update(deb.id, {
-          status: 'Pago',
-          pagamento: pagamentoId,
-          descricao: deb.descricao,
-          valor: deb.valor,
-        })
-      } catch {
-        // Continue if fails
+        if (repasseRestante >= val) {
+          // Liquidado integralmente
+          await pb.collection('parceiro_debitos').update(deb.id, {
+            status: 'Pago',
+            saldo_pendente: 0,
+            pagamento: pagamentoId,
+            descricao: deb.descricao,
+            valor: deb.valor,
+          })
+          repasseRestante = Math.round((repasseRestante - val) * 100) / 100
+        } else if (repasseRestante > 0) {
+          // Abate parcial: mantém pendente com saldo reduzido
+          const saldo = Math.round((val - repasseRestante) * 100) / 100
+          await pb.collection('parceiro_debitos').update(deb.id, {
+            status: 'Pendente',
+            saldo_pendente: saldo,
+            descricao: deb.descricao,
+          })
+          repasseRestante = 0
+        }
+      } catch (e) {
+        console.error('[liquidarDebitosPagamento] Erro ao atualizar débito:', e)
+        throw e
       }
     } else {
       try {
-        await pb.collection('parceiro_debitos').create({
-          parceiro: parceiroId,
-          descricao: deb.descricao,
-          valor: deb.valor,
-          status: 'Pago',
-          pagamento: pagamentoId,
-          data: todayLocalDate(),
-        })
-      } catch {
-        // Continue
+        if (repasseRestante >= val) {
+          await pb.collection('parceiro_debitos').create({
+            parceiro: parceiroId,
+            descricao: deb.descricao,
+            valor: deb.valor,
+            saldo_pendente: 0,
+            status: 'Pago',
+            pagamento: pagamentoId,
+            data: todayLocalDate(),
+          })
+          repasseRestante = Math.round((repasseRestante - val) * 100) / 100
+        } else if (repasseRestante > 0) {
+          const saldo = Math.round((val - repasseRestante) * 100) / 100
+          await pb.collection('parceiro_debitos').create({
+            parceiro: parceiroId,
+            descricao: deb.descricao,
+            valor: deb.valor,
+            saldo_pendente: saldo,
+            status: 'Pendente',
+            data: todayLocalDate(),
+          })
+          repasseRestante = 0
+        }
+      } catch (e) {
+        console.error('[liquidarDebitosPagamento] Erro ao criar débito:', e)
+        throw e
       }
     }
   }
