@@ -106,6 +106,12 @@ export default function Financial() {
   const [recebimentoInitialComp, setRecebimentoInitialComp] = useState<string | undefined>(
     undefined,
   )
+  const [recebimentoInitialPrevId, setRecebimentoInitialPrevId] = useState<string | undefined>(
+    undefined,
+  )
+  const [recebimentoInitialValor, setRecebimentoInitialValor] = useState<number | undefined>(
+    undefined,
+  )
   const [historyPolicy, setHistoryPolicy] = useState<Policy | null>(null)
   const [isEditRecebimentoOpen, setIsEditRecebimentoOpen] = useState(false)
   const [editingRecebimento, setEditingRecebimento] = useState<ComissaoRecebimento | null>(null)
@@ -148,15 +154,26 @@ export default function Financial() {
 
   const ITEMS_PER_PAGE = 10
 
-  // Lê eventual ?policy= e ?competencia= da URL (quando redirecionado de PolicyDetail)
+  // Lê eventual ?policy=, ?competencia=, ?prevId= e ?valor= da URL (quando redirecionado de PolicyDetail)
   useEffect(() => {
     const urlPolicy = searchParams.get('policy')
     const urlComp = searchParams.get('competencia')
+    const urlPrevId = searchParams.get('prevId')
+    const urlValor = searchParams.get('valor')
     if (urlPolicy) {
       setPolicySearchFilter(urlPolicy)
     }
     if (urlComp) {
       setRecebimentoInitialComp(urlComp)
+    }
+    if (urlPrevId) {
+      setRecebimentoInitialPrevId(urlPrevId)
+    }
+    if (urlValor) {
+      const parsedVal = Number(urlValor)
+      if (!isNaN(parsedVal) && parsedVal > 0) {
+        setRecebimentoInitialValor(parsedVal)
+      }
     }
   }, [searchParams])
 
@@ -527,9 +544,16 @@ export default function Financial() {
     return partnerPols.slice(start, start + ITEMS_PER_PAGE)
   }, [metrics?.partnerPols, repassePage])
 
-  const handleOpenRegistrarRecebimento = (policy: Policy, competenciaPreenchida?: string) => {
+  const handleOpenRegistrarRecebimento = (
+    policy: Policy,
+    competenciaPreenchida?: string,
+    prevId?: string,
+    valorPrevisto?: number,
+  ) => {
     setRecebimentoPolicy(policy)
     setRecebimentoInitialComp(competenciaPreenchida || undefined)
+    setRecebimentoInitialPrevId(prevId)
+    setRecebimentoInitialValor(valorPrevisto)
   }
 
   const handleConfirmDeleteRecebimento = async () => {
@@ -920,7 +944,12 @@ export default function Financial() {
                                 size="sm"
                                 className="bg-emerald-600 hover:bg-emerald-700 text-white text-xs h-7 px-2 shadow-xs"
                                 onClick={() =>
-                                  handleOpenRegistrarRecebimento(targetPolicy, prev.competencia)
+                                  handleOpenRegistrarRecebimento(
+                                    targetPolicy,
+                                    prev.competencia,
+                                    prev.id,
+                                    Number(prev.valor_previsto),
+                                  )
                                 }
                               >
                                 <ArrowDownCircle className="w-3.5 h-3.5 mr-1" />
@@ -1259,11 +1288,15 @@ export default function Financial() {
           if (!open) {
             setRecebimentoPolicy(null)
             setRecebimentoInitialComp(undefined)
+            setRecebimentoInitialPrevId(undefined)
+            setRecebimentoInitialValor(undefined)
           }
         }}
         policy={recebimentoPolicy}
         seguradoras={seguradoras}
         initialCompetencia={recebimentoInitialComp}
+        comissaoPrevistaId={recebimentoInitialPrevId}
+        initialValorBruto={recebimentoInitialValor}
         alreadyReceived={
           recebimentoPolicy
             ? (receivedGrossByPolicy.get(recebimentoPolicy.id) ??

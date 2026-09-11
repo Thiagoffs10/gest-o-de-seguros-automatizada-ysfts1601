@@ -620,7 +620,7 @@ export default function PolicyDetail() {
                                 className="h-7 text-xs text-blue-600 hover:text-blue-800 hover:bg-blue-50 px-2"
                               >
                                 <Link
-                                  to={`/financeiro?policy=${policy.policy_number || policy.numero_proposta || ''}&competencia=${encodeURIComponent(prev.competencia || '')}`}
+                                  to={`/financeiro?policy=${policy.policy_number || policy.numero_proposta || ''}&competencia=${encodeURIComponent(prev.competencia || '')}&prevId=${encodeURIComponent(prev.id)}&valor=${encodeURIComponent(String(prev.valor_previsto || ''))}`}
                                 >
                                   Receber
                                 </Link>
