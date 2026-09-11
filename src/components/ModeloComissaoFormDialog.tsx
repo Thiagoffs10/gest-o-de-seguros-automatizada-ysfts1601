@@ -76,10 +76,6 @@ export function ModeloComissaoFormDialog({
     { mes_inicio: 4, mes_fim: null, percentual: 2 },
   ])
 
-  // Campos específicos de POR_ESGOTAMENTO
-  const [saldoTotal, setSaldoTotal] = useState<number | ''>(1000)
-  const [valorParcelaEstimada, setValorParcelaEstimada] = useState<number | ''>(250)
-
   const [loading, setLoading] = useState(false)
 
   useEffect(() => {
@@ -103,9 +99,6 @@ export function ModeloComissaoFormDialog({
         if (cfg.percentual_recorrente != null)
           setPercentualRecorrente(Number(cfg.percentual_recorrente))
         if (cfg.fases && cfg.fases.length > 0) setFases(cfg.fases)
-        if (cfg.saldo_total != null) setSaldoTotal(Number(cfg.saldo_total))
-        if (cfg.valor_estimado_parcela != null)
-          setValorParcelaEstimada(Number(cfg.valor_estimado_parcela))
       } else {
         setNome('')
         setTipoModelo('A_VISTA')
@@ -122,8 +115,6 @@ export function ModeloComissaoFormDialog({
           { mes_inicio: 1, mes_fim: 3, percentual: 100 },
           { mes_inicio: 4, mes_fim: null, percentual: 2 },
         ])
-        setSaldoTotal(1000)
-        setValorParcelaEstimada(250)
       }
     }
   }, [open, initialData])
@@ -174,9 +165,8 @@ export function ModeloComissaoFormDialog({
       config_json.fases = fases
       config_json.recorrencia_meses_horizonte = 12
     } else if (tipoModelo === 'POR_ESGOTAMENTO') {
-      config_json.saldo_total = saldoTotal !== '' ? Number(saldoTotal) : null
-      config_json.valor_estimado_parcela =
-        valorParcelaEstimada !== '' ? Number(valorParcelaEstimada) : null
+      // Por saldo/esgotamento: não exige saldo manual nem estimativa de parcela;
+      // o saldo total esperado é calculado automaticamente pela Comissão Líquida Prevista da apólice.
     }
 
     try {
@@ -589,38 +579,12 @@ export function ModeloComissaoFormDialog({
             )}
 
             {tipoModelo === 'POR_ESGOTAMENTO' && (
-              <div className="space-y-3">
-                <div className="grid grid-cols-2 gap-3">
-                  <div>
-                    <Label className="text-xs font-semibold">Saldo Total Previsto (R$)</Label>
-                    <Input
-                      type="number"
-                      step="0.01"
-                      className="bg-white"
-                      placeholder="1000,00"
-                      value={saldoTotal}
-                      onChange={(e) =>
-                        setSaldoTotal(e.target.value === '' ? '' : Number(e.target.value))
-                      }
-                    />
-                  </div>
-                  <div>
-                    <Label className="text-xs font-semibold">Valor Estimado por Parcela (R$)</Label>
-                    <Input
-                      type="number"
-                      step="0.01"
-                      className="bg-white"
-                      placeholder="250,00"
-                      value={valorParcelaEstimada}
-                      onChange={(e) =>
-                        setValorParcelaEstimada(e.target.value === '' ? '' : Number(e.target.value))
-                      }
-                    />
-                  </div>
-                </div>
-                <p className="text-[11px] text-slate-500">
-                  Existe um total de comissão e os pagamentos continuarão até consumir totalmente o
-                  saldo.
+              <div className="p-3 bg-blue-50/70 border border-blue-200 rounded-md text-xs space-y-1">
+                <p className="font-semibold text-blue-900">Por saldo/esgotamento</p>
+                <p className="text-slate-600">
+                  Não requer preenchimento de saldo manual nem estimativa de parcela. Cada apólice
+                  vinculada usará automaticamente sua própria Comissão Líquida Prevista como saldo
+                  total esperado, e os recebimentos registrarão as baixas até o saldo zerar.
                 </p>
               </div>
             )}

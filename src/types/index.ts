@@ -300,11 +300,13 @@ export const TIPOS_NATIVOS_RECEBIMENTO: Record<TipoModeloComissao, TipoNativoRec
   POR_ESGOTAMENTO: {
     id: 'POR_ESGOTAMENTO',
     nome: 'Por saldo/esgotamento',
-    descricaoCurta: 'Existe um total a receber e cada recebimento reduz o saldo até zerar.',
+    descricaoCurta:
+      'Usa a comissão líquida prevista como saldo e cada recebimento reduz até zerar.',
     descricaoCompleta:
-      'Existe um total de comissão a receber. Cada recebimento reduz esse saldo até ele ser totalmente esgotado.',
-    resumoAposSelecao: 'Existe um saldo total a receber; os recebimentos reduzem até zerar.',
-    exemplo: 'Ex.: Comissão total contratada de R$ 1.000,00 consumida em parcelas até esgotar.',
+      'O sistema usa automaticamente a comissão líquida prevista como saldo total esperado. Não exige estimativa de parcela; cada baixa reduz o saldo até a quitação integral.',
+    resumoAposSelecao:
+      'Saldo baseado na comissão líquida prevista; baixas reduzem o saldo até zerar.',
+    exemplo: 'Ex.: Comissão líquida prevista de R$ 1.000,00 consumida em baixas até esgotar.',
   },
 }
 

@@ -62,6 +62,7 @@ export function calcularPrevisoesComissao(
     premium_amount?: number
     commission_percent?: number
     commission?: number
+    iss?: number
   },
   modelo: {
     tipo_modelo: TipoModeloComissao
@@ -267,64 +268,31 @@ export function calcularPrevisoesComissao(
     }
 
     case 'POR_ESGOTAMENTO': {
-      // ITEM 10: Continuar gerando até esgotar o saldo, sem parar arbitrariamente em 36 competências se ainda houver saldo.
-      const totalSaldo = Number(
-        config.saldo_total != null && Number(config.saldo_total) > 0
-          ? config.saldo_total
-          : policy.commission != null && Number(policy.commission) > 0
-            ? policy.commission
-            : Math.round(
-                ((basePremio * Number(modelo.percentual_padrao || policy.commission_percent || 0)) /
-                  100) *
-                  100,
-              ) / 100,
-      )
+      // Regra Por saldo/esgotamento:
+      // O sistema usa AUTOMATICAMENTE a "Comissão Líquida Prevista" da apólice como valor total esperado.
+      // NÃO calcula nem exibe "Estimativa de Parcela" e não exige valor manual de saldo previsto.
+      // Gera uma ÚNICA previsão com valor_previsto = Comissão Líquida Prevista (commission − iss).
+      const commBruta =
+        policy.commission != null && Number(policy.commission) > 0
+          ? Number(policy.commission)
+          : Math.round(
+              ((basePremio * Number(modelo.percentual_padrao || policy.commission_percent || 0)) /
+                100) *
+                100,
+            ) / 100
 
-      const valorParcelaEstimada = Number(
-        config.valor_estimado_parcela && Number(config.valor_estimado_parcela) > 0
-          ? config.valor_estimado_parcela
-          : totalSaldo > 0
-            ? Math.round((totalSaldo / 4) * 100) / 100
-            : 0,
-      )
+      const issVal = policy.iss != null ? Number(policy.iss) : 0
+      const totalLiquidoEsperado = Math.max(0, Math.round((commBruta - issVal) * 100) / 100)
 
-      if (totalSaldo <= 0) {
-        const { dateStr, comp } = addMonthsToDateWithClamp(startDateStr, 0)
-        previsoes.push({
-          competencia: comp,
-          data_prevista: dateStr,
-          valor_previsto: 0,
-          parcela_numero: 1,
-          origem_modelo: nomeModelo,
-          observacao: 'Por esgotamento — saldo R$ 0',
-        })
-        break
-      }
-
-      let saldoRestante = totalSaldo
-      let parcIndex = 1
-      // Limite seguro superior para evitar loop infinito em erros de digitação (ex: 360 meses = 30 anos)
-      const maxIter = options?.horizonteEsgotamentoMax || 240
-
-      while (saldoRestante > 0.009 && parcIndex <= maxIter) {
-        const valParc = Math.min(
-          saldoRestante,
-          valorParcelaEstimada > 0 ? valorParcelaEstimada : saldoRestante,
-        )
-        const { dateStr, comp } = addMonthsToDateWithClamp(startDateStr, parcIndex - 1)
-
-        previsoes.push({
-          competencia: comp,
-          data_prevista: dateStr,
-          valor_previsto: Math.round(valParc * 100) / 100,
-          parcela_numero: parcIndex,
-          origem_modelo: nomeModelo,
-          observacao: `Esgotamento — Parcela ${parcIndex} (Saldo inicial: R$ ${totalSaldo.toFixed(2)})`,
-        })
-
-        saldoRestante = Math.round((saldoRestante - valParc) * 100) / 100
-        parcIndex++
-      }
+      const { dateStr, comp } = addMonthsToDateWithClamp(startDateStr, 0)
+      previsoes.push({
+        competencia: comp,
+        data_prevista: dateStr,
+        valor_previsto: totalLiquidoEsperado,
+        parcela_numero: 1,
+        origem_modelo: nomeModelo,
+        observacao: `Por saldo/esgotamento — Comissão Líquida Prevista: R$ ${totalLiquidoEsperado.toFixed(2)}`,
+      })
       break
     }
 

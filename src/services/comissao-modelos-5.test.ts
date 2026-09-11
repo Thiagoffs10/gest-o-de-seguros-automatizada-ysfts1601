@@ -111,25 +111,26 @@ describe('Motor de Cálculo de Previsões de Comissão (5 Modelos)', () => {
   })
 
   // MODELO 5: POR SALDO / ESGOTAMENTO
-  // Exemplo da spec: Total R$ 1.000, parcelas de consumo até esgotar o saldo
-  it('5. POR SALDO / ESGOTAMENTO: R$ 1.000 com parcelas de R$ 300 consome até zerar o saldo', () => {
-    const res = calcularPrevisoesComissao(basePolicy, {
-      tipo_modelo: 'POR_ESGOTAMENTO',
-      nome: 'Consórcio Esgotamento',
-      config_json: {
-        saldo_total: 1000,
-        valor_estimado_parcela: 300,
+  // Regra atualizada: NÃO calcula estimativa de parcelas nem cria série de competências estimadas.
+  // Utiliza automaticamente a Comissão Líquida Prevista da apólice como valor total esperado (sem saldo_total manual).
+  it('5. POR SALDO / ESGOTAMENTO: gera previsão única com a comissão líquida prevista como saldo inicial', () => {
+    const res = calcularPrevisoesComissao(
+      {
+        ...basePolicy,
+        commission: 1000,
+        iss: 50,
       },
-    })
+      {
+        tipo_modelo: 'POR_ESGOTAMENTO',
+        nome: 'Consórcio Esgotamento',
+        config_json: {},
+      },
+    )
 
-    // 1000 = 300 + 300 + 300 + 100 = 4 parcelas
-    expect(res).toHaveLength(4)
-    expect(res[0].valor_previsto).toBe(300)
-    expect(res[1].valor_previsto).toBe(300)
-    expect(res[2].valor_previsto).toBe(300)
-    expect(res[3].valor_previsto).toBe(100)
-
-    const soma = res.reduce((acc, p) => acc + p.valor_previsto, 0)
-    expect(soma).toBe(1000)
+    // Previsão única com o saldo total líquido esperado (1000 - 50 = 950)
+    expect(res).toHaveLength(1)
+    expect(res[0].valor_previsto).toBe(950)
+    expect(res[0].parcela_numero).toBe(1)
+    expect(res[0].observacao).toContain('Por saldo/esgotamento')
   })
 })

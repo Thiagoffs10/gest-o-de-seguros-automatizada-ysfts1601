@@ -93,8 +93,6 @@ const DEFAULT_FORM = {
     { mes_inicio: 1, mes_fim: 3, percentual: 100 },
     { mes_inicio: 4, mes_fim: null, percentual: 2 },
   ] as FaseModelo[],
-  personalizada_saldo_total: 1000,
-  personalizada_valor_estimado_parcela: 250,
   ajuste_manual_excepcional: false,
 }
 interface Props {
@@ -286,28 +284,19 @@ function RecebimentoParametros({
   }
 
   if (tipo === 'POR_ESGOTAMENTO') {
+    const comissaoLiq = Math.max(
+      0,
+      Math.round((Number(form.commission || 0) - Number(form.iss || 0)) * 100) / 100,
+    )
     return (
-      <div className="grid grid-cols-2 gap-2">
-        <div>
-          <Label className="text-[11px] text-slate-700">Saldo Total Previsto (R$)</Label>
-          <Input
-            type="number"
-            step="0.01"
-            className="bg-white h-8 text-xs mt-0.5"
-            value={form.personalizada_saldo_total || form.commission || 1000}
-            onChange={(e) => set('personalizada_saldo_total', Number(e.target.value))}
-          />
-        </div>
-        <div>
-          <Label className="text-[11px] text-slate-700">Estimativa Parcela (R$)</Label>
-          <Input
-            type="number"
-            step="0.01"
-            className="bg-white h-8 text-xs mt-0.5"
-            value={form.personalizada_valor_estimado_parcela || 250}
-            onChange={(e) => set('personalizada_valor_estimado_parcela', Number(e.target.value))}
-          />
-        </div>
+      <div className="p-2.5 bg-blue-50/70 border border-blue-200 rounded-md text-[11px] text-slate-700">
+        <p className="font-medium text-blue-900">Por saldo/esgotamento:</p>
+        <p className="mt-0.5 text-slate-600">
+          O saldo total esperado é a Comissão Líquida Prevista desta apólice (R${' '}
+          {comissaoLiq.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}). O sistema não
+          calcula nem exibe estimativa de parcela e não exige valor manual; cada recebimento
+          registrado reduzirá o saldo a receber até sua total quitação.
+        </p>
       </div>
     )
   }
@@ -436,8 +425,6 @@ export function PolicyFormDialog({
                 { mes_inicio: 1, mes_fim: 3, percentual: 100 },
                 { mes_inicio: 4, mes_fim: null, percentual: 2 },
               ],
-        personalizada_saldo_total: customCfg.saldo_total || 1000,
-        personalizada_valor_estimado_parcela: customCfg.valor_estimado_parcela || 250,
         ajuste_manual_excepcional: Boolean(customCfg.ajuste_manual_excepcional),
       })
       if (initialData.modelo_comissao) {
@@ -576,14 +563,6 @@ export function PolicyFormDialog({
             ? Number(form.personalizada_horizonte_meses || 12)
             : undefined,
         fases: tipoEscolhido === 'POR_FASES' ? form.personalizada_fases || [] : undefined,
-        saldo_total:
-          tipoEscolhido === 'POR_ESGOTAMENTO'
-            ? Number(form.personalizada_saldo_total || form.commission || 0)
-            : undefined,
-        valor_estimado_parcela:
-          tipoEscolhido === 'POR_ESGOTAMENTO'
-            ? Number(form.personalizada_valor_estimado_parcela || 0)
-            : undefined,
       }
 
       await onSubmit({

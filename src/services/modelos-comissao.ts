@@ -311,6 +311,7 @@ export const syncPrevisoesForPolicy = async (
       premium_amount: policy.premium_amount,
       commission_percent: policy.commission_percent,
       commission: policy.commission,
+      iss: policy.iss,
     },
     modelo,
   )
