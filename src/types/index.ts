@@ -135,6 +135,15 @@ export interface Policy {
     tipo_modelo?: TipoModeloComissao
     percentual_padrao?: number
   }
+  modelo_comissao_snapshot?: {
+    modelo_id?: string
+    nome?: string
+    tipo_modelo?: TipoModeloComissao
+    percentual_padrao?: number
+    config_json?: ModeloComissaoConfig
+    data_snapshot?: string
+    versao?: number
+  }
   historico_alteracao_comissao?: ComissaoAlteracaoHistorico[]
 }
 

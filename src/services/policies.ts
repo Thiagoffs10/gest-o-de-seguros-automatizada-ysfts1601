@@ -432,11 +432,44 @@ export const cancelPolicy = async (
   id: string,
   data: { data_cancelamento: string; motivo_cancelamento: string },
 ) => {
-  return pb.collection('policies').update<Policy>(id, {
+  const cancelDateFormatted = formatDateForInput(data.data_cancelamento) || todayLocalDate()
+  const motivoFormatted = data.motivo_cancelamento ? String(data.motivo_cancelamento).trim() : ''
+
+  // 1. Atualizar a apólice preservando todos os dados financeiros existentes
+  const updatedPolicy = await pb.collection('policies').update<Policy>(id, {
     status: 'Cancelada',
-    data_cancelamento: formatDateForInput(data.data_cancelamento),
-    motivo_cancelamento: data.motivo_cancelamento ? String(data.motivo_cancelamento).trim() : '',
+    data_cancelamento: cancelDateFormatted,
+    motivo_cancelamento: motivoFormatted,
   })
+
+  // 2. ITEM 11: Cancelamento inteligente de previsões futuras pendentes.
+  // Previsões futuras estritamente 'Pendente' viram status 'Cancelada' (sem apagar do histórico),
+  // deixando de contar como recebível. Recebimentos parciais e recebidos permanecem intactos.
+  try {
+    const previsoes = await pb.collection('comissoes_previstas').getFullList<ComissaoPrevista>({
+      filter: `policy = "${id}"`,
+    })
+
+    const recebimentos = await pb.collection('comissao_recebimentos').getFullList({
+      filter: `policy = "${id}"`,
+    })
+
+    for (const prev of previsoes) {
+      const temRecebimento = recebimentos.some((r) => r.comissao_prevista === prev.id)
+      if (prev.status === 'Pendente' && !temRecebimento) {
+        await pb.collection('comissoes_previstas').update(prev.id, {
+          status: 'Cancelada',
+          observacao: prev.observacao
+            ? `${prev.observacao} [Cancelada junto à apólice em ${cancelDateFormatted}]`
+            : `Cancelada junto à apólice em ${cancelDateFormatted}`,
+        })
+      }
+    }
+  } catch {
+    /* intentionally ignored */
+  }
+
+  return updatedPolicy
 }
 
 export const updatePolicyFinancial = async (
