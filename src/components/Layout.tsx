@@ -20,6 +20,7 @@ import {
   Database,
   ClipboardCheck,
   Layers,
+  Boxes,
 } from 'lucide-react'
 import logoImg from '@/assets/cred10mixlogooficialfundobranco4k-12574.jpg'
 import { useAuth } from '@/hooks/use-auth'
@@ -75,8 +76,7 @@ export default function Layout() {
     { title: 'Apólices', path: '/apolices', icon: FileText },
     { title: 'Pipeline', path: '/pipeline', icon: LayoutGrid },
     { title: 'Parceiros', path: '/parceiros', icon: Handshake },
-    { title: 'Seguradoras', path: '/seguradoras', icon: Building2 },
-    { title: 'Modelos de Recebimento', path: '/modelos-comissao', icon: Layers },
+    { title: 'Cadastros', path: '/cadastros', icon: Boxes },
     { title: 'Financeiro', path: '/financeiro', icon: Wallet },
     ...(can('conciliacoes', 'read')
       ? [{ title: 'Conciliação', path: '/conciliacao-mensal', icon: ClipboardCheck }]

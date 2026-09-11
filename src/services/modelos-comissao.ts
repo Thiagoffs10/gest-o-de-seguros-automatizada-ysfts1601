@@ -125,24 +125,29 @@ export const findSuggestedModelo = async (
 
     if (list.length === 0) return null
 
-    // 1. Tentar match exato seguradora + tipo_seguro
+    // 1. Tentar match exato seguradora + tipo_seguro (produto comercial ou ramo)
     if (seguradoraId && tipoSeguro) {
       const matchBoth = list.find(
-        (m) => m.seguradora === seguradoraId && m.tipo_seguro === tipoSeguro,
+        (m) =>
+          m.seguradora === seguradoraId &&
+          m.tipo_seguro &&
+          m.tipo_seguro.toLowerCase() === tipoSeguro.toLowerCase(),
       )
       if (matchBoth) return matchBoth
     }
 
-    // 2. Tentar match apenas por seguradora
+    // 2. Tentar match exato apenas por tipo_seguro (caso modelo seja genérico daquele produto para todas as companhias)
+    if (tipoSeguro) {
+      const matchTipo = list.find(
+        (m) => m.tipo_seguro && m.tipo_seguro.toLowerCase() === tipoSeguro.toLowerCase(),
+      )
+      if (matchTipo) return matchTipo
+    }
+
+    // 3. Tentar match por seguradora (modelo padrão da companhia sem produto específico)
     if (seguradoraId) {
       const matchSeg = list.find((m) => m.seguradora === seguradoraId)
       if (matchSeg) return matchSeg
-    }
-
-    // 3. Tentar match apenas por tipo de seguro
-    if (tipoSeguro) {
-      const matchTipo = list.find((m) => m.tipo_seguro === tipoSeguro)
-      if (matchTipo) return matchTipo
     }
 
     return null

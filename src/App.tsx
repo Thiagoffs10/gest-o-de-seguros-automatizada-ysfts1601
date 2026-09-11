@@ -18,6 +18,7 @@ import PolicyDetail from '@/pages/PolicyDetail'
 import Parceiros from '@/pages/Parceiros'
 import Seguradoras from '@/pages/Seguradoras'
 import ModelosComissao from '@/pages/ModelosComissao'
+import CadastrosSistema from '@/pages/CadastrosSistema'
 import PartnerReport from '@/pages/PartnerReport'
 import Financial from '@/pages/Financial'
 import ConciliacaoMensal from '@/pages/ConciliacaoMensal'
@@ -52,6 +53,8 @@ const App = () => (
                 <Route path="/apolices" element={<Policies />} />
                 <Route path="/apolices/:id" element={<PolicyDetail />} />
                 <Route path="/parceiros" element={<Parceiros />} />
+                <Route path="/cadastros" element={<CadastrosSistema />} />
+                <Route path="/cadastros-sistema" element={<Navigate to="/cadastros" replace />} />
                 <Route path="/seguradoras" element={<Seguradoras />} />
                 <Route path="/modelos-comissao" element={<ModelosComissao />} />
                 <Route path="/relatorio-comissoes" element={<PartnerReport />} />

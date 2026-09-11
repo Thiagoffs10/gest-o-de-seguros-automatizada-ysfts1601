@@ -8,8 +8,7 @@ import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Checkbox } from '@/components/ui/checkbox'
 import { SecretsGuideDialog } from '@/components/SecretsGuideDialog'
-import { TiposSeguroManager } from '@/components/TiposSeguroManager'
-import { Layers } from 'lucide-react'
+import { Boxes, Building2, Layers, Package, SlidersHorizontal, ArrowRight } from 'lucide-react'
 import { Link } from 'react-router-dom'
 import { useToast } from '@/hooks/use-toast'
 import pb from '@/lib/pocketbase/client'
@@ -73,6 +72,79 @@ export default function Settings() {
         </CardContent>
       </Card>
 
+      {/* Bloco Centralizador: Cadastros do Sistema (ETAPA 2B) */}
+      <Card className="shadow-sm border-blue-200 bg-gradient-to-br from-blue-50/40 via-white to-slate-50">
+        <CardHeader className="pb-3">
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-2.5">
+              <div className="p-2 bg-blue-600 text-white rounded-lg shadow-xs">
+                <Boxes className="w-5 h-5" />
+              </div>
+              <div>
+                <CardTitle className="text-base font-bold text-slate-900">
+                  Cadastros do Sistema
+                </CardTitle>
+                <CardDescription className="text-xs text-slate-500 mt-0.5">
+                  Central única de cadastros: Seguradoras, Ramos, Produtos e Modelos de Recebimento.
+                </CardDescription>
+              </div>
+            </div>
+            <Link to="/cadastros">
+              <Button size="sm" className="bg-blue-600 hover:bg-blue-700 text-white">
+                Acessar Cadastros <ArrowRight className="w-4 h-4 ml-1.5" />
+              </Button>
+            </Link>
+          </div>
+        </CardHeader>
+        <CardContent className="pt-2">
+          <div className="grid grid-cols-2 sm:grid-cols-4 gap-2.5">
+            <Link
+              to="/cadastros?tab=seguradoras"
+              className="p-3 bg-white rounded-lg border border-slate-200 hover:border-blue-400 hover:shadow-xs transition-all flex flex-col items-start gap-1 group"
+            >
+              <Building2 className="w-4 h-4 text-blue-600 group-hover:scale-110 transition-transform" />
+              <span className="text-xs font-bold text-slate-800">Seguradoras</span>
+              <span className="text-[11px] text-slate-500 leading-tight">
+                Companhias e alíquotas de ISS
+              </span>
+            </Link>
+
+            <Link
+              to="/cadastros?tab=ramos"
+              className="p-3 bg-white rounded-lg border border-slate-200 hover:border-blue-400 hover:shadow-xs transition-all flex flex-col items-start gap-1 group"
+            >
+              <Layers className="w-4 h-4 text-blue-600 group-hover:scale-110 transition-transform" />
+              <span className="text-xs font-bold text-slate-800">Ramos</span>
+              <span className="text-[11px] text-slate-500 leading-tight">
+                Linhas de seguro do sistema
+              </span>
+            </Link>
+
+            <Link
+              to="/cadastros?tab=produtos"
+              className="p-3 bg-white rounded-lg border border-slate-200 hover:border-blue-400 hover:shadow-xs transition-all flex flex-col items-start gap-1 group"
+            >
+              <Package className="w-4 h-4 text-blue-600 group-hover:scale-110 transition-transform" />
+              <span className="text-xs font-bold text-slate-800">Produtos</span>
+              <span className="text-[11px] text-slate-500 leading-tight">
+                Produtos comerciais por companhia
+              </span>
+            </Link>
+
+            <Link
+              to="/cadastros?tab=modelos"
+              className="p-3 bg-white rounded-lg border border-slate-200 hover:border-blue-400 hover:shadow-xs transition-all flex flex-col items-start gap-1 group"
+            >
+              <SlidersHorizontal className="w-4 h-4 text-blue-600 group-hover:scale-110 transition-transform" />
+              <span className="text-xs font-bold text-slate-800">Modelos</span>
+              <span className="text-[11px] text-slate-500 leading-tight">
+                5 modelos de comissionamento
+              </span>
+            </Link>
+          </div>
+        </CardContent>
+      </Card>
+
       <Card className="shadow-sm">
         <CardHeader>
           <CardTitle className="text-base font-bold flex items-center gap-2">
@@ -102,31 +174,6 @@ export default function Settings() {
               Exibir notificações de aniversariantes do mês
             </Label>
           </div>
-        </CardContent>
-      </Card>
-
-      <TiposSeguroManager />
-
-      <Card className="shadow-sm">
-        <CardHeader>
-          <CardTitle className="text-base font-bold flex items-center gap-2">
-            <Layers className="w-5 h-5 text-blue-600" />
-            Modelos de Recebimento de Comissões
-          </CardTitle>
-          <CardDescription>
-            Configure os 5 modelos de comissão (à vista, parcelada, recorrente, por fases ou
-            esgotamento) e sugestões por seguradora.
-          </CardDescription>
-        </CardHeader>
-        <CardContent className="flex items-center justify-between">
-          <p className="text-sm text-slate-600">
-            Gerencie e crie regras pré-definidas para cálculo automático de previsões de comissão.
-          </p>
-          <Link to="/modelos-comissao">
-            <Button variant="outline" className="text-blue-600 border-blue-200 hover:bg-blue-50">
-              Gerenciar Modelos
-            </Button>
-          </Link>
         </CardContent>
       </Card>
 

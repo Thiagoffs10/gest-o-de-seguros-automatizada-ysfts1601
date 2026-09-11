@@ -1,17 +1,7 @@
 import { useState, useEffect } from 'react'
-import {
-  Layers,
-  Plus,
-  Edit2,
-  Trash2,
-  CheckCircle2,
-  Calendar,
-  Building2,
-  ShieldAlert,
-  Percent,
-} from 'lucide-react'
+import { Layers, Plus, Edit2, Trash2, HelpCircle, Building2, Calendar } from 'lucide-react'
 import { Button } from '@/components/ui/button'
-import { Card, CardHeader, CardTitle, CardContent } from '@/components/ui/card'
+import { Card, CardHeader, CardTitle, CardContent, CardDescription } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
 import {
   Table,
@@ -40,12 +30,13 @@ import { Produto } from '@/types'
 import { ModeloComissaoFormDialog } from '@/components/ModeloComissaoFormDialog'
 import { useToast } from '@/hooks/use-toast'
 import { formatDateDisplay } from '@/lib/utils'
+import { usePermissions } from '@/hooks/use-permissions'
+import { useRealtime } from '@/hooks/use-realtime'
+import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip'
 
-import { Link } from 'react-router-dom'
-import { Boxes, ArrowRight } from 'lucide-react'
-
-export function ModelosComissao() {
+export function CadastrosModelosRecebimentoTab() {
   const { toast } = useToast()
+  const { can } = usePermissions()
   const [modelos, setModelos] = useState<ModeloComissao[]>([])
   const [seguradoras, setSeguradoras] = useState<Seguradora[]>([])
   const [tiposSeguro, setTiposSeguro] = useState<TipoSeguro[]>([])
@@ -85,6 +76,11 @@ export function ModelosComissao() {
   useEffect(() => {
     loadData()
   }, [])
+
+  useRealtime('modelos_comissao', () => loadData())
+  useRealtime('seguradoras', () => loadData())
+  useRealtime('tipos_seguro', () => loadData())
+  useRealtime('produtos', () => loadData())
 
   const handleDelete = async () => {
     if (!deleteId) return
@@ -132,75 +128,63 @@ export function ModelosComissao() {
     }
   }
 
+  const canCreate = can('modelos_comissao', 'create')
+  const canUpdate = can('modelos_comissao', 'update')
+  const canDelete = can('modelos_comissao', 'delete')
+
   return (
-    <div className="space-y-6">
-      {/* Banner de atalho para a Central de Cadastros */}
-      <div className="p-3 bg-blue-50 border border-blue-200 rounded-lg flex items-center justify-between text-xs text-blue-900">
-        <div className="flex items-center gap-2">
-          <Boxes className="w-4 h-4 text-blue-600" />
-          <span>
-            Os modelos de recebimento agora estão organizados em{' '}
-            <strong>Configurações → Cadastros do Sistema → Modelos de Recebimento</strong>.
-          </span>
-        </div>
-        <Link
-          to="/cadastros?tab=modelos"
-          className="font-semibold text-blue-700 hover:underline flex items-center gap-1"
-        >
-          Abrir na Central de Cadastros <ArrowRight className="w-3.5 h-3.5" />
-        </Link>
-      </div>
-
-      <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
-        <div>
-          <h1 className="text-2xl font-bold tracking-tight text-slate-900 flex items-center gap-2">
-            <Layers className="h-6 w-6 text-blue-600" />
-            Modelos de Recebimento de Comissão
-          </h1>
-          <p className="text-sm text-slate-500">
-            Defina como as comissões são pagas pelas seguradoras (à vista, parceladas, recorrentes,
-            por fases ou por saldo).
-          </p>
-        </div>
-
-        <Button
-          onClick={() => {
-            setEditingModelo(null)
-            setDialogOpen(true)
-          }}
-          className="bg-blue-600 hover:bg-blue-700 text-white"
-        >
-          <Plus className="h-4 w-4 mr-2" /> Novo Modelo
-        </Button>
-      </div>
-
-      <Card>
-        <CardHeader className="pb-3">
-          <CardTitle className="text-base font-semibold">Modelos Cadastrados</CardTitle>
+    <div className="space-y-4">
+      <Card className="border-slate-200 shadow-xs">
+        <CardHeader className="p-4 pb-3 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3">
+          <div>
+            <div className="flex items-center gap-2">
+              <Layers className="w-5 h-5 text-blue-600" />
+              <CardTitle className="text-base font-bold text-slate-900">
+                Modelos de Recebimento de Comissões
+              </CardTitle>
+            </div>
+            <CardDescription className="text-xs text-slate-500 mt-1">
+              Centraliza os 5 modelos criados na ETAPA 2A (À vista, Parcelada, Recorrente, Por fases
+              e Por esgotamento). Relacione a <strong>Seguradora + Produto</strong> para sugestão
+              automática na apólice.
+            </CardDescription>
+          </div>
+          {canCreate && (
+            <Button
+              size="sm"
+              onClick={() => {
+                setEditingModelo(null)
+                setDialogOpen(true)
+              }}
+              className="bg-blue-600 hover:bg-blue-700 text-white shrink-0"
+            >
+              <Plus className="h-4 w-4 mr-1.5" /> Novo Modelo
+            </Button>
+          )}
         </CardHeader>
         <CardContent className="p-0">
           <Table>
             <TableHeader>
-              <TableRow>
-                <TableHead>Nome do Modelo</TableHead>
-                <TableHead>Modelo</TableHead>
-                <TableHead>Seguradora / Produto</TableHead>
-                <TableHead>% Padrão / Condição</TableHead>
-                <TableHead>Válido a partir de</TableHead>
-                <TableHead className="text-right">Ações</TableHead>
+              <TableRow className="bg-slate-50 text-xs uppercase tracking-wider">
+                <TableHead className="py-3">Nome do Modelo</TableHead>
+                <TableHead className="py-3">Tipo de Modelo</TableHead>
+                <TableHead className="py-3">Vínculo (Seguradora / Produto)</TableHead>
+                <TableHead className="py-3">% Padrão / Condição</TableHead>
+                <TableHead className="py-3">Válido a partir de</TableHead>
+                <TableHead className="py-3 text-right">Ações</TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
               {loading ? (
                 <TableRow>
-                  <TableCell colSpan={6} className="text-center py-8 text-slate-500">
-                    Carregando modelos de comissão...
+                  <TableCell colSpan={6} className="text-center py-8 text-slate-500 text-sm">
+                    Carregando modelos de recebimento...
                   </TableCell>
                 </TableRow>
               ) : modelos.length === 0 ? (
                 <TableRow>
-                  <TableCell colSpan={6} className="text-center py-10 text-slate-500">
-                    Nenhum modelo de comissão cadastrado ainda. Clique em "Novo Modelo" para criar.
+                  <TableCell colSpan={6} className="text-center py-10 text-slate-500 text-sm">
+                    Nenhum modelo cadastrado ainda. Clique em "Novo Modelo" para cadastrar.
                   </TableCell>
                 </TableRow>
               ) : (
@@ -209,10 +193,10 @@ export function ModelosComissao() {
                     m.expand?.seguradora?.nome ||
                     seguradoras.find((s) => s.id === m.seguradora)?.nome ||
                     'Todas'
-                  const prodNome = m.tipo_seguro || 'Todos'
+                  const prodNome = m.tipo_seguro || 'Todos os produtos'
 
                   return (
-                    <TableRow key={m.id}>
+                    <TableRow key={m.id} className="hover:bg-slate-50/70 transition-colors">
                       <TableCell className="font-semibold text-slate-900">
                         {m.nome}
                         {m.descricao && (
@@ -221,7 +205,7 @@ export function ModelosComissao() {
                       </TableCell>
                       <TableCell>{getTipoModeloBadge(m.tipo_modelo)}</TableCell>
                       <TableCell>
-                        <div className="text-xs text-slate-700 font-medium">{segNome}</div>
+                        <div className="text-xs text-slate-800 font-medium">{segNome}</div>
                         <div className="text-[11px] text-slate-400">{prodNome}</div>
                       </TableCell>
                       <TableCell>
@@ -257,25 +241,31 @@ export function ModelosComissao() {
                       </TableCell>
                       <TableCell className="text-right">
                         <div className="flex items-center justify-end gap-1">
-                          <Button
-                            variant="ghost"
-                            size="sm"
-                            className="h-8 w-8 p-0"
-                            onClick={() => {
-                              setEditingModelo(m)
-                              setDialogOpen(true)
-                            }}
-                          >
-                            <Edit2 className="h-4 w-4 text-slate-600" />
-                          </Button>
-                          <Button
-                            variant="ghost"
-                            size="sm"
-                            className="h-8 w-8 p-0 text-red-500 hover:text-red-700 hover:bg-red-50"
-                            onClick={() => setDeleteId(m.id)}
-                          >
-                            <Trash2 className="h-4 w-4" />
-                          </Button>
+                          {canUpdate && (
+                            <Button
+                              variant="ghost"
+                              size="sm"
+                              className="h-8 w-8 p-0 text-blue-600 hover:text-blue-800"
+                              title="Editar modelo"
+                              onClick={() => {
+                                setEditingModelo(m)
+                                setDialogOpen(true)
+                              }}
+                            >
+                              <Edit2 className="h-4 w-4" />
+                            </Button>
+                          )}
+                          {canDelete && (
+                            <Button
+                              variant="ghost"
+                              size="sm"
+                              className="h-8 w-8 p-0 text-red-500 hover:text-red-700 hover:bg-red-50"
+                              title="Excluir modelo"
+                              onClick={() => setDeleteId(m.id)}
+                            >
+                              <Trash2 className="h-4 w-4" />
+                            </Button>
+                          )}
                         </div>
                       </TableCell>
                     </TableRow>
@@ -287,7 +277,6 @@ export function ModelosComissao() {
         </CardContent>
       </Card>
 
-      {/* Dialog de criação/edição */}
       <ModeloComissaoFormDialog
         open={dialogOpen}
         onOpenChange={setDialogOpen}
@@ -298,7 +287,6 @@ export function ModelosComissao() {
         onSuccess={loadData}
       />
 
-      {/* Confirmação de exclusão */}
       <AlertDialog open={!!deleteId} onOpenChange={(open) => !open && setDeleteId(null)}>
         <AlertDialogContent>
           <AlertDialogHeader>
@@ -323,4 +311,4 @@ export function ModelosComissao() {
     </div>
   )
 }
-export default ModelosComissao
+export default CadastrosModelosRecebimentoTab

@@ -23,8 +23,10 @@ import {
 import { Textarea } from '@/components/ui/textarea'
 import { Loader2 } from 'lucide-react'
 import { TIPOS_DE_SEGURO, TIPOS_DE_VENDA } from '@/lib/constants'
-import { Client, Seguradora, Parceiro, Policy, ModeloComissao } from '@/types'
+import { Client, Seguradora, Parceiro, Policy, ModeloComissao, TipoSeguro, Produto } from '@/types'
 import { getModelosComissao, findSuggestedModelo } from '@/services/modelos-comissao'
+import { getTiposSeguro } from '@/services/tipos-seguro'
+import { getProdutos } from '@/services/produtos'
 import { ClientAutocomplete } from '@/components/ClientAutocomplete'
 import type { FieldErrors } from '@/lib/pocketbase/errors'
 import {
@@ -112,6 +114,8 @@ export function PolicyFormDialog({
   const [loading, setLoading] = useState(false)
   const [validationErrors, setValidationErrors] = useState<Record<string, string>>({})
   const [modelosList, setModelosList] = useState<ModeloComissao[]>([])
+  const [tiposSeguroList, setTiposSeguroList] = useState<TipoSeguro[]>([])
+  const [produtosList, setProdutosList] = useState<Produto[]>([])
   const [modeloAtivo, setModeloAtivo] = useState<ModeloComissao | null>(null)
   const skipAuto = useRef(true)
 
@@ -119,6 +123,12 @@ export function PolicyFormDialog({
     if (open) {
       getModelosComissao()
         .then(setModelosList)
+        .catch(() => {})
+      getTiposSeguro()
+        .then(setTiposSeguroList)
+        .catch(() => {})
+      getProdutos('ativo = true')
+        .then(setProdutosList)
         .catch(() => {})
     }
   }, [open])
@@ -373,17 +383,44 @@ export function PolicyFormDialog({
           </div>
 
           <div>
-            <Label className="text-xs font-semibold">Tipo de Seguro</Label>
+            <Label className="text-xs font-semibold">Ramo / Tipo de Seguro</Label>
             <Select value={form.tipo_de_seguro} onValueChange={(v) => set('tipo_de_seguro', v)}>
               <SelectTrigger>
                 <SelectValue />
               </SelectTrigger>
               <SelectContent>
-                {TIPOS_DE_SEGURO.map((t) => (
-                  <SelectItem key={t} value={t}>
-                    {t}
-                  </SelectItem>
-                ))}
+                {/* Ramos existentes no sistema */}
+                {tiposSeguroList.length > 0
+                  ? tiposSeguroList.map((t) => (
+                      <SelectItem key={t.id || t.nome} value={t.nome}>
+                        {t.nome}
+                      </SelectItem>
+                    ))
+                  : TIPOS_DE_SEGURO.map((t) => (
+                      <SelectItem key={t} value={t}>
+                        {t}
+                      </SelectItem>
+                    ))}
+                {/* Produtos comerciais da seguradora selecionada (se houver) */}
+                {produtosList.filter(
+                  (p) => !form.seguradora || !p.seguradora || p.seguradora === form.seguradora,
+                ).length > 0 && (
+                  <>
+                    <div className="px-2 py-1 text-[10px] font-bold uppercase tracking-wider text-slate-400 border-t mt-1">
+                      Produtos Comerciais Específicos
+                    </div>
+                    {produtosList
+                      .filter(
+                        (p) =>
+                          !form.seguradora || !p.seguradora || p.seguradora === form.seguradora,
+                      )
+                      .map((p) => (
+                        <SelectItem key={`prod-${p.id}`} value={p.nome}>
+                          {p.nome}
+                        </SelectItem>
+                      ))}
+                  </>
+                )}
               </SelectContent>
             </Select>
           </div>

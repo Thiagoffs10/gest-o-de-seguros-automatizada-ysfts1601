@@ -27,6 +27,9 @@ import {
   AlertDialogTitle,
 } from '@/components/ui/alert-dialog'
 
+import { Link } from 'react-router-dom'
+import { Boxes, ArrowRight } from 'lucide-react'
+
 export default function Seguradoras() {
   const { toast } = useToast()
   const { can } = usePermissions()
@@ -123,6 +126,23 @@ export default function Seguradoras() {
 
   return (
     <div className="space-y-6">
+      {/* Banner de atalho para a Central de Cadastros */}
+      <div className="p-3 bg-blue-50 border border-blue-200 rounded-lg flex items-center justify-between text-xs text-blue-900">
+        <div className="flex items-center gap-2">
+          <Boxes className="w-4 h-4 text-blue-600" />
+          <span>
+            Este cadastro agora também está centralizado em{' '}
+            <strong>Configurações → Cadastros do Sistema</strong>.
+          </span>
+        </div>
+        <Link
+          to="/cadastros?tab=seguradoras"
+          className="font-semibold text-blue-700 hover:underline flex items-center gap-1"
+        >
+          Abrir na Central de Cadastros <ArrowRight className="w-3.5 h-3.5" />
+        </Link>
+      </div>
+
       <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
         <div>
           <h1 className="text-2xl font-bold text-slate-900">Gestão de Seguradoras</h1>

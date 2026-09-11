@@ -45,6 +45,22 @@ export interface TipoSeguro {
   updated: string
 }
 
+export interface Produto {
+  id: string
+  nome: string
+  seguradora?: string
+  ramo?: string
+  codigo_comercial?: string
+  descricao?: string
+  ativo: boolean
+  created: string
+  updated: string
+  expand?: {
+    seguradora?: Seguradora
+    ramo?: TipoSeguro
+  }
+}
+
 export interface Parceiro {
   id: string
   partner_code?: number

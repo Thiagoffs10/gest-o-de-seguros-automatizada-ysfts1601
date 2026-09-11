@@ -22,6 +22,7 @@ import {
   TipoModeloComissao,
   Seguradora,
   TipoSeguro,
+  Produto,
   FaseModelo,
   ParcelaModelo,
 } from '@/types'
@@ -35,7 +36,8 @@ interface Props {
   onOpenChange: (open: boolean) => void
   initialData?: ModeloComissao | null
   seguradoras: Seguradora[]
-  tiposSeguro: (TipoSeguro | { id: string; nome: string })[]
+  tiposSeguro: TipoSeguro[]
+  produtos?: Produto[]
   onSuccess: () => void
 }
 
@@ -45,6 +47,7 @@ export function ModeloComissaoFormDialog({
   initialData,
   seguradoras,
   tiposSeguro,
+  produtos = [],
   onSuccess,
 }: Props) {
   const { toast } = useToast()
@@ -269,15 +272,33 @@ export function ModeloComissaoFormDialog({
                   <SelectValue placeholder="Todos / Qualquer produto" />
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="none">Todos os produtos</SelectItem>
+                  <SelectItem value="none">Todos os produtos / ramos</SelectItem>
+                  {tiposSeguro.length > 0 && (
+                    <div className="px-2 py-1 text-[10px] font-bold uppercase tracking-wider text-slate-400">
+                      Ramos Principais
+                    </div>
+                  )}
                   {tiposSeguro.map((t) => (
-                    <SelectItem key={t.id || t.nome} value={t.nome}>
-                      {t.nome}
+                    <SelectItem key={`ramo-${t.id || t.nome}`} value={t.nome}>
+                      {t.nome} (Ramo)
+                    </SelectItem>
+                  ))}
+                  {produtos.length > 0 && (
+                    <div className="px-2 py-1 text-[10px] font-bold uppercase tracking-wider text-slate-400 border-t mt-1">
+                      Produtos Comerciais
+                    </div>
+                  )}
+                  {produtos.map((p) => (
+                    <SelectItem key={`prod-${p.id}`} value={p.nome}>
+                      {p.nome}
+                      {p.expand?.seguradora?.nome ? ` (${p.expand.seguradora.nome})` : ''}
                     </SelectItem>
                   ))}
                 </SelectContent>
               </Select>
-              <span className="text-[10px] text-slate-400">Sugere ao selecionar este produto</span>
+              <span className="text-[10px] text-slate-400">
+                Sugere ao selecionar este produto comercial ou ramo
+              </span>
             </div>
           </div>
 

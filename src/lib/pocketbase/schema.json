@@ -1,5 +1,5 @@
 {
-  "generatedAt": "2026-09-11T03:06:25.155Z",
+  "generatedAt": "2026-09-11T03:17:23.511Z",
   "collections": [
     {
       "name": "users",
@@ -1748,6 +1748,76 @@
         "CREATE INDEX idx_com_prev_policy ON comissoes_previstas (policy)",
         "CREATE INDEX idx_com_prev_data ON comissoes_previstas (data_prevista)",
         "CREATE INDEX idx_com_prev_comp ON comissoes_previstas (competencia)"
+      ]
+    },
+    {
+      "name": "produtos",
+      "type": "base",
+      "apiRules": {
+        "list": "@request.auth.id != ''",
+        "view": "@request.auth.id != ''",
+        "create": "@request.auth.id != ''",
+        "update": "@request.auth.id != ''",
+        "delete": "@request.auth.id != ''"
+      },
+      "fields": [
+        {
+          "name": "nome",
+          "type": "text",
+          "required": true,
+          "system": false
+        },
+        {
+          "name": "seguradora",
+          "type": "relation",
+          "required": false,
+          "system": false,
+          "collectionRef": "seguradoras"
+        },
+        {
+          "name": "ramo",
+          "type": "relation",
+          "required": false,
+          "system": false,
+          "collectionRef": "tipos_seguro"
+        },
+        {
+          "name": "codigo_comercial",
+          "type": "text",
+          "required": false,
+          "system": false
+        },
+        {
+          "name": "descricao",
+          "type": "text",
+          "required": false,
+          "system": false
+        },
+        {
+          "name": "ativo",
+          "type": "bool",
+          "required": false,
+          "system": false
+        },
+        {
+          "name": "created",
+          "type": "autodate",
+          "required": false,
+          "system": false,
+          "autodateTriggers": ["onCreate"]
+        },
+        {
+          "name": "updated",
+          "type": "autodate",
+          "required": false,
+          "system": false,
+          "autodateTriggers": ["onCreate", "onUpdate"]
+        }
+      ],
+      "indexes": [
+        "CREATE INDEX idx_produtos_nome ON produtos (nome)",
+        "CREATE INDEX idx_produtos_seguradora ON produtos (seguradora)",
+        "CREATE INDEX idx_produtos_ramo ON produtos (ramo)"
       ]
     }
   ]

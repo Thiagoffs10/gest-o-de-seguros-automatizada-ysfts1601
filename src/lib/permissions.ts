@@ -10,6 +10,8 @@ export type CollectionName =
   | 'reminders'
   | 'custos_fixos'
   | 'tipos_seguro'
+  | 'produtos'
+  | 'modelos_comissao'
   | 'conciliacoes'
   | 'parceiro_pagamentos'
   | 'parceiro_debitos'
@@ -33,6 +35,8 @@ const PERMISSIONS: Record<UserRole, Record<CollectionName, ActionType[]>> = {
     reminders: ALL,
     custos_fixos: ALL,
     tipos_seguro: ALL,
+    produtos: ALL,
+    modelos_comissao: ALL,
     conciliacoes: ALL,
     parceiro_pagamentos: ALL,
     parceiro_debitos: ALL,
@@ -48,6 +52,8 @@ const PERMISSIONS: Record<UserRole, Record<CollectionName, ActionType[]>> = {
     reminders: ALL,
     custos_fixos: ALL,
     tipos_seguro: ALL,
+    produtos: ALL,
+    modelos_comissao: ALL,
     conciliacoes: ALL,
     parceiro_pagamentos: ALL,
     parceiro_debitos: ALL,
@@ -63,6 +69,8 @@ const PERMISSIONS: Record<UserRole, Record<CollectionName, ActionType[]>> = {
     reminders: READ,
     custos_fixos: ALL,
     tipos_seguro: READ,
+    produtos: READ,
+    modelos_comissao: READ,
     conciliacoes: READ,
     parceiro_pagamentos: CRU,
     parceiro_debitos: CRU,
@@ -78,6 +86,8 @@ const PERMISSIONS: Record<UserRole, Record<CollectionName, ActionType[]>> = {
     reminders: READ,
     custos_fixos: [] as ActionType[],
     tipos_seguro: READ,
+    produtos: READ,
+    modelos_comissao: READ,
     conciliacoes: [] as ActionType[],
     parceiro_pagamentos: READ,
     parceiro_debitos: READ,
@@ -93,6 +103,8 @@ const PERMISSIONS: Record<UserRole, Record<CollectionName, ActionType[]>> = {
     reminders: READ,
     custos_fixos: [] as ActionType[],
     tipos_seguro: READ,
+    produtos: READ,
+    modelos_comissao: READ,
     conciliacoes: [] as ActionType[],
     parceiro_pagamentos: READ,
     parceiro_debitos: READ,
