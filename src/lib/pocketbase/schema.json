@@ -1,5 +1,5 @@
 {
-  "generatedAt": "2026-09-11T02:56:01.853Z",
+  "generatedAt": "2026-09-11T03:06:25.155Z",
   "collections": [
     {
       "name": "users",
@@ -207,7 +207,7 @@
         {
           "name": "policy_number",
           "type": "text",
-          "required": true,
+          "required": false,
           "system": false
         },
         {
@@ -489,12 +489,19 @@
           "type": "json",
           "required": false,
           "system": false
+        },
+        {
+          "name": "numero_proposta",
+          "type": "text",
+          "required": false,
+          "system": false
         }
       ],
       "indexes": [
-        "CREATE UNIQUE INDEX idx_policies_number ON policies (policy_number)",
         "CREATE INDEX idx_policies_client ON policies (client)",
-        "CREATE INDEX idx_policies_status ON policies (status)"
+        "CREATE INDEX idx_policies_status ON policies (status)",
+        "CREATE UNIQUE INDEX `idx_policies_number` ON `policies` (policy_number) WHERE policy_number IS NOT NULL AND policy_number != ''",
+        "CREATE INDEX `idx_policies_proposta` ON `policies` (numero_proposta) WHERE numero_proposta IS NOT NULL AND numero_proposta != ''"
       ]
     },
     {

@@ -81,6 +81,13 @@ export function preparePolicyPayload(data: Partial<Policy> & Record<string, any>
     payload.modelo_veiculo = data.modelo_veiculo ? String(data.modelo_veiculo).trim() : ''
 
   // Relations: PocketBase rejects empty string "" for relation fields
+  if ('policy_number' in data) {
+    payload.policy_number = data.policy_number ? String(data.policy_number).trim() : ''
+  }
+  if ('numero_proposta' in data) {
+    payload.numero_proposta = data.numero_proposta ? String(data.numero_proposta).trim() : ''
+  }
+
   if (!payload.client || (typeof payload.client === 'string' && payload.client.trim() === '')) {
     delete payload.client
   }
@@ -483,6 +490,7 @@ export function prepareRenewalData(policy: Policy): Partial<Policy> {
   delete data.policy_code
   return {
     ...data,
+    numero_proposta: '',
     policy_number: '',
     start_date: todayLocalDate(),
     end_date: toLocalDate(new Date(Date.now() + 365 * 86400000)),

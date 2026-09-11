@@ -344,7 +344,13 @@ export default function PolicyDetail() {
           >
             ← Voltar para Apólices
           </Button>
-          <h1 className="text-2xl font-bold text-slate-900">Apólice {policy.policy_number}</h1>
+          <h1 className="text-2xl font-bold text-slate-900">
+            {policy.policy_number
+              ? `Apólice ${policy.policy_number}`
+              : policy.numero_proposta
+                ? `Proposta ${policy.numero_proposta}`
+                : `Registro #${policy.policy_code || policy.id}`}
+          </h1>
         </div>
         <div className="flex flex-wrap gap-2">
           {can('policies', 'update') && (
@@ -654,6 +660,22 @@ export default function PolicyDetail() {
         </CardHeader>
         <CardContent className="grid grid-cols-1 md:grid-cols-4 gap-4 text-sm text-slate-700">
           <div>
+            <p className="text-xs text-slate-500">Nº da Proposta</p>
+            <p className="font-bold text-slate-900">
+              {policy.numero_proposta || (
+                <span className="text-slate-400 font-normal">Não informada</span>
+              )}
+            </p>
+          </div>
+          <div>
+            <p className="text-xs text-slate-500">Nº da Apólice</p>
+            <p className="font-bold text-slate-900">
+              {policy.policy_number || (
+                <span className="text-slate-400 font-normal">Não informada</span>
+              )}
+            </p>
+          </div>
+          <div>
             <p className="text-xs text-slate-500">Cliente Segurado</p>
             <p className="font-bold text-slate-900">
               {policy.expand?.client?.name || 'Não informado'}
@@ -661,7 +683,7 @@ export default function PolicyDetail() {
           </div>
           <div>
             <p className="text-xs text-slate-500">Seguradora</p>
-            <p className="font-semibold">
+            <p className="font-semibold text-slate-900">
               {policy.expand?.seguradora?.nome || policy.insurance_company || '-'}
             </p>
           </div>
@@ -824,7 +846,7 @@ export default function PolicyDetail() {
         open={deleteOpen}
         onOpenChange={setDeleteOpen}
         onConfirm={handleDeleteConfirm}
-        policyNumber={policy.policy_number}
+        policyNumber={policy.policy_number || policy.numero_proposta || ''}
         relatedCount={relatedCount}
         loading={deleteLoading}
       />
@@ -833,7 +855,7 @@ export default function PolicyDetail() {
         open={cancelOpen}
         onOpenChange={setCancelOpen}
         onConfirm={handleCancelConfirm}
-        policyNumber={policy.policy_number}
+        policyNumber={policy.policy_number || policy.numero_proposta || ''}
       />
 
       {/* Modal de Estorno de Recebimento */}
@@ -895,7 +917,7 @@ export default function PolicyDetail() {
             <div className="space-y-3 text-sm text-slate-600 py-1">
               <p>
                 Tem certeza de que deseja desfazer este recebimento de comissão da apólice{' '}
-                <strong>{policy.policy_number}</strong>?
+                <strong>{policy.policy_number || policy.numero_proposta || policy.id}</strong>?
               </p>
 
               <div className="p-3 bg-slate-50 border rounded-lg text-xs space-y-1">

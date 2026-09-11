@@ -39,6 +39,7 @@ import {
 const DEFAULT_FORM = {
   client: '',
   seguradora: '',
+  numero_proposta: '',
   policy_number: '',
   tipo_de_seguro: 'Auto',
   placa: '',
@@ -158,6 +159,7 @@ export function PolicyFormDialog({
         ...DEFAULT_FORM,
         client: initialData.client || (exp?.client?.id ?? ''),
         seguradora: initialData.seguradora || (exp?.seguradora?.id ?? ''),
+        numero_proposta: initialData.numero_proposta || '',
         policy_number: initialData.policy_number || '',
         tipo_de_seguro: initialData.tipo_de_seguro || initialData.coverage_type || 'Auto',
         placa: initialData.placa || '',
@@ -281,7 +283,6 @@ export function PolicyFormDialog({
     e.preventDefault()
     const errs: Record<string, string> = {}
     if (!form.client) errs.client = 'Selecione um cliente'
-    if (!form.policy_number?.trim()) errs.policy_number = 'Número da apólice é obrigatório'
     if (!form.start_date) errs.start_date = 'Data de início é obrigatória'
     if (!form.end_date) errs.end_date = 'Data de fim é obrigatória'
     if (form.tipo_de_venda === 'Parceiro' && !form.parceiro) {
@@ -336,29 +337,39 @@ export function PolicyFormDialog({
 
           <div className="grid grid-cols-2 gap-2">
             <div>
-              <Label className="text-xs font-semibold">Nº Apólice Seguradora *</Label>
+              <Label className="text-xs font-semibold">Nº da proposta (opcional)</Label>
               <Input
-                required
-                value={form.policy_number}
+                value={form.numero_proposta || ''}
+                onChange={(e) => set('numero_proposta', e.target.value)}
+                placeholder="Ex: PROP-12345"
+              />
+              <FieldErr message={err('numero_proposta') || validationErrors.numero_proposta} />
+            </div>
+            <div>
+              <Label className="text-xs font-semibold">Nº da apólice (opcional)</Label>
+              <Input
+                value={form.policy_number || ''}
                 onChange={(e) => set('policy_number', e.target.value)}
+                placeholder="Ex: AP-987654"
               />
               <FieldErr message={err('policy_number') || validationErrors.policy_number} />
             </div>
-            <div>
-              <Label className="text-xs font-semibold">Seguradora</Label>
-              <Select value={form.seguradora} onValueChange={(v) => set('seguradora', v)}>
-                <SelectTrigger>
-                  <SelectValue placeholder="Selecione" />
-                </SelectTrigger>
-                <SelectContent>
-                  {seguradoras.map((s) => (
-                    <SelectItem key={s.id} value={s.id}>
-                      {s.nome}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
+          </div>
+
+          <div>
+            <Label className="text-xs font-semibold">Seguradora</Label>
+            <Select value={form.seguradora} onValueChange={(v) => set('seguradora', v)}>
+              <SelectTrigger>
+                <SelectValue placeholder="Selecione" />
+              </SelectTrigger>
+              <SelectContent>
+                {seguradoras.map((s) => (
+                  <SelectItem key={s.id} value={s.id}>
+                    {s.nome}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
           </div>
 
           <div>

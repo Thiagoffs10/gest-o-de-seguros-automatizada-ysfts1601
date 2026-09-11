@@ -78,6 +78,7 @@ export default function ClientDetail() {
   const [isEditOpen, setIsEditOpen] = useState(false)
   const [isNewPolicyOpen, setIsNewPolicyOpen] = useState(false)
   const [newPolicy, setNewPolicy] = useState({
+    numero_proposta: '',
     policy_number: '',
     seguradora: '',
     tipo_de_seguro: 'Auto',
@@ -836,13 +837,23 @@ export default function ClientDetail() {
             <DialogTitle>Nova Apólice para {client.name}</DialogTitle>
           </DialogHeader>
           <form onSubmit={handleCreatePolicy} className="space-y-3">
-            <div>
-              <Label>Nº da Apólice *</Label>
-              <Input
-                required
-                value={newPolicy.policy_number}
-                onChange={(e) => setNewPolicy({ ...newPolicy, policy_number: e.target.value })}
-              />
+            <div className="grid grid-cols-2 gap-2">
+              <div>
+                <Label>Nº da proposta (opcional)</Label>
+                <Input
+                  value={newPolicy.numero_proposta}
+                  onChange={(e) => setNewPolicy({ ...newPolicy, numero_proposta: e.target.value })}
+                  placeholder="Ex: PROP-12345"
+                />
+              </div>
+              <div>
+                <Label>Nº da apólice (opcional)</Label>
+                <Input
+                  value={newPolicy.policy_number}
+                  onChange={(e) => setNewPolicy({ ...newPolicy, policy_number: e.target.value })}
+                  placeholder="Ex: AP-987654"
+                />
+              </div>
             </div>
             <div>
               <Label>Seguradora</Label>

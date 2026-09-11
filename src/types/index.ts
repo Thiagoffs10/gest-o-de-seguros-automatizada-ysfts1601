@@ -69,7 +69,8 @@ export interface Policy {
   }
   seguradora?: string
   insurance_company?: string
-  policy_number: string
+  policy_number?: string
+  numero_proposta?: string
   tipo_de_seguro?: string
   coverage_type?: 'Auto' | 'Vida' | 'Residencial' | 'Empresarial' | 'Saúde' | 'Outros'
   premium_amount: number

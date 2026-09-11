@@ -455,7 +455,7 @@ export default function Policies() {
                   >
                     <td className="p-3.5 font-bold text-blue-600">{p.policy_code || '-'}</td>
                     <td className="p-3.5 font-bold text-slate-900 flex items-center gap-1.5">
-                      {p.policy_number}
+                      {p.policy_number || (p.numero_proposta ? `Prop. ${p.numero_proposta}` : '-')}
                       {p.status === 'Cancelada' && (
                         <span className="text-[10px] bg-red-100 text-red-700 px-1.5 py-0.5 rounded font-semibold">
                           Cancelada
@@ -607,7 +607,7 @@ export default function Policies() {
           if (!open) setDeleteTarget(null)
         }}
         onConfirm={handleDeleteConfirm}
-        policyNumber={deleteTarget?.policy_number || ''}
+        policyNumber={deleteTarget?.policy_number || deleteTarget?.numero_proposta || ''}
         relatedCount={relatedCount}
         loading={deleteLoading}
       />
@@ -618,7 +618,7 @@ export default function Policies() {
           if (!open) setCancelTarget(null)
         }}
         onConfirm={handleCancelPolicy}
-        policyNumber={cancelTarget?.policy_number || ''}
+        policyNumber={cancelTarget?.policy_number || cancelTarget?.numero_proposta || ''}
       />
     </div>
   )

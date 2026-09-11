@@ -46,6 +46,7 @@ const FIELD_LABELS: Record<string, string> = {
   cidade: 'Cidade',
   estado: 'UF / Estado',
   birth_date: 'Data de Nascimento',
+  numero_proposta: 'Nº da Proposta',
   policy_number: 'Nº da Apólice',
   coverage_type: 'Ramo / Cobertura',
   tipo_de_seguro: 'Tipo de Seguro',
@@ -217,8 +218,13 @@ export function exportBackupToExcel(data: BackupData, filename: string): void {
   const rawPolicies = data.records['policies'] || []
   for (const pol of rawPolicies) {
     if (pol.id && typeof pol.id === 'string') {
+      const displayNum = pol.policy_number
+        ? String(pol.policy_number)
+        : pol.numero_proposta
+          ? `Prop. ${pol.numero_proposta}`
+          : pol.id
       policiesMap.set(pol.id, {
-        number: pol.policy_number ? String(pol.policy_number) : pol.id,
+        number: displayNum,
         clientId: pol.client ? String(pol.client) : '',
       })
     }
