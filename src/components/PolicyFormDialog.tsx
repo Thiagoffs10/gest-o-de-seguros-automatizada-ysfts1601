@@ -115,6 +115,206 @@ function FieldErr({ message }: { message?: string }) {
   return <p className="text-xs text-red-500 mt-0.5">{message}</p>
 }
 
+function RecebimentoParametros({
+  tipo,
+  form,
+  set,
+}: {
+  tipo: TipoModeloComissao
+  form: any
+  set: (key: string, val: any) => void
+}) {
+  if (tipo === 'PARCELADA') {
+    return (
+      <div>
+        <Label className="text-[11px] text-slate-700">Quantidade de Competências</Label>
+        <Input
+          type="number"
+          min="1"
+          max="36"
+          className="bg-white h-8 text-xs mt-0.5 max-w-[120px]"
+          value={form.personalizada_qtd_competencias || 6}
+          onChange={(e) =>
+            set('personalizada_qtd_competencias', Math.max(1, parseInt(e.target.value || '1', 10)))
+          }
+        />
+      </div>
+    )
+  }
+
+  if (tipo === 'RECORRENTE') {
+    return (
+      <div className="grid grid-cols-2 gap-2">
+        <div>
+          <Label className="text-[11px] text-slate-700">% Mensal Recorrente</Label>
+          <Input
+            type="number"
+            step="0.1"
+            className="bg-white h-8 text-xs mt-0.5"
+            value={form.personalizada_percentual_recorrente || form.commission_percent || 5}
+            onChange={(e) => set('personalizada_percentual_recorrente', Number(e.target.value))}
+          />
+        </div>
+        <div>
+          <Label className="text-[11px] text-slate-700">Horizonte (meses)</Label>
+          <Input
+            type="number"
+            min="1"
+            max="36"
+            className="bg-white h-8 text-xs mt-0.5"
+            value={form.personalizada_horizonte_meses || 12}
+            onChange={(e) =>
+              set('personalizada_horizonte_meses', parseInt(e.target.value || '12', 10))
+            }
+          />
+        </div>
+      </div>
+    )
+  }
+
+  if (tipo === 'POR_FASES') {
+    return (
+      <div className="space-y-2 p-2.5 bg-purple-50/50 rounded border border-purple-200/60">
+        <div className="flex items-center justify-between">
+          <Label className="text-[11px] font-bold text-purple-900">
+            Linhas de Fase (Período + Percentual)
+          </Label>
+          <button
+            type="button"
+            onClick={() => {
+              const currentFases: FaseModelo[] = form.personalizada_fases || []
+              const lastFase = currentFases[currentFases.length - 1]
+              const proxInicio = lastFase
+                ? lastFase.mes_fim
+                  ? lastFase.mes_fim + 1
+                  : lastFase.mes_inicio + 1
+                : 1
+              set('personalizada_fases', [
+                ...currentFases,
+                { mes_inicio: proxInicio, mes_fim: null, percentual: 5 },
+              ])
+            }}
+            className="text-[10px] text-purple-700 hover:text-purple-900 font-semibold underline"
+          >
+            + Adicionar Fase
+          </button>
+        </div>
+
+        <div className="space-y-1.5">
+          {(form.personalizada_fases || []).map((fase: FaseModelo, idx: number) => (
+            <div
+              key={idx}
+              className="flex items-center gap-1.5 text-xs bg-white p-1.5 rounded border border-slate-200"
+            >
+              <span className="text-[10px] font-bold text-slate-500 w-10 shrink-0">
+                Fase {idx + 1}
+              </span>
+              <div className="flex items-center gap-1">
+                <span className="text-[10px] text-slate-500">Mês</span>
+                <Input
+                  type="number"
+                  min="1"
+                  className="h-7 w-12 text-xs px-1 text-center"
+                  value={fase.mes_inicio}
+                  onChange={(e) => {
+                    const newFases = [...(form.personalizada_fases || [])]
+                    newFases[idx] = {
+                      ...newFases[idx],
+                      mes_inicio: Math.max(1, parseInt(e.target.value || '1', 10)),
+                    }
+                    set('personalizada_fases', newFases)
+                  }}
+                />
+                <span className="text-[10px] text-slate-500">a</span>
+                <Input
+                  type="number"
+                  min={fase.mes_inicio}
+                  placeholder="Fim"
+                  title="Deixe em branco para fase aberta"
+                  className="h-7 w-12 text-xs px-1 text-center"
+                  value={fase.mes_fim ?? ''}
+                  onChange={(e) => {
+                    const newFases = [...(form.personalizada_fases || [])]
+                    const val = e.target.value === '' ? null : parseInt(e.target.value, 10)
+                    newFases[idx] = {
+                      ...newFases[idx],
+                      mes_fim: val != null && !isNaN(val) ? val : null,
+                    }
+                    set('personalizada_fases', newFases)
+                  }}
+                />
+              </div>
+              <div className="flex items-center gap-1 ml-auto">
+                <Input
+                  type="number"
+                  step="0.1"
+                  min="0"
+                  placeholder="%"
+                  className="h-7 w-14 text-xs px-1 text-right"
+                  value={fase.percentual}
+                  onChange={(e) => {
+                    const newFases = [...(form.personalizada_fases || [])]
+                    newFases[idx] = {
+                      ...newFases[idx],
+                      percentual: Number(e.target.value || 0),
+                    }
+                    set('personalizada_fases', newFases)
+                  }}
+                />
+                <span className="text-[11px] text-slate-500">%</span>
+                {(form.personalizada_fases || []).length > 1 && (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      const newFases = (form.personalizada_fases || []).filter(
+                        (_: any, i: number) => i !== idx,
+                      )
+                      set('personalizada_fases', newFases)
+                    }}
+                    className="text-slate-400 hover:text-red-500 ml-1 text-xs"
+                    title="Remover fase"
+                  >
+                    ×
+                  </button>
+                )}
+              </div>
+            </div>
+          ))}
+        </div>
+      </div>
+    )
+  }
+
+  if (tipo === 'POR_ESGOTAMENTO') {
+    return (
+      <div className="grid grid-cols-2 gap-2">
+        <div>
+          <Label className="text-[11px] text-slate-700">Saldo Total Previsto (R$)</Label>
+          <Input
+            type="number"
+            step="0.01"
+            className="bg-white h-8 text-xs mt-0.5"
+            value={form.personalizada_saldo_total || form.commission || 1000}
+            onChange={(e) => set('personalizada_saldo_total', Number(e.target.value))}
+          />
+        </div>
+        <div>
+          <Label className="text-[11px] text-slate-700">Estimativa Parcela (R$)</Label>
+          <Input
+            type="number"
+            step="0.01"
+            className="bg-white h-8 text-xs mt-0.5"
+            value={form.personalizada_valor_estimado_parcela || 250}
+            onChange={(e) => set('personalizada_valor_estimado_parcela', Number(e.target.value))}
+          />
+        </div>
+      </div>
+    )
+  }
+
+  return null
+}
+
 export function PolicyFormDialog({
   open,
   onOpenChange,
@@ -388,8 +588,7 @@ export function PolicyFormDialog({
 
       await onSubmit({
         ...form,
-        // Mantém comissao_personalizada ativo se houver modelo não-nulo ou tipo definido
-        comissao_personalizada: form.comissao_personalizada || !form.modelo_comissao,
+        comissao_personalizada: Boolean(form.comissao_personalizada),
         renewal_date: renewalDate,
         comissao_personalizada_config: customConfigPayload,
       })
@@ -668,11 +867,13 @@ export function PolicyFormDialog({
             </div>
           </div>
 
-          {/* Modelo de Recebimento Simplificado — Campo Único e Compacto */}
+          {/* Forma de recebimento da comissão — Campo normal do cadastro */}
           <div className="p-3 bg-slate-50/90 border border-slate-200 rounded-lg space-y-2">
             <div className="flex items-center justify-between">
               <div className="flex items-center gap-1.5">
-                <Label className="text-xs font-bold text-slate-900">Modelo de recebimento</Label>
+                <Label className="text-xs font-bold text-slate-900">
+                  Forma de recebimento da comissão
+                </Label>
                 <TooltipProvider delayDuration={150}>
                   <Tooltip>
                     <TooltipTrigger asChild>
@@ -721,32 +922,85 @@ export function PolicyFormDialog({
             </div>
 
             {!form.comissao_personalizada ? (
-              <div className="space-y-1.5">
+              <div className="space-y-2">
                 <Select
-                  value={form.modelo_comissao || 'none'}
-                  onValueChange={(v) => {
-                    const mId = v === 'none' ? '' : v
-                    set('modelo_comissao', mId)
-                    const m = modelosList.find((x) => x.id === mId)
-                    setModeloAtivo(m || null)
-                    if (m?.percentual_padrao && Number(m.percentual_padrao) > 0) {
-                      set('commission_percent', Number(m.percentual_padrao))
+                  value={
+                    form.modelo_comissao
+                      ? `model:${form.modelo_comissao}`
+                      : form.personalizada_tipo_modelo
+                        ? `native:${form.personalizada_tipo_modelo}`
+                        : 'none'
+                  }
+                  onValueChange={(val) => {
+                    if (val === 'none') {
+                      set('modelo_comissao', '')
+                      set('personalizada_tipo_modelo', 'A_VISTA')
+                      setModeloAtivo(null)
+                    } else if (val.startsWith('native:')) {
+                      const tipo = val.replace('native:', '') as TipoModeloComissao
+                      set('modelo_comissao', '')
+                      set('personalizada_tipo_modelo', tipo)
+                      setModeloAtivo(null)
+                    } else if (val.startsWith('model:')) {
+                      const mId = val.replace('model:', '')
+                      set('modelo_comissao', mId)
+                      const m = modelosList.find((x) => x.id === mId)
+                      setModeloAtivo(m || null)
+                      if (m) {
+                        set('personalizada_tipo_modelo', m.tipo_modelo)
+                        if (m.percentual_padrao && Number(m.percentual_padrao) > 0) {
+                          set('commission_percent', Number(m.percentual_padrao))
+                        }
+                      }
                     }
                   }}
                 >
                   <SelectTrigger className="bg-white h-9 text-xs">
-                    <SelectValue placeholder="Selecione um modelo..." />
+                    <SelectValue placeholder="Selecione a forma de recebimento..." />
                   </SelectTrigger>
                   <SelectContent>
-                    <SelectItem value="none">Nenhum modelo configurado</SelectItem>
-                    {modelosList.map((m) => (
-                      <SelectItem key={m.id} value={m.id}>
-                        {m.nome} ({TIPOS_NATIVOS_RECEBIMENTO[m.tipo_modelo]?.nome || m.tipo_modelo})
-                        {m.percentual_padrao ? ` — ${m.percentual_padrao}%` : ''}
+                    <SelectItem value="none">Nenhum modelo configurado (À vista padrão)</SelectItem>
+                    <div className="px-2 py-1 text-[10px] font-bold uppercase tracking-wider text-slate-400 border-t mt-1">
+                      Tipos do sistema
+                    </div>
+                    {(
+                      [
+                        'A_VISTA',
+                        'PARCELADA',
+                        'RECORRENTE',
+                        'POR_FASES',
+                        'POR_ESGOTAMENTO',
+                      ] as TipoModeloComissao[]
+                    ).map((t) => (
+                      <SelectItem key={`native-${t}`} value={`native:${t}`}>
+                        {TIPOS_NATIVOS_RECEBIMENTO[t]?.nome}
                       </SelectItem>
                     ))}
+                    {modelosList.length > 0 && (
+                      <>
+                        <div className="px-2 py-1 text-[10px] font-bold uppercase tracking-wider text-slate-400 border-t mt-1">
+                          Modelos configurados
+                        </div>
+                        {modelosList.map((m) => (
+                          <SelectItem key={`model-${m.id}`} value={`model:${m.id}`}>
+                            {m.nome} (
+                            {TIPOS_NATIVOS_RECEBIMENTO[m.tipo_modelo]?.nome || m.tipo_modelo})
+                            {m.percentual_padrao ? ` — ${m.percentual_padrao}%` : ''}
+                          </SelectItem>
+                        ))}
+                      </>
+                    )}
                   </SelectContent>
                 </Select>
+
+                {/* Exibição dos parâmetros essenciais quando tipo nativo é selecionado (sem modelo configurado) */}
+                {!form.modelo_comissao && form.personalizada_tipo_modelo && (
+                  <RecebimentoParametros
+                    tipo={form.personalizada_tipo_modelo}
+                    form={form}
+                    set={set}
+                  />
+                )}
 
                 {modeloAtivo ? (
                   <p className="text-[11px] text-emerald-700 flex items-center gap-1 font-medium">
@@ -813,197 +1067,11 @@ export function PolicyFormDialog({
                   </Select>
                 </div>
 
-                {form.personalizada_tipo_modelo === 'PARCELADA' && (
-                  <div>
-                    <Label className="text-[11px] text-slate-700">Quantidade de Competências</Label>
-                    <Input
-                      type="number"
-                      min="1"
-                      max="36"
-                      className="bg-white h-8 text-xs mt-0.5 max-w-[120px]"
-                      value={form.personalizada_qtd_competencias || 6}
-                      onChange={(e) =>
-                        set(
-                          'personalizada_qtd_competencias',
-                          Math.max(1, parseInt(e.target.value || '1', 10)),
-                        )
-                      }
-                    />
-                  </div>
-                )}
-
-                {form.personalizada_tipo_modelo === 'RECORRENTE' && (
-                  <div className="grid grid-cols-2 gap-2">
-                    <div>
-                      <Label className="text-[11px] text-slate-700">% Mensal Recorrente</Label>
-                      <Input
-                        type="number"
-                        step="0.1"
-                        className="bg-white h-8 text-xs mt-0.5"
-                        value={
-                          form.personalizada_percentual_recorrente || form.commission_percent || 5
-                        }
-                        onChange={(e) =>
-                          set('personalizada_percentual_recorrente', Number(e.target.value))
-                        }
-                      />
-                    </div>
-                    <div>
-                      <Label className="text-[11px] text-slate-700">Horizonte (meses)</Label>
-                      <Input
-                        type="number"
-                        min="1"
-                        max="36"
-                        className="bg-white h-8 text-xs mt-0.5"
-                        value={form.personalizada_horizonte_meses || 12}
-                        onChange={(e) =>
-                          set('personalizada_horizonte_meses', parseInt(e.target.value || '12', 10))
-                        }
-                      />
-                    </div>
-                  </div>
-                )}
-
-                {form.personalizada_tipo_modelo === 'POR_FASES' && (
-                  <div className="space-y-2 p-2.5 bg-purple-50/50 rounded border border-purple-200/60">
-                    <div className="flex items-center justify-between">
-                      <Label className="text-[11px] font-bold text-purple-900">
-                        Linhas de Fase (Período + Percentual)
-                      </Label>
-                      <button
-                        type="button"
-                        onClick={() => {
-                          const currentFases: FaseModelo[] = form.personalizada_fases || []
-                          const lastFase = currentFases[currentFases.length - 1]
-                          const proxInicio = lastFase
-                            ? lastFase.mes_fim
-                              ? lastFase.mes_fim + 1
-                              : lastFase.mes_inicio + 1
-                            : 1
-                          set('personalizada_fases', [
-                            ...currentFases,
-                            { mes_inicio: proxInicio, mes_fim: null, percentual: 5 },
-                          ])
-                        }}
-                        className="text-[10px] text-purple-700 hover:text-purple-900 font-semibold underline"
-                      >
-                        + Adicionar Fase
-                      </button>
-                    </div>
-
-                    <div className="space-y-1.5">
-                      {(form.personalizada_fases || []).map((fase: FaseModelo, idx: number) => (
-                        <div
-                          key={idx}
-                          className="flex items-center gap-1.5 text-xs bg-white p-1.5 rounded border border-slate-200"
-                        >
-                          <span className="text-[10px] font-bold text-slate-500 w-10 shrink-0">
-                            Fase {idx + 1}
-                          </span>
-                          <div className="flex items-center gap-1">
-                            <span className="text-[10px] text-slate-500">Mês</span>
-                            <Input
-                              type="number"
-                              min="1"
-                              className="h-7 w-12 text-xs px-1 text-center"
-                              value={fase.mes_inicio}
-                              onChange={(e) => {
-                                const newFases = [...(form.personalizada_fases || [])]
-                                newFases[idx] = {
-                                  ...newFases[idx],
-                                  mes_inicio: Math.max(1, parseInt(e.target.value || '1', 10)),
-                                }
-                                set('personalizada_fases', newFases)
-                              }}
-                            />
-                            <span className="text-[10px] text-slate-500">a</span>
-                            <Input
-                              type="number"
-                              min={fase.mes_inicio}
-                              placeholder="Fim"
-                              title="Deixe em branco para fase aberta"
-                              className="h-7 w-12 text-xs px-1 text-center"
-                              value={fase.mes_fim ?? ''}
-                              onChange={(e) => {
-                                const newFases = [...(form.personalizada_fases || [])]
-                                const val =
-                                  e.target.value === '' ? null : parseInt(e.target.value, 10)
-                                newFases[idx] = {
-                                  ...newFases[idx],
-                                  mes_fim: val != null && !isNaN(val) ? val : null,
-                                }
-                                set('personalizada_fases', newFases)
-                              }}
-                            />
-                          </div>
-                          <div className="flex items-center gap-1 ml-auto">
-                            <Input
-                              type="number"
-                              step="0.1"
-                              min="0"
-                              placeholder="%"
-                              className="h-7 w-14 text-xs px-1 text-right"
-                              value={fase.percentual}
-                              onChange={(e) => {
-                                const newFases = [...(form.personalizada_fases || [])]
-                                newFases[idx] = {
-                                  ...newFases[idx],
-                                  percentual: Number(e.target.value || 0),
-                                }
-                                set('personalizada_fases', newFases)
-                              }}
-                            />
-                            <span className="text-[11px] text-slate-500">%</span>
-                            {(form.personalizada_fases || []).length > 1 && (
-                              <button
-                                type="button"
-                                onClick={() => {
-                                  const newFases = (form.personalizada_fases || []).filter(
-                                    (_: any, i: number) => i !== idx,
-                                  )
-                                  set('personalizada_fases', newFases)
-                                }}
-                                className="text-slate-400 hover:text-red-500 ml-1 text-xs"
-                                title="Remover fase"
-                              >
-                                ×
-                              </button>
-                            )}
-                          </div>
-                        </div>
-                      ))}
-                    </div>
-                  </div>
-                )}
-
-                {form.personalizada_tipo_modelo === 'POR_ESGOTAMENTO' && (
-                  <div className="grid grid-cols-2 gap-2">
-                    <div>
-                      <Label className="text-[11px] text-slate-700">
-                        Saldo Total Previsto (R$)
-                      </Label>
-                      <Input
-                        type="number"
-                        step="0.01"
-                        className="bg-white h-8 text-xs mt-0.5"
-                        value={form.personalizada_saldo_total || form.commission || 1000}
-                        onChange={(e) => set('personalizada_saldo_total', Number(e.target.value))}
-                      />
-                    </div>
-                    <div>
-                      <Label className="text-[11px] text-slate-700">Estimativa Parcela (R$)</Label>
-                      <Input
-                        type="number"
-                        step="0.01"
-                        className="bg-white h-8 text-xs mt-0.5"
-                        value={form.personalizada_valor_estimado_parcela || 250}
-                        onChange={(e) =>
-                          set('personalizada_valor_estimado_parcela', Number(e.target.value))
-                        }
-                      />
-                    </div>
-                  </div>
-                )}
+                <RecebimentoParametros
+                  tipo={form.personalizada_tipo_modelo}
+                  form={form}
+                  set={set}
+                />
 
                 <div>
                   <Label className="text-[11px] text-slate-700">Motivo (opcional)</Label>

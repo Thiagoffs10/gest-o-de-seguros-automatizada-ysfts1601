@@ -134,6 +134,9 @@ export interface Policy {
   comissao_personalizada_config?: ModeloComissaoConfig & {
     tipo_modelo?: TipoModeloComissao
     percentual_padrao?: number
+    ajuste_manual_excepcional?: boolean
+    total_bruto_previsto?: number
+    total_liquido_previsto?: number
   }
   modelo_comissao_snapshot?: {
     modelo_id?: string

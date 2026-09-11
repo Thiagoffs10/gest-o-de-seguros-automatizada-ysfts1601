@@ -5,6 +5,7 @@ import {
   ComissaoPrevista,
   ComissaoRecebimento,
   Policy,
+  TIPOS_NATIVOS_RECEBIMENTO,
 } from '@/types'
 import { calcularPrevisoesComissao, PrevisaoItemCalculada } from '@/services/comissao-engine'
 import { formatDateForInput } from '@/lib/utils'
@@ -269,12 +270,15 @@ export const syncPrevisoesForPolicy = async (
   // Se o modelo não foi passado explicitamente, tenta carregar o modelo vinculado
   let modelo = modeloOuConfig
   if (!modelo) {
-    if (policy.comissao_personalizada && policy.comissao_personalizada_config?.tipo_modelo) {
+    if (policy.comissao_personalizada_config?.tipo_modelo) {
       modelo = {
         tipo_modelo: policy.comissao_personalizada_config.tipo_modelo,
         percentual_padrao:
           policy.comissao_personalizada_config.percentual_padrao || policy.commission_percent,
-        nome: 'Personalizado nesta apólice',
+        nome: policy.comissao_personalizada
+          ? 'Personalizado nesta apólice'
+          : TIPOS_NATIVOS_RECEBIMENTO[policy.comissao_personalizada_config.tipo_modelo]?.nome ||
+            'Padrão',
         config_json: policy.comissao_personalizada_config,
       }
     } else if (policy.modelo_comissao) {
