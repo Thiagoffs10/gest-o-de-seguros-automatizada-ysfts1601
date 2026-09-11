@@ -23,7 +23,8 @@ import {
 import { Textarea } from '@/components/ui/textarea'
 import { Loader2 } from 'lucide-react'
 import { TIPOS_DE_SEGURO, TIPOS_DE_VENDA } from '@/lib/constants'
-import { Client, Seguradora, Parceiro, Policy } from '@/types'
+import { Client, Seguradora, Parceiro, Policy, ModeloComissao } from '@/types'
+import { getModelosComissao, findSuggestedModelo } from '@/services/modelos-comissao'
 import { ClientAutocomplete } from '@/components/ClientAutocomplete'
 import type { FieldErrors } from '@/lib/pocketbase/errors'
 import {
@@ -63,6 +64,10 @@ const DEFAULT_FORM = {
   end_date: toLocalDate(new Date(Date.now() + 365 * 86400000)),
   status: 'Ativa',
   previous_policy: '',
+  modelo_comissao: '',
+  comissao_personalizada: false,
+  comissao_personalizada_config: null,
+  motivo_personalizacao: '',
 }
 
 interface Props {
@@ -105,7 +110,17 @@ export function PolicyFormDialog({
   }, [initialClients])
   const [loading, setLoading] = useState(false)
   const [validationErrors, setValidationErrors] = useState<Record<string, string>>({})
+  const [modelosList, setModelosList] = useState<ModeloComissao[]>([])
+  const [modeloAtivo, setModeloAtivo] = useState<ModeloComissao | null>(null)
   const skipAuto = useRef(true)
+
+  useEffect(() => {
+    if (open) {
+      getModelosComissao()
+        .then(setModelosList)
+        .catch(() => {})
+    }
+  }, [open])
 
   useEffect(() => {
     if (!open) return
@@ -169,9 +184,18 @@ export function PolicyFormDialog({
         end_date: formatDateForInput(initialData.end_date) || DEFAULT_FORM.end_date,
         status: initialData.status || 'Ativa',
         previous_policy: initialData.previous_policy || '',
+        modelo_comissao: initialData.modelo_comissao || '',
+        comissao_personalizada: Boolean(initialData.comissao_personalizada),
+        comissao_personalizada_config: initialData.comissao_personalizada_config || null,
+        motivo_personalizacao: '',
       })
+      if (initialData.modelo_comissao) {
+        const m = modelosList.find((x) => x.id === initialData.modelo_comissao)
+        if (m) setModeloAtivo(m)
+      }
     } else {
       setForm({ ...DEFAULT_FORM })
+      setModeloAtivo(null)
     }
     setValidationErrors({})
     setTimeout(() => {
@@ -189,6 +213,22 @@ export function PolicyFormDialog({
       })
     }
   }
+
+  // Sugestão automática de modelo por Seguradora + Produto ao trocar
+  useEffect(() => {
+    if (!open || initialData || form.comissao_personalizada) return
+    if (form.seguradora || form.tipo_de_seguro) {
+      findSuggestedModelo(form.seguradora, form.tipo_de_seguro).then((sugestao) => {
+        if (sugestao && (!form.modelo_comissao || form.modelo_comissao === '')) {
+          set('modelo_comissao', sugestao.id)
+          setModeloAtivo(sugestao)
+          if (sugestao.percentual_padrao && Number(sugestao.percentual_padrao) > 0) {
+            set('commission_percent', Number(sugestao.percentual_padrao))
+          }
+        }
+      })
+    }
+  }, [form.seguradora, form.tipo_de_seguro, open, initialData, form.comissao_personalizada])
 
   const selectedSeguradora = seguradoras.find((s) => s.id === form.seguradora)
   const impostoPercentual = selectedSeguradora?.imposto_percentual ?? 0
@@ -469,81 +509,94 @@ export function PolicyFormDialog({
             </div>
           </div>
 
-          {/* Forma de Recebimento da Comissão */}
-          <div className="p-3 bg-blue-50/50 border border-blue-100 rounded-lg space-y-2.5">
-            <div>
-              <Label className="text-xs font-semibold text-slate-800">
-                Forma de recebimento da comissão
+          {/* Modelo de Recebimento de Comissão (ETAPA 2A) */}
+          <div className="p-3 bg-blue-50/60 border border-blue-200 rounded-lg space-y-2.5">
+            <div className="flex items-center justify-between">
+              <Label className="text-xs font-bold text-slate-900">
+                Modelo de Recebimento de Comissão
               </Label>
-              <p className="text-[11px] text-slate-500 mb-1.5">
-                Indica apenas como a comissão é esperada (baixas são feitas exclusivamente no
-                Financeiro).
-              </p>
-              <Select
-                value={form.forma_recebimento || 'none'}
-                onValueChange={(v) => {
-                  const val = v === 'none' ? '' : v
-                  set('forma_recebimento', val)
-                  if (val !== 'Parcelada') {
-                    set('qtde_parcelas_esperadas', '')
-                  }
-                  if (val !== 'Outra / Manual') {
-                    set('obs_forma_recebimento', '')
-                  }
-                }}
-              >
-                <SelectTrigger className="bg-white">
-                  <SelectValue placeholder="Selecione a forma esperada (opcional)" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="none">Não informado / Padrão</SelectItem>
-                  <SelectItem value="Total definido">Total definido</SelectItem>
-                  <SelectItem value="Parcelada">Parcelada</SelectItem>
-                  <SelectItem value="Recorrente">Recorrente</SelectItem>
-                  <SelectItem value="Por esgotamento">Por esgotamento</SelectItem>
-                  <SelectItem value="Outra / Manual">Outra / Manual</SelectItem>
-                </SelectContent>
-              </Select>
+              <div className="flex items-center gap-1.5 text-xs">
+                <button
+                  type="button"
+                  onClick={() => {
+                    set('comissao_personalizada', false)
+                  }}
+                  className={`px-2 py-0.5 rounded text-[11px] font-semibold transition-colors ${
+                    !form.comissao_personalizada
+                      ? 'bg-blue-600 text-white shadow-xs'
+                      : 'bg-white text-slate-600 hover:bg-slate-100 border'
+                  }`}
+                >
+                  Usar modelo padrão
+                </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    set('comissao_personalizada', true)
+                  }}
+                  className={`px-2 py-0.5 rounded text-[11px] font-semibold transition-colors ${
+                    form.comissao_personalizada
+                      ? 'bg-amber-600 text-white shadow-xs'
+                      : 'bg-white text-slate-600 hover:bg-slate-100 border'
+                  }`}
+                >
+                  Personalizar nesta apólice
+                </button>
+              </div>
             </div>
 
-            {form.forma_recebimento === 'Parcelada' && (
+            {!form.comissao_personalizada ? (
               <div>
-                <Label className="text-xs font-semibold">Quantidade esperada de parcelas</Label>
-                <Input
-                  type="number"
-                  min="1"
-                  step="1"
-                  placeholder="Ex: 4, 6, 10"
-                  className="bg-white mt-1"
-                  value={form.qtde_parcelas_esperadas ?? ''}
-                  onChange={(e) => {
-                    const val = e.target.value === '' ? '' : parseInt(e.target.value, 10)
-                    set('qtde_parcelas_esperadas', isNaN(val as number) ? '' : val)
+                <Select
+                  value={form.modelo_comissao || 'none'}
+                  onValueChange={(v) => {
+                    const mId = v === 'none' ? '' : v
+                    set('modelo_comissao', mId)
+                    const m = modelosList.find((x) => x.id === mId)
+                    setModeloAtivo(m || null)
+                    if (m?.percentual_padrao && Number(m.percentual_padrao) > 0) {
+                      set('commission_percent', Number(m.percentual_padrao))
+                    }
                   }}
-                />
-                <p className="text-[11px] text-slate-500 mt-0.5">
-                  Previsão da quantidade de vezes em que a comissão será creditada pela seguradora.
-                </p>
+                >
+                  <SelectTrigger className="bg-white">
+                    <SelectValue placeholder="Selecione o modelo de comissão" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="none">
+                      Sem modelo pré-definido (Manual / À vista padrão)
+                    </SelectItem>
+                    {modelosList.map((m) => (
+                      <SelectItem key={m.id} value={m.id}>
+                        {m.nome} ({m.tipo_modelo})
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+                {modeloAtivo && (
+                  <p className="text-[11px] text-blue-700 mt-1">
+                    ✓ Modelo ativo: <strong>{modeloAtivo.nome}</strong> — tipo{' '}
+                    {modeloAtivo.tipo_modelo}
+                  </p>
+                )}
               </div>
-            )}
-
-            {form.forma_recebimento === 'Recorrente' && (
-              <p className="text-[11px] text-blue-700 bg-blue-100/60 p-2 rounded">
-                Recebimento contínuo/mensal conforme vigência. Não exige quantidade final de
-                parcelas.
-              </p>
-            )}
-
-            {form.forma_recebimento === 'Outra / Manual' && (
-              <div>
-                <Label className="text-xs font-semibold">Observação da forma de recebimento</Label>
-                <Input
-                  type="text"
-                  placeholder="Descreva como será o recebimento da comissão..."
-                  className="bg-white mt-1"
-                  value={form.obs_forma_recebimento || ''}
-                  onChange={(e) => set('obs_forma_recebimento', e.target.value)}
-                />
+            ) : (
+              <div className="space-y-2 p-2.5 bg-amber-50/70 border border-amber-200 rounded text-xs">
+                <p className="text-[11px] font-medium text-amber-900">
+                  ⚠️ Negociação exclusiva desta apólice. Não alterará o modelo padrão das demais
+                  apólices.
+                </p>
+                <div>
+                  <Label className="text-[11px] font-semibold text-slate-700">
+                    Motivo da personalização *
+                  </Label>
+                  <Input
+                    placeholder="Ex: Negociação especial 25% pelo volume ou condição de fase diferente"
+                    className="bg-white text-xs h-8 mt-0.5"
+                    value={form.motivo_personalizacao || ''}
+                    onChange={(e) => set('motivo_personalizacao', e.target.value)}
+                  />
+                </div>
               </div>
             )}
           </div>

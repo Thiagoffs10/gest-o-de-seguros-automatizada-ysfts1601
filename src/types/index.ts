@@ -112,6 +112,13 @@ export interface Policy {
   created: string
   updated: string
   previous_policy?: string
+  modelo_comissao?: string
+  comissao_personalizada?: boolean
+  comissao_personalizada_config?: ModeloComissaoConfig & {
+    tipo_modelo?: TipoModeloComissao
+    percentual_padrao?: number
+  }
+  historico_alteracao_comissao?: ComissaoAlteracaoHistorico[]
 }
 
 export interface Payment {
@@ -206,6 +213,87 @@ export interface Conciliacao {
   updated: string
 }
 
+export type TipoModeloComissao =
+  | 'A_VISTA'
+  | 'PARCELADA'
+  | 'RECORRENTE'
+  | 'POR_FASES'
+  | 'POR_ESGOTAMENTO'
+
+export interface FaseModelo {
+  id?: string
+  mes_inicio: number
+  mes_fim?: number | null // null indica "em diante"
+  percentual: number // % sobre prêmio líquido ou % do comissionamento
+}
+
+export interface ParcelaModelo {
+  numero: number
+  percentual?: number // % da comissão ou % sobre prêmio líquido
+  valor_fixo?: number
+}
+
+export interface ModeloComissaoConfig {
+  // Para PARCELADA:
+  quantidade_competencias?: number
+  parcelas?: ParcelaModelo[] // pode ter percentuais diferentes por competência
+
+  // Para RECORRENTE:
+  recorrencia_meses_horizonte?: number // padrão 12 meses
+  percentual_recorrente?: number
+
+  // Para POR_FASES:
+  fases?: FaseModelo[]
+
+  // Para POR_ESGOTAMENTO:
+  saldo_total?: number // ou comissão total definida
+  valor_estimado_parcela?: number
+}
+
+export interface ModeloComissao {
+  id: string
+  nome: string
+  tipo_modelo: TipoModeloComissao
+  seguradora?: string
+  tipo_seguro?: string
+  percentual_padrao?: number
+  config_json?: ModeloComissaoConfig
+  valido_a_partir_de?: string
+  versao?: number
+  ativo?: boolean
+  descricao?: string
+  created: string
+  updated: string
+  expand?: {
+    seguradora?: Seguradora
+  }
+}
+
+export interface ComissaoPrevista {
+  id: string
+  policy: string
+  competencia: string // Ex: "08/2026"
+  data_prevista: string // YYYY-MM-DD
+  valor_previsto: number
+  parcela_numero?: number
+  origem_modelo?: string
+  status: 'Pendente' | 'Parcial' | 'Recebida' | 'Cancelada'
+  observacao?: string
+  created: string
+  updated: string
+  expand?: {
+    policy?: Policy
+  }
+}
+
+export interface ComissaoAlteracaoHistorico {
+  data: string
+  usuario: string
+  motivo: string
+  alteracao: string
+  detalhes?: any
+}
+
 export interface ComissaoRecebimento {
   id: string
   policy: string
@@ -217,6 +305,8 @@ export interface ComissaoRecebimento {
         parceiro?: Parceiro
       }
     }
+    recebimento_original?: ComissaoRecebimento
+    comissao_prevista?: ComissaoPrevista
   }
   data_recebimento: string
   valor_bruto: number
@@ -228,6 +318,10 @@ export interface ComissaoRecebimento {
   parcela?: number
   competencia?: string
   idempotency_key?: string
+  is_estorno?: boolean
+  recebimento_original?: string
+  motivo_estorno?: string
+  comissao_prevista?: string
   created: string
   updated: string
 }

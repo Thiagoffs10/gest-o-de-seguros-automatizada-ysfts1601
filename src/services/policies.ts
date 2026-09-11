@@ -100,6 +100,22 @@ export function preparePolicyPayload(data: Partial<Policy> & Record<string, any>
     payload.valor_repasse = 0
   }
 
+  // ETAPA 2A: Modelo de comissão e personalização
+  if (payload.comissao_personalizada) {
+    payload.comissao_personalizada = true
+    payload.modelo_comissao = null
+  } else if (
+    payload.modelo_comissao &&
+    typeof payload.modelo_comissao === 'string' &&
+    payload.modelo_comissao.trim() !== ''
+  ) {
+    payload.modelo_comissao = payload.modelo_comissao.trim()
+    payload.comissao_personalizada = false
+  } else {
+    payload.modelo_comissao = null
+    payload.comissao_personalizada = false
+  }
+
   // Dates & financial tracking
   if ('data_pagamento_parceiro' in data) {
     if (
@@ -265,7 +281,7 @@ export const getPolicies = async (
     filter = filter ? `${filter} && (${qName})` : qName
   }
   const rawList = await pb.collection('policies').getFullList<Policy>({
-    expand: 'client,seguradora,parceiro',
+    expand: 'client,seguradora,parceiro,modelo_comissao',
     filter,
     sort: '-created',
   })
@@ -275,7 +291,7 @@ export const getPolicies = async (
 }
 export const getPolicy = async (id: string) => {
   return pb.collection('policies').getOne<Policy>(id, {
-    expand: 'client,seguradora,parceiro',
+    expand: 'client,seguradora,parceiro,modelo_comissao',
   })
 }
 
@@ -340,7 +356,7 @@ export function preparePolicyUpdatePayload(data: Partial<Policy> & Record<string
     }
 
     // Relacionamentos: evitar string vazia ""
-    if (['client', 'seguradora', 'parceiro', 'previous_policy'].includes(key)) {
+    if (['client', 'seguradora', 'parceiro', 'previous_policy', 'modelo_comissao'].includes(key)) {
       if (val !== undefined) {
         payload[key] = typeof val === 'string' && val.trim() === '' ? null : val
       }
@@ -372,12 +388,32 @@ export function preparePolicyUpdatePayload(data: Partial<Policy> & Record<string
 
 export const createPolicy = async (data: Partial<Policy>) => {
   const cleanData = preparePolicyPayload(data)
-  return pb.collection('policies').create<Policy>(cleanData)
+  const created = await pb.collection('policies').create<Policy>(cleanData)
+
+  // Se houver modelo ou customização de comissão, dispara sync de previsões
+  try {
+    const { syncPrevisoesForPolicy } = await import('@/services/modelos-comissao')
+    await syncPrevisoesForPolicy(created)
+  } catch {
+    /* intentionally ignored */
+  }
+
+  return created
 }
 
 export const updatePolicy = async (id: string, data: Partial<Policy>) => {
   const cleanData = preparePolicyUpdatePayload(data)
-  return pb.collection('policies').update<Policy>(id, cleanData)
+  const updated = await pb.collection('policies').update<Policy>(id, cleanData)
+
+  // Se houver modelo ou customização de comissão, dispara sync de previsões
+  try {
+    const { syncPrevisoesForPolicy } = await import('@/services/modelos-comissao')
+    await syncPrevisoesForPolicy(updated)
+  } catch {
+    /* intentionally ignored */
+  }
+
+  return updated
 }
 
 /**

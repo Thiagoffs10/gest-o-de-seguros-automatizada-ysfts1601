@@ -28,6 +28,8 @@ import { FinancialSummaryCards } from '@/components/FinancialSummaryCards'
 import { CommissionEditDialog, FinancialEditData } from '@/components/CommissionEditDialog'
 import { RegistrarRecebimentoModal } from '@/components/RegistrarRecebimentoModal'
 import { EditRecebimentoModal } from '@/components/EditRecebimentoModal'
+import { EstornoRecebimentoModal } from '@/components/EstornoRecebimentoModal'
+import { RotateCcw } from 'lucide-react'
 import { deleteComissaoRecebimento } from '@/services/comissao-recebimentos'
 import {
   Dialog,
@@ -91,6 +93,10 @@ export default function Financial() {
   const [historyPolicy, setHistoryPolicy] = useState<Policy | null>(null)
   const [isEditRecebimentoOpen, setIsEditRecebimentoOpen] = useState(false)
   const [editingRecebimento, setEditingRecebimento] = useState<ComissaoRecebimento | null>(null)
+  const [isEstornoOpen, setIsEstornoOpen] = useState(false)
+  const [estornandoRecebimento, setEstornandoRecebimento] = useState<ComissaoRecebimento | null>(
+    null,
+  )
   const [isDeleteRecebimentoOpen, setIsDeleteRecebimentoOpen] = useState(false)
   const [deletingRecebimento, setDeletingRecebimento] = useState<ComissaoRecebimento | null>(null)
   const [deleteLoading, setDeleteLoading] = useState(false)
@@ -977,17 +983,37 @@ export default function Financial() {
                           <td className="p-2.5 font-medium">
                             {formatDateDisplay(rec.data_recebimento)}
                           </td>
-                          <td className="p-2.5 font-bold">R$ {fmtMoney(rec.valor_bruto)}</td>
+                          <td
+                            className={`p-2.5 font-bold ${rec.is_estorno || rec.valor_bruto < 0 ? 'text-rose-600' : ''}`}
+                          >
+                            {rec.valor_bruto < 0
+                              ? `- R$ ${fmtMoney(Math.abs(rec.valor_bruto))}`
+                              : `R$ ${fmtMoney(rec.valor_bruto)}`}
+                          </td>
                           <td className="p-2.5 text-slate-500">
                             {rec.descontos_impostos
                               ? `R$ ${fmtMoney(rec.descontos_impostos)}`
                               : '-'}
                           </td>
-                          <td className="p-2.5 font-bold text-emerald-700">
-                            R$ {fmtMoney(rec.valor_liquido)}
+                          <td
+                            className={`p-2.5 font-bold ${rec.is_estorno || (rec.valor_liquido || 0) < 0 ? 'text-rose-600' : 'text-emerald-700'}`}
+                          >
+                            {(rec.valor_liquido || 0) < 0
+                              ? `- R$ ${fmtMoney(Math.abs(rec.valor_liquido || 0))}`
+                              : `R$ ${fmtMoney(rec.valor_liquido)}`}
                           </td>
                           <td className="p-2.5">
-                            <span className="font-semibold block">{rec.origem || 'Manual'}</span>
+                            <div className="flex items-center gap-1.5">
+                              {rec.is_estorno && (
+                                <Badge
+                                  variant="outline"
+                                  className="text-[10px] bg-rose-50 text-rose-700 border-rose-200"
+                                >
+                                  Estorno
+                                </Badge>
+                              )}
+                              <span className="font-semibold block">{rec.origem || 'Manual'}</span>
+                            </div>
                             {rec.observacao && (
                               <span className="text-[11px] text-slate-500 block">
                                 {rec.observacao}
@@ -996,7 +1022,21 @@ export default function Financial() {
                           </td>
                           <td className="p-2.5 text-right">
                             <div className="flex items-center justify-end gap-1">
-                              {can('policies', 'update') && (
+                              {can('policies', 'update') && !rec.is_estorno && (
+                                <Button
+                                  variant="ghost"
+                                  size="sm"
+                                  className="text-rose-600 hover:text-rose-700 hover:bg-rose-50 h-7 px-2"
+                                  title="Estornar recebimento"
+                                  onClick={() => {
+                                    setEstornandoRecebimento(rec)
+                                    setIsEstornoOpen(true)
+                                  }}
+                                >
+                                  <RotateCcw className="w-3.5 h-3.5 mr-1" /> Estornar
+                                </Button>
+                              )}
+                              {can('policies', 'update') && !rec.is_estorno && (
                                 <Button
                                   variant="ghost"
                                   size="sm"
@@ -1041,6 +1081,21 @@ export default function Financial() {
           </DialogFooter>
         </DialogContent>
       </Dialog>
+
+      {/* Modal de Estorno de Recebimento no Financeiro */}
+      <EstornoRecebimentoModal
+        open={isEstornoOpen}
+        onOpenChange={(open) => {
+          setIsEstornoOpen(open)
+          if (!open) setEstornandoRecebimento(null)
+        }}
+        recebimento={estornandoRecebimento}
+        onSuccess={() => {
+          setTimeout(() => {
+            loadData()
+          }, 50)
+        }}
+      />
 
       {/* Modal de Edição de Recebimento no Financeiro */}
       <EditRecebimentoModal

@@ -1,5 +1,5 @@
 {
-  "generatedAt": "2026-09-11T02:37:33.700Z",
+  "generatedAt": "2026-09-11T02:56:01.853Z",
   "collections": [
     {
       "name": "users",
@@ -462,6 +462,31 @@
         {
           "name": "obs_forma_recebimento",
           "type": "text",
+          "required": false,
+          "system": false
+        },
+        {
+          "name": "modelo_comissao",
+          "type": "relation",
+          "required": false,
+          "system": false,
+          "collectionRef": "modelos_comissao"
+        },
+        {
+          "name": "comissao_personalizada",
+          "type": "bool",
+          "required": false,
+          "system": false
+        },
+        {
+          "name": "comissao_personalizada_config",
+          "type": "json",
+          "required": false,
+          "system": false
+        },
+        {
+          "name": "historico_alteracao_comissao",
+          "type": "json",
           "required": false,
           "system": false
         }
@@ -1509,12 +1534,213 @@
           "required": false,
           "system": false,
           "autodateTriggers": ["onCreate", "onUpdate"]
+        },
+        {
+          "name": "is_estorno",
+          "type": "bool",
+          "required": false,
+          "system": false
+        },
+        {
+          "name": "recebimento_original",
+          "type": "relation",
+          "required": false,
+          "system": false,
+          "collectionRef": "comissao_recebimentos"
+        },
+        {
+          "name": "motivo_estorno",
+          "type": "text",
+          "required": false,
+          "system": false
+        },
+        {
+          "name": "comissao_prevista",
+          "type": "relation",
+          "required": false,
+          "system": false,
+          "collectionRef": "comissoes_previstas"
         }
       ],
       "indexes": [
         "CREATE INDEX idx_comissao_rec_policy ON comissao_recebimentos (policy)",
         "CREATE INDEX idx_comissao_rec_data ON comissao_recebimentos (data_recebimento)",
         "CREATE UNIQUE INDEX idx_comissao_rec_idempotency ON comissao_recebimentos (idempotency_key) WHERE idempotency_key != \"\""
+      ]
+    },
+    {
+      "name": "modelos_comissao",
+      "type": "base",
+      "apiRules": {
+        "list": "@request.auth.id != ''",
+        "view": "@request.auth.id != ''",
+        "create": "@request.auth.id != ''",
+        "update": "@request.auth.id != ''",
+        "delete": "@request.auth.id != ''"
+      },
+      "fields": [
+        {
+          "name": "nome",
+          "type": "text",
+          "required": true,
+          "system": false
+        },
+        {
+          "name": "tipo_modelo",
+          "type": "select",
+          "required": true,
+          "system": false,
+          "selectValues": ["A_VISTA", "PARCELADA", "RECORRENTE", "POR_FASES", "POR_ESGOTAMENTO"]
+        },
+        {
+          "name": "seguradora",
+          "type": "relation",
+          "required": false,
+          "system": false,
+          "collectionRef": "seguradoras"
+        },
+        {
+          "name": "tipo_seguro",
+          "type": "text",
+          "required": false,
+          "system": false
+        },
+        {
+          "name": "percentual_padrao",
+          "type": "number",
+          "required": false,
+          "system": false
+        },
+        {
+          "name": "config_json",
+          "type": "json",
+          "required": false,
+          "system": false
+        },
+        {
+          "name": "valido_a_partir_de",
+          "type": "date",
+          "required": false,
+          "system": false
+        },
+        {
+          "name": "versao",
+          "type": "number",
+          "required": false,
+          "system": false
+        },
+        {
+          "name": "ativo",
+          "type": "bool",
+          "required": false,
+          "system": false
+        },
+        {
+          "name": "descricao",
+          "type": "text",
+          "required": false,
+          "system": false
+        },
+        {
+          "name": "created",
+          "type": "autodate",
+          "required": false,
+          "system": false,
+          "autodateTriggers": ["onCreate"]
+        },
+        {
+          "name": "updated",
+          "type": "autodate",
+          "required": false,
+          "system": false,
+          "autodateTriggers": ["onCreate", "onUpdate"]
+        }
+      ],
+      "indexes": [
+        "CREATE INDEX idx_mod_com_seguradora ON modelos_comissao (seguradora)",
+        "CREATE INDEX idx_mod_com_tipo ON modelos_comissao (tipo_modelo)"
+      ]
+    },
+    {
+      "name": "comissoes_previstas",
+      "type": "base",
+      "apiRules": {
+        "list": "@request.auth.id != ''",
+        "view": "@request.auth.id != ''",
+        "create": "@request.auth.id != ''",
+        "update": "@request.auth.id != ''",
+        "delete": "@request.auth.id != ''"
+      },
+      "fields": [
+        {
+          "name": "policy",
+          "type": "relation",
+          "required": true,
+          "system": false,
+          "collectionRef": "policies"
+        },
+        {
+          "name": "competencia",
+          "type": "text",
+          "required": true,
+          "system": false
+        },
+        {
+          "name": "data_prevista",
+          "type": "date",
+          "required": true,
+          "system": false
+        },
+        {
+          "name": "valor_previsto",
+          "type": "number",
+          "required": true,
+          "system": false
+        },
+        {
+          "name": "parcela_numero",
+          "type": "number",
+          "required": false,
+          "system": false
+        },
+        {
+          "name": "origem_modelo",
+          "type": "text",
+          "required": false,
+          "system": false
+        },
+        {
+          "name": "status",
+          "type": "select",
+          "required": false,
+          "system": false,
+          "selectValues": ["Pendente", "Parcial", "Recebida", "Cancelada"]
+        },
+        {
+          "name": "observacao",
+          "type": "text",
+          "required": false,
+          "system": false
+        },
+        {
+          "name": "created",
+          "type": "autodate",
+          "required": false,
+          "system": false,
+          "autodateTriggers": ["onCreate"]
+        },
+        {
+          "name": "updated",
+          "type": "autodate",
+          "required": false,
+          "system": false,
+          "autodateTriggers": ["onCreate", "onUpdate"]
+        }
+      ],
+      "indexes": [
+        "CREATE INDEX idx_com_prev_policy ON comissoes_previstas (policy)",
+        "CREATE INDEX idx_com_prev_data ON comissoes_previstas (data_prevista)",
+        "CREATE INDEX idx_com_prev_comp ON comissoes_previstas (competencia)"
       ]
     }
   ]

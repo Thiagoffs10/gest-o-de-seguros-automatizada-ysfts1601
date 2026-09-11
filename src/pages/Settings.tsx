@@ -9,6 +9,8 @@ import { Label } from '@/components/ui/label'
 import { Checkbox } from '@/components/ui/checkbox'
 import { SecretsGuideDialog } from '@/components/SecretsGuideDialog'
 import { TiposSeguroManager } from '@/components/TiposSeguroManager'
+import { Layers } from 'lucide-react'
+import { Link } from 'react-router-dom'
 import { useToast } from '@/hooks/use-toast'
 import pb from '@/lib/pocketbase/client'
 
@@ -104,6 +106,29 @@ export default function Settings() {
       </Card>
 
       <TiposSeguroManager />
+
+      <Card className="shadow-sm">
+        <CardHeader>
+          <CardTitle className="text-base font-bold flex items-center gap-2">
+            <Layers className="w-5 h-5 text-blue-600" />
+            Modelos de Recebimento de Comissões
+          </CardTitle>
+          <CardDescription>
+            Configure os 5 modelos de comissão (à vista, parcelada, recorrente, por fases ou
+            esgotamento) e sugestões por seguradora.
+          </CardDescription>
+        </CardHeader>
+        <CardContent className="flex items-center justify-between">
+          <p className="text-sm text-slate-600">
+            Gerencie e crie regras pré-definidas para cálculo automático de previsões de comissão.
+          </p>
+          <Link to="/modelos-comissao">
+            <Button variant="outline" className="text-blue-600 border-blue-200 hover:bg-blue-50">
+              Gerenciar Modelos
+            </Button>
+          </Link>
+        </CardContent>
+      </Card>
 
       <Card className="shadow-sm bg-slate-100 border-slate-200">
         <CardHeader>

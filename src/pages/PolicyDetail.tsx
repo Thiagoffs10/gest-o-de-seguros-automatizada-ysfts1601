@@ -53,6 +53,8 @@ import { PolicyFormDialog } from '@/components/PolicyFormDialog'
 import { DeletePolicyDialog } from '@/components/DeletePolicyDialog'
 import { CancelPolicyDialog } from '@/components/CancelPolicyDialog'
 import { EditRecebimentoModal } from '@/components/EditRecebimentoModal'
+import { EstornoRecebimentoModal } from '@/components/EstornoRecebimentoModal'
+import { RotateCcw } from 'lucide-react'
 import { useToast } from '@/hooks/use-toast'
 import { useRealtime } from '@/hooks/use-realtime'
 import { usePermissions } from '@/hooks/use-permissions'
@@ -86,6 +88,10 @@ export default function PolicyDetail() {
   // Separação de aberto/fechado de item selecionado para evitar desmontagem abrupta e flicker
   const [isEditRecebimentoOpen, setIsEditRecebimentoOpen] = useState(false)
   const [editingRecebimento, setEditingRecebimento] = useState<ComissaoRecebimento | null>(null)
+  const [isEstornoOpen, setIsEstornoOpen] = useState(false)
+  const [estornandoRecebimento, setEstornandoRecebimento] = useState<ComissaoRecebimento | null>(
+    null,
+  )
 
   const [isDeleteRecebimentoOpen, setIsDeleteRecebimentoOpen] = useState(false)
   const [deletingRecebimento, setDeletingRecebimento] = useState<ComissaoRecebimento | null>(null)
@@ -510,20 +516,40 @@ export default function PolicyDetail() {
                         <td className="p-2.5 font-medium">
                           {formatDateDisplay(rec.data_recebimento)}
                         </td>
-                        <td className="p-2.5">R$ {fmtMoney(rec.valor_bruto)}</td>
+                        <td
+                          className={`p-2.5 ${rec.is_estorno || rec.valor_bruto < 0 ? 'text-rose-600 font-bold' : 'font-medium'}`}
+                        >
+                          {rec.valor_bruto < 0
+                            ? `- R$ ${fmtMoney(Math.abs(rec.valor_bruto))}`
+                            : `R$ ${fmtMoney(rec.valor_bruto)}`}
+                        </td>
                         <td className="p-2.5 text-slate-500">
                           {rec.descontos_impostos ? `R$ ${fmtMoney(rec.descontos_impostos)}` : '-'}
                         </td>
-                        <td className="p-2.5 font-bold text-emerald-700">
-                          R$ {fmtMoney(rec.valor_liquido)}
+                        <td
+                          className={`p-2.5 font-bold ${rec.is_estorno || (rec.valor_liquido || 0) < 0 ? 'text-rose-600' : 'text-emerald-700'}`}
+                        >
+                          {(rec.valor_liquido || 0) < 0
+                            ? `- R$ ${fmtMoney(Math.abs(rec.valor_liquido || 0))}`
+                            : `R$ ${fmtMoney(rec.valor_liquido)}`}
                         </td>
                         <td className="p-2.5">
                           <div className="flex flex-col">
-                            <span className="font-medium text-slate-800">
-                              {rec.origem || 'Manual'}
-                              {rec.competencia && ` • Comp: ${rec.competencia}`}
-                              {rec.parcela ? ` • Parc: ${rec.parcela}` : ''}
-                            </span>
+                            <div className="flex items-center gap-1.5">
+                              {rec.is_estorno && (
+                                <Badge
+                                  variant="outline"
+                                  className="text-[10px] bg-rose-50 text-rose-700 border-rose-200"
+                                >
+                                  Estorno
+                                </Badge>
+                              )}
+                              <span className="font-medium text-slate-800">
+                                {rec.origem || 'Manual'}
+                                {rec.competencia && ` • Comp: ${rec.competencia}`}
+                                {rec.parcela ? ` • Parc: ${rec.parcela}` : ''}
+                              </span>
+                            </div>
                             {rec.observacao && (
                               <span className="text-slate-500 text-[11px]">{rec.observacao}</span>
                             )}
@@ -531,7 +557,21 @@ export default function PolicyDetail() {
                         </td>
                         <td className="p-2.5 text-right">
                           <div className="flex items-center justify-end gap-1">
-                            {can('policies', 'update') && (
+                            {can('policies', 'update') && !rec.is_estorno && (
+                              <Button
+                                variant="ghost"
+                                size="sm"
+                                className="text-rose-600 hover:text-rose-700 hover:bg-rose-50 h-7 px-2"
+                                onClick={() => {
+                                  setEstornandoRecebimento(rec)
+                                  setIsEstornoOpen(true)
+                                }}
+                                title="Estornar recebimento"
+                              >
+                                <RotateCcw className="w-3.5 h-3.5 mr-1" /> Estornar
+                              </Button>
+                            )}
+                            {can('policies', 'update') && !rec.is_estorno && (
                               <Button
                                 variant="ghost"
                                 size="sm"
@@ -682,15 +722,18 @@ export default function PolicyDetail() {
             </p>
           </div>
           <div>
-            <p className="text-xs text-slate-500">Forma de Recebimento da Comissão</p>
+            <p className="text-xs text-slate-500">Modelo de Recebimento</p>
             <p className="font-semibold text-slate-900">
-              {policy.forma_recebimento || 'Não informada'}
-              {policy.forma_recebimento === 'Parcelada' && policy.qtde_parcelas_esperadas
-                ? ` (${policy.qtde_parcelas_esperadas} parcelas esperadas)`
-                : ''}
-              {policy.forma_recebimento === 'Outra / Manual' && policy.obs_forma_recebimento
-                ? ` — ${policy.obs_forma_recebimento}`
-                : ''}
+              {policy.comissao_personalizada ? (
+                <span className="text-amber-700 font-bold">Personalizado nesta apólice</span>
+              ) : (policy as any).expand?.modelo_comissao?.nome ? (
+                <span>
+                  {(policy as any).expand.modelo_comissao.nome} (
+                  {(policy as any).expand.modelo_comissao.tipo_modelo})
+                </span>
+              ) : (
+                policy.forma_recebimento || 'À Vista / Padrão'
+              )}
             </p>
           </div>
           <div>
@@ -791,6 +834,21 @@ export default function PolicyDetail() {
         onOpenChange={setCancelOpen}
         onConfirm={handleCancelConfirm}
         policyNumber={policy.policy_number}
+      />
+
+      {/* Modal de Estorno de Recebimento */}
+      <EstornoRecebimentoModal
+        open={isEstornoOpen}
+        onOpenChange={(open) => {
+          setIsEstornoOpen(open)
+          if (!open) setEstornandoRecebimento(null)
+        }}
+        recebimento={estornandoRecebimento}
+        onSuccess={() => {
+          setTimeout(() => {
+            loadData()
+          }, 50)
+        }}
       />
 
       {/* Modal de Edição de Recebimento */}

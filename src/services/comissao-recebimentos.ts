@@ -36,6 +36,10 @@ export interface CreateComissaoRecebimentoPayload {
   parcela?: number | null
   competencia?: string | null
   idempotency_key?: string
+  is_estorno?: boolean
+  recebimento_original?: string | null
+  motivo_estorno?: string
+  comissao_prevista?: string | null
 }
 
 export interface UpdateComissaoRecebimentoPayload {
@@ -125,15 +129,23 @@ export const createComissaoRecebimento = async (
   }
 
   const bruto = Math.round(Number(data.valor_bruto) * 100) / 100
-  if (isNaN(bruto) || bruto <= 0) {
+  if (isNaN(bruto)) {
+    throw new Error('O valor da comissão informado é inválido.')
+  }
+  if (!data.is_estorno && bruto <= 0) {
     throw new Error('O valor bruto da comissão deve ser maior que zero.')
+  }
+  if (data.is_estorno && bruto >= 0) {
+    throw new Error('O valor de estorno deve ser lançado como valor negativo.')
   }
 
   const descontos = Math.round(Number(data.descontos_impostos || 0) * 100) / 100
   const liquido =
     data.valor_liquido !== undefined
       ? Math.round(Number(data.valor_liquido) * 100) / 100
-      : Math.round(Math.max(0, bruto - descontos) * 100) / 100
+      : data.is_estorno
+        ? Math.round((bruto - descontos) * 100) / 100
+        : Math.round(Math.max(0, bruto - descontos) * 100) / 100
 
   // Auditoria do usuário responsável e data/hora da ação
   const currentUser = pb.authStore.record
@@ -155,6 +167,17 @@ export const createComissaoRecebimento = async (
     valor_liquido: liquido,
     origem: data.origem || 'Manual',
     observacao: obs,
+    is_estorno: Boolean(data.is_estorno),
+  }
+
+  if (data.recebimento_original) {
+    payload.recebimento_original = data.recebimento_original
+  }
+  if (data.motivo_estorno) {
+    payload.motivo_estorno = data.motivo_estorno.trim()
+  }
+  if (data.comissao_prevista) {
+    payload.comissao_prevista = data.comissao_prevista
   }
 
   if (data.aliquota_imposto !== undefined && data.aliquota_imposto !== null) {
@@ -259,6 +282,98 @@ export const updateComissaoRecebimento = async (
   }
 
   return updatedRec
+}
+
+export interface RegistrarEstornoPayload {
+  recebimento_original_id: string
+  valor_estorno: number // valor positivo a ser estornado (será negativado no banco)
+  data_estorno: string
+  motivo: string
+}
+
+/**
+ * Registra um Estorno de recebimento de comissão.
+ * Regra: NUNCA apagar o recebimento original.
+ * O estorno é registrado como um novo lançamento com valor NEGATIVO em comissao_recebimentos,
+ * vinculado ao recebimento_original, preservando histórico e rastreabilidade total (usuário, data, motivo).
+ */
+export const registrarEstornoComissao = async (
+  payload: RegistrarEstornoPayload,
+): Promise<ComissaoRecebimento> => {
+  if (!payload.recebimento_original_id) {
+    throw new Error('O recebimento original é obrigatório para registrar o estorno.')
+  }
+  const valorPositivo = Math.abs(Number(payload.valor_estorno))
+  if (isNaN(valorPositivo) || valorPositivo <= 0) {
+    throw new Error('Informe um valor de estorno válido maior que zero.')
+  }
+  if (!payload.motivo || payload.motivo.trim() === '') {
+    throw new Error('O motivo do estorno é obrigatório para auditoria.')
+  }
+  if (!payload.data_estorno || payload.data_estorno.trim() === '') {
+    throw new Error('A data do estorno é obrigatória.')
+  }
+
+  // 1. Carregar recebimento original
+  const original = await pb
+    .collection('comissao_recebimentos')
+    .getOne<ComissaoRecebimento>(payload.recebimento_original_id)
+
+  const originalBruto = Number(original.valor_bruto) || 0
+
+  // 2. Buscar outros estornos já feitos para este recebimento
+  const outrosEstornos = await pb
+    .collection('comissao_recebimentos')
+    .getFullList<ComissaoRecebimento>({
+      filter: `recebimento_original = "${original.id}"`,
+    })
+  const jaEstornado = Math.abs(
+    outrosEstornos.reduce((acc, est) => acc + (Number(est.valor_bruto) || 0), 0),
+  )
+
+  const saldoDisponivelParaEstorno = Math.max(
+    0,
+    Math.round((originalBruto - jaEstornado) * 100) / 100,
+  )
+  if (valorPositivo > saldoDisponivelParaEstorno + 0.009) {
+    throw new Error(
+      `O valor de estorno (R$ ${valorPositivo.toFixed(2)}) não pode exceder o saldo restante deste recebimento (R$ ${saldoDisponivelParaEstorno.toFixed(2)}).`,
+    )
+  }
+
+  // 3. Proporcional de imposto se houver
+  const aliq = Number(original.aliquota_imposto || 0)
+  const descImpostoEstorno = aliq > 0 ? Math.round(((valorPositivo * aliq) / 100) * 100) / 100 : 0
+
+  const valorBrutoNegativo = -Math.abs(valorPositivo)
+  const valorLiquidoNegativo = -Math.abs(
+    Math.round((valorPositivo - descImpostoEstorno) * 100) / 100,
+  )
+
+  const currentUser = pb.authStore.record
+  const userAuditoria = currentUser
+    ? `${currentUser.name || currentUser.email || currentUser.id}`
+    : 'Sistema'
+
+  const idempotencyKey = `est_${original.id}_${Date.now()}_${Math.random().toString(36).substring(2, 6)}`
+
+  return createComissaoRecebimento({
+    policy: original.policy,
+    data_recebimento: payload.data_estorno,
+    valor_bruto: valorBrutoNegativo,
+    descontos_impostos: -descImpostoEstorno,
+    valor_liquido: valorLiquidoNegativo,
+    aliquota_imposto: aliq,
+    origem: 'Estorno',
+    observacao: `[Estorno ref. recebimento ${original.id}]: ${payload.motivo.trim()} [Responsável: ${userAuditoria}]`,
+    parcela: original.parcela,
+    competencia: original.competencia,
+    idempotency_key: idempotencyKey,
+    is_estorno: true,
+    recebimento_original: original.id,
+    motivo_estorno: payload.motivo.trim(),
+    comissao_prevista: original.comissao_prevista || null,
+  })
 }
 
 export const deleteComissaoRecebimento = async (id: string, policyId?: string) => {
