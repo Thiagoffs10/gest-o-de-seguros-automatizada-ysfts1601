@@ -95,6 +95,7 @@ const DEFAULT_FORM = {
   ] as FaseModelo[],
   personalizada_saldo_total: 1000,
   personalizada_valor_estimado_parcela: 250,
+  ajuste_manual_excepcional: false,
 }
 interface Props {
   open: boolean
@@ -237,6 +238,7 @@ export function PolicyFormDialog({
               ],
         personalizada_saldo_total: customCfg.saldo_total || 1000,
         personalizada_valor_estimado_parcela: customCfg.valor_estimado_parcela || 250,
+        ajuste_manual_excepcional: Boolean(customCfg.ajuste_manual_excepcional),
       })
       if (initialData.modelo_comissao) {
         const m = modelosList.find((x) => x.id === initialData.modelo_comissao)
@@ -351,41 +353,43 @@ export function PolicyFormDialog({
       const renewalDate = toLocalDate(new Date(endDate.getTime() - 30 * 86400000))
 
       // Montar config de comissão personalizada se o usuário escolheu personalizar
-      let customConfigPayload = null
-      if (form.comissao_personalizada) {
-        customConfigPayload = {
-          tipo_modelo: form.personalizada_tipo_modelo || 'A_VISTA',
-          percentual_padrao: form.commission_percent,
-          quantidade_competencias:
-            form.personalizada_tipo_modelo === 'PARCELADA'
-              ? Number(form.personalizada_qtd_competencias || 1)
-              : undefined,
-          percentual_recorrente:
-            form.personalizada_tipo_modelo === 'RECORRENTE'
-              ? Number(form.personalizada_percentual_recorrente || form.commission_percent || 0)
-              : undefined,
-          recorrencia_meses_horizonte:
-            form.personalizada_tipo_modelo === 'RECORRENTE' ||
-            form.personalizada_tipo_modelo === 'POR_FASES'
-              ? Number(form.personalizada_horizonte_meses || 12)
-              : undefined,
-          fases:
-            form.personalizada_tipo_modelo === 'POR_FASES'
-              ? form.personalizada_fases || []
-              : undefined,
-          saldo_total:
-            form.personalizada_tipo_modelo === 'POR_ESGOTAMENTO'
-              ? Number(form.personalizada_saldo_total || form.commission || 0)
-              : undefined,
-          valor_estimado_parcela:
-            form.personalizada_tipo_modelo === 'POR_ESGOTAMENTO'
-              ? Number(form.personalizada_valor_estimado_parcela || 0)
-              : undefined,
-        }
+      // Configuração de recebimento da comissão na apólice:
+      // Sempre que selecionado um tipo nativo, salva no comissao_personalizada_config para que
+      // o motor de previsão gere as competências exatamente de acordo com a modalidade escolhida.
+      const tipoEscolhido = form.personalizada_tipo_modelo || 'A_VISTA'
+      const customConfigPayload = {
+        tipo_modelo: tipoEscolhido,
+        percentual_padrao: form.commission_percent,
+        total_bruto_previsto: form.commission != null ? Number(form.commission) : 0,
+        total_liquido_previsto: comissaoLiquida,
+        ajuste_manual_excepcional: Boolean(form.ajuste_manual_excepcional),
+        quantidade_competencias:
+          tipoEscolhido === 'PARCELADA'
+            ? Number(form.personalizada_qtd_competencias || 1)
+            : undefined,
+        percentual_recorrente:
+          tipoEscolhido === 'RECORRENTE'
+            ? Number(form.personalizada_percentual_recorrente || form.commission_percent || 0)
+            : undefined,
+        recorrencia_meses_horizonte:
+          tipoEscolhido === 'RECORRENTE' || tipoEscolhido === 'POR_FASES'
+            ? Number(form.personalizada_horizonte_meses || 12)
+            : undefined,
+        fases: tipoEscolhido === 'POR_FASES' ? form.personalizada_fases || [] : undefined,
+        saldo_total:
+          tipoEscolhido === 'POR_ESGOTAMENTO'
+            ? Number(form.personalizada_saldo_total || form.commission || 0)
+            : undefined,
+        valor_estimado_parcela:
+          tipoEscolhido === 'POR_ESGOTAMENTO'
+            ? Number(form.personalizada_valor_estimado_parcela || 0)
+            : undefined,
       }
 
       await onSubmit({
         ...form,
+        // Mantém comissao_personalizada ativo se houver modelo não-nulo ou tipo definido
+        comissao_personalizada: form.comissao_personalizada || !form.modelo_comissao,
         renewal_date: renewalDate,
         comissao_personalizada_config: customConfigPayload,
       })
@@ -601,6 +605,23 @@ export function PolicyFormDialog({
                 />
               </div>
             </div>
+            {Number(form.parcelas) > 0 && Number(form.valor_bruto) > 0 && (
+              <div className="mt-2 pt-2 border-t border-slate-200/80 flex items-center justify-between text-xs bg-white px-2.5 py-1.5 rounded border border-slate-200">
+                <div>
+                  <span className="text-slate-500 font-medium">Valor da parcela do seguro: </span>
+                  <span className="font-bold text-slate-900">
+                    R$ {formatCurrency(Number(form.valor_bruto) / Number(form.parcelas))}
+                  </span>
+                  <span className="text-[11px] text-slate-400 ml-1">
+                    ({Number(form.parcelas)}x de R${' '}
+                    {formatCurrency(Number(form.valor_bruto) / Number(form.parcelas))})
+                  </span>
+                </div>
+                <span className="text-[10px] text-slate-500 italic">
+                  * Prêmio pago pelo segurado (não confundir com recebimento de comissão)
+                </span>
+              </div>
+            )}
           </div>
 
           <div className="grid grid-cols-2 gap-2">

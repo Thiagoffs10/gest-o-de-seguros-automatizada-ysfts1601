@@ -877,7 +877,19 @@ export default function PolicyDetail() {
           </div>
           <div>
             <p className="text-xs text-slate-500">Parcelas do Seguro</p>
-            <p className="font-semibold">{policy.parcelas ? `${policy.parcelas}x` : '-'}</p>
+            <p className="font-semibold">
+              {policy.parcelas ? `${policy.parcelas}x` : '-'}
+              {policy.parcelas && Number(policy.parcelas) > 0 && Number(policy.valor_bruto || 0) > 0
+                ? ` — R$ ${fmtMoney(Number(policy.valor_bruto || 0) / Number(policy.parcelas))} / parcela`
+                : ''}
+            </p>
+            {policy.parcelas &&
+              Number(policy.parcelas) > 0 &&
+              Number(policy.valor_bruto || 0) > 0 && (
+                <p className="text-[10px] text-slate-400 italic">
+                  Prêmio pago pelo segurado à seguradora (não é comissão)
+                </p>
+              )}
           </div>
           <div>
             <p className="text-xs text-slate-500">Comissão (%)</p>
