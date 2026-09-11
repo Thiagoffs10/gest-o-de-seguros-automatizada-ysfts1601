@@ -89,10 +89,13 @@ const DEFAULT_FORM = {
   personalizada_qtd_competencias: 6,
   personalizada_percentual_recorrente: 5,
   personalizada_horizonte_meses: 12,
+  personalizada_fases: [
+    { mes_inicio: 1, mes_fim: 3, percentual: 100 },
+    { mes_inicio: 4, mes_fim: null, percentual: 2 },
+  ] as FaseModelo[],
   personalizada_saldo_total: 1000,
   personalizada_valor_estimado_parcela: 250,
 }
-
 interface Props {
   open: boolean
   onOpenChange: (open: boolean) => void
@@ -225,6 +228,13 @@ export function PolicyFormDialog({
         personalizada_qtd_competencias: customCfg.quantidade_competencias || 6,
         personalizada_percentual_recorrente: customCfg.percentual_recorrente || 5,
         personalizada_horizonte_meses: customCfg.recorrencia_meses_horizonte || 12,
+        personalizada_fases:
+          customCfg.fases && customCfg.fases.length > 0
+            ? customCfg.fases
+            : [
+                { mes_inicio: 1, mes_fim: 3, percentual: 100 },
+                { mes_inicio: 4, mes_fim: null, percentual: 2 },
+              ],
         personalizada_saldo_total: customCfg.saldo_total || 1000,
         personalizada_valor_estimado_parcela: customCfg.valor_estimado_parcela || 250,
       })
@@ -358,6 +368,10 @@ export function PolicyFormDialog({
             form.personalizada_tipo_modelo === 'RECORRENTE' ||
             form.personalizada_tipo_modelo === 'POR_FASES'
               ? Number(form.personalizada_horizonte_meses || 12)
+              : undefined,
+          fases:
+            form.personalizada_tipo_modelo === 'POR_FASES'
+              ? form.personalizada_fases || []
               : undefined,
           saldo_total:
             form.personalizada_tipo_modelo === 'POR_ESGOTAMENTO'
@@ -721,7 +735,7 @@ export function PolicyFormDialog({
                   <div className="flex items-center justify-between text-[11px] text-slate-500 pt-0.5">
                     <span>Nenhum modelo cadastrado para esta Seguradora + Produto.</span>
                     <a
-                      href={`/cadastros?tab=modelos${form.seguradora ? `&seguradora=${form.seguradora}` : ''}`}
+                      href={`/cadastros?tab=modelos${form.seguradora ? `&seguradora=${encodeURIComponent(form.seguradora)}` : ''}${form.tipo_de_seguro ? `&produto=${encodeURIComponent(form.tipo_de_seguro)}` : ''}`}
                       target="_blank"
                       rel="noreferrer"
                       className="text-blue-600 hover:underline font-medium inline-flex items-center gap-0.5"
@@ -825,6 +839,118 @@ export function PolicyFormDialog({
                           set('personalizada_horizonte_meses', parseInt(e.target.value || '12', 10))
                         }
                       />
+                    </div>
+                  </div>
+                )}
+
+                {form.personalizada_tipo_modelo === 'POR_FASES' && (
+                  <div className="space-y-2 p-2.5 bg-purple-50/50 rounded border border-purple-200/60">
+                    <div className="flex items-center justify-between">
+                      <Label className="text-[11px] font-bold text-purple-900">
+                        Linhas de Fase (Período + Percentual)
+                      </Label>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          const currentFases: FaseModelo[] = form.personalizada_fases || []
+                          const lastFase = currentFases[currentFases.length - 1]
+                          const proxInicio = lastFase
+                            ? lastFase.mes_fim
+                              ? lastFase.mes_fim + 1
+                              : lastFase.mes_inicio + 1
+                            : 1
+                          set('personalizada_fases', [
+                            ...currentFases,
+                            { mes_inicio: proxInicio, mes_fim: null, percentual: 5 },
+                          ])
+                        }}
+                        className="text-[10px] text-purple-700 hover:text-purple-900 font-semibold underline"
+                      >
+                        + Adicionar Fase
+                      </button>
+                    </div>
+
+                    <div className="space-y-1.5">
+                      {(form.personalizada_fases || []).map((fase: FaseModelo, idx: number) => (
+                        <div
+                          key={idx}
+                          className="flex items-center gap-1.5 text-xs bg-white p-1.5 rounded border border-slate-200"
+                        >
+                          <span className="text-[10px] font-bold text-slate-500 w-10 shrink-0">
+                            Fase {idx + 1}
+                          </span>
+                          <div className="flex items-center gap-1">
+                            <span className="text-[10px] text-slate-500">Mês</span>
+                            <Input
+                              type="number"
+                              min="1"
+                              className="h-7 w-12 text-xs px-1 text-center"
+                              value={fase.mes_inicio}
+                              onChange={(e) => {
+                                const newFases = [...(form.personalizada_fases || [])]
+                                newFases[idx] = {
+                                  ...newFases[idx],
+                                  mes_inicio: Math.max(1, parseInt(e.target.value || '1', 10)),
+                                }
+                                set('personalizada_fases', newFases)
+                              }}
+                            />
+                            <span className="text-[10px] text-slate-500">a</span>
+                            <Input
+                              type="number"
+                              min={fase.mes_inicio}
+                              placeholder="Fim"
+                              title="Deixe em branco para fase aberta"
+                              className="h-7 w-12 text-xs px-1 text-center"
+                              value={fase.mes_fim ?? ''}
+                              onChange={(e) => {
+                                const newFases = [...(form.personalizada_fases || [])]
+                                const val =
+                                  e.target.value === '' ? null : parseInt(e.target.value, 10)
+                                newFases[idx] = {
+                                  ...newFases[idx],
+                                  mes_fim: val != null && !isNaN(val) ? val : null,
+                                }
+                                set('personalizada_fases', newFases)
+                              }}
+                            />
+                          </div>
+                          <div className="flex items-center gap-1 ml-auto">
+                            <Input
+                              type="number"
+                              step="0.1"
+                              min="0"
+                              placeholder="%"
+                              className="h-7 w-14 text-xs px-1 text-right"
+                              value={fase.percentual}
+                              onChange={(e) => {
+                                const newFases = [...(form.personalizada_fases || [])]
+                                newFases[idx] = {
+                                  ...newFases[idx],
+                                  percentual: Number(e.target.value || 0),
+                                }
+                                set('personalizada_fases', newFases)
+                              }}
+                            />
+                            <span className="text-[11px] text-slate-500">%</span>
+                            {(form.personalizada_fases || []).length > 1 && (
+                              <button
+                                type="button"
+                                onClick={() => {
+                                  const newFases = (form.personalizada_fases || []).filter(
+                                    (_: any, i: number) => i !== idx,
+                                  )
+                                  set('personalizada_fases', newFases)
+                                }}
+                                className="text-slate-400 hover:text-red-500 ml-1 text-xs"
+                                title="Remover fase"
+                              >
+                                ×
+                              </button>
+                            )}
+                          </div>
+                        </div>
+                      ))}
                     </div>
                   </div>
                 )}

@@ -1,5 +1,5 @@
 import pb from '@/lib/pocketbase/client'
-import { Policy } from '@/types'
+import { Policy, ComissaoPrevista } from '@/types'
 
 import { formatDateForInput, todayLocalDate, toLocalDate } from '@/lib/utils'
 

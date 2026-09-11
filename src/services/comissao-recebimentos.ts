@@ -114,30 +114,57 @@ export const recalcularStatusApolice = async (policyId: string) => {
     })
 
     // Sincronizar status das comissões previstas vinculadas (Pendente, Parcial, Recebida)
-    // Regra estrita de vínculo:
-    // O ID da previsão (comissao_prevista) é o identificador soberano.
-    // Competência NÃO deve alterar outra previsão nem ser o identificador principal.
+    // ITEM A.2: Regra estrita de vínculo por ID:
+    // 1. O ID da previsão (comissao_prevista) é soberano e exclusivo.
+    // 2. O fallback por competência só pode rodar quando NÃO existe NENHUM vínculo direto por comissao_prevista
+    //    em todos os recebimentos da apólice (legado).
+    // 3. Mesmo no fallback legado, NUNCA distribuir um recebimento entre múltiplas previsões da mesma competência:
+    //    um recebimento legado afeta no máximo UMA previsão (alocação 1:1, a primeira com competência compatível).
+    // 4. Novos fluxos com ID: sem fallback por competência.
     try {
       const prevs = await pb.collection('comissoes_previstas').getFullList({
         filter: `policy = "${policyId}"`,
       })
       if (prevs.length > 0) {
-        // Se houver previsões cadastradas para a apólice:
-        // 1. Recebimentos com comissao_prevista preenchida vinculam estritamente àquela previsão
-        // 2. Recebimentos legados sem comissao_prevista só vinculam por competência se NÃO houver comissao_prevista vinculada
         const hasDirectLinks = allRecs.some((r) => Boolean(r.comissao_prevista))
 
+        // Mapear alocação de recebimentos para garantir que nenhum recebimento legado
+        // seja somado/distribuído em mais de uma previsão da mesma competência
+        const recsAlocadosPorPrevisao = new Map<string, ComissaoRecebimento[]>()
         for (const p of prevs) {
-          const recsDaPrevisao = allRecs.filter((r) => {
-            if (r.comissao_prevista) {
-              return r.comissao_prevista === p.id
+          recsAlocadosPorPrevisao.set(p.id, [])
+        }
+
+        // 1. Alocar recebimentos vinculados diretamente por ID
+        for (const r of allRecs) {
+          if (r.comissao_prevista && recsAlocadosPorPrevisao.has(r.comissao_prevista)) {
+            recsAlocadosPorPrevisao.get(r.comissao_prevista)!.push(r)
+          }
+        }
+
+        // 2. Fallback legado: SOMENTE se não houver NENHUM recebimento com comissao_prevista direta
+        if (!hasDirectLinks) {
+          const usedLegacyRecIds = new Set<string>()
+          for (const p of prevs) {
+            for (const r of allRecs) {
+              if (
+                !r.comissao_prevista &&
+                !usedLegacyRecIds.has(r.id) &&
+                r.competencia &&
+                p.competencia &&
+                r.competencia.trim() === p.competencia.trim()
+              ) {
+                // Aloca no máximo a UMA previsão e marca como usado
+                recsAlocadosPorPrevisao.get(p.id)!.push(r)
+                usedLegacyRecIds.add(r.id)
+                break // apenas 1 recebimento legado para esta previsão
+              }
             }
-            // Fallback apenas para registros antigos legados onde comissao_prevista não estava gravada
-            if (!hasDirectLinks && r.competencia && p.competencia) {
-              return r.competencia === p.competencia
-            }
-            return false
-          })
+          }
+        }
+
+        for (const p of prevs) {
+          const recsDaPrevisao = recsAlocadosPorPrevisao.get(p.id) || []
 
           const brutoPrevisao =
             Math.round(
@@ -228,8 +255,11 @@ export const createComissaoRecebimento = async (
   if (data.motivo_estorno) {
     payload.motivo_estorno = data.motivo_estorno.trim()
   }
-  if (data.comissao_prevista) {
-    payload.comissao_prevista = data.comissao_prevista
+  // ITEM A: Validação no serviço: se informado comissao_prevista, garantir que não é vazio/inválido
+  if (data.comissao_prevista && data.comissao_prevista.trim() !== '') {
+    payload.comissao_prevista = data.comissao_prevista.trim()
+  } else if (data.comissao_prevista === '') {
+    throw new Error('O ID da comissão prevista não pode ser uma string vazia.')
   }
 
   if (data.aliquota_imposto !== undefined && data.aliquota_imposto !== null) {

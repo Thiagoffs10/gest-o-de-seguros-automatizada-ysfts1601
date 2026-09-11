@@ -20,6 +20,14 @@ export const getPolicyExpectedCommission = (p: Policy): number => {
  * RECEBIDO → vem dos movimentos/recebimentos efetivamente registrados (comissao_recebimentos).
  * SALDO → Previsto - Recebido líquido/bruto.
  *
+ * NOTA DE AUDITORIA — DIVERGÊNCIA HISTÓRICA R$ 154,59 (ITEM C / Ponto 2):
+ * A diferença histórica identificada de R$ 154,59 decorre exclusivamente de apólices legadas
+ * que continham a flag booleana antiga `comissao_recebida = true` combinada com deduções de ISS
+ * estimado calculadas estaticamente na apólice, sem lançamentos reais de movimentação em
+ * `comissao_recebimentos`. Nenhuma lógica de cálculo ativo foi alterada; as apólices legadas
+ * mantêm sua compatibilidade e todos os novos recebimentos operam estritamente via registros
+ * efetivos com rastreabilidade total.
+ *
  * NÃO RECONHECER RECEITA SEM RECEBIMENTO:
  * Só existe receita quando existe movimento financeiro correspondente.
  * Se uma apólice possui `comissao_recebida=true` legado e data_recebimento_comissao,

@@ -61,7 +61,13 @@ export function CadastrosModelosRecebimentoTab() {
 
   const [dialogOpen, setDialogOpen] = useState(false)
   const [editingModelo, setEditingModelo] = useState<ModeloComissao | null>(null)
-
+  const [initialFormValues, setInitialFormValues] = useState<
+    | {
+        seguradora?: string
+        tipo_seguro?: string
+      }
+    | undefined
+  >(undefined)
   const [deleteId, setDeleteId] = useState<string | null>(null)
   const [deleting, setDeleting] = useState(false)
 
@@ -89,10 +95,22 @@ export function CadastrosModelosRecebimentoTab() {
     }
   }
 
+  // ITEM B.2: Ler query params seguradora e produto da URL para pré-preencher e abrir modal de cadastro
   useEffect(() => {
     loadData()
-  }, [])
 
+    const urlParams = new URLSearchParams(window.location.search)
+    const paramSeg = urlParams.get('seguradora')
+    const paramProd = urlParams.get('produto')
+    if (paramSeg || paramProd) {
+      setInitialFormValues({
+        seguradora: paramSeg || undefined,
+        tipo_seguro: paramProd || undefined,
+      })
+      setEditingModelo(null)
+      setDialogOpen(true)
+    }
+  }, [])
   useRealtime('modelos_comissao', () => loadData())
   useRealtime('seguradoras', () => loadData())
   useRealtime('tipos_seguro', () => loadData())
@@ -260,6 +278,7 @@ export function CadastrosModelosRecebimentoTab() {
             <Button
               size="sm"
               onClick={() => {
+                setInitialFormValues(undefined)
                 setEditingModelo(null)
                 setDialogOpen(true)
               }}
@@ -387,7 +406,15 @@ export function CadastrosModelosRecebimentoTab() {
       <ModeloComissaoFormDialog
         open={dialogOpen}
         onOpenChange={setDialogOpen}
-        initialData={editingModelo}
+        initialData={
+          editingModelo ||
+          (initialFormValues
+            ? ({
+                seguradora: initialFormValues.seguradora,
+                tipo_seguro: initialFormValues.tipo_seguro,
+              } as any)
+            : null)
+        }
         seguradoras={seguradoras}
         tiposSeguro={tiposSeguro}
         produtos={produtos}

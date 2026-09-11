@@ -164,6 +164,18 @@ export function RegistrarRecebimentoModal({
 
     setIsSubmitting(true)
 
+    // ITEM A.1: Garantir que quando comissaoPrevistaId está presente, ele é enviado obrigatoriamente
+    // como comissao_prevista. Impedir salvar novo recebimento vinculado a previsão sem o ID válido.
+    const cleanPrevId = comissaoPrevistaId ? comissaoPrevistaId.trim() : undefined
+    if (comissaoPrevistaId !== undefined && (!cleanPrevId || cleanPrevId === '')) {
+      toast({
+        title: 'Vínculo inválido',
+        description: 'O ID da previsão informada para este recebimento é inválido.',
+        variant: 'destructive',
+      })
+      return
+    }
+
     // Chave de idempotência no cliente baseada no timestamp único + id apólice + valor
     const idempotencyKey = `rec_${policy.id}_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`
 
@@ -179,7 +191,7 @@ export function RegistrarRecebimentoModal({
         observacao: observacao.trim() || undefined,
         parcela: parcela !== '' ? Number(parcela) : undefined,
         competencia: competencia.trim() || undefined,
-        comissao_prevista: comissaoPrevistaId || undefined,
+        comissao_prevista: cleanPrevId || undefined,
         idempotency_key: idempotencyKey,
       })
 

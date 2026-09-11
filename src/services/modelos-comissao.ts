@@ -111,12 +111,21 @@ export const deleteModeloComissao = async (id: string): Promise<boolean> => {
 }
 
 /**
- * Busca sugestão de modelo para Seguradora + Produto (tipo_seguro)
+ * Busca sugestão de modelo para Seguradora + Produto (tipo_seguro).
+ * ITEM B.1:
+ * - Filtro ESTRITO por seguradora + produto (tipo_seguro).
+ * - Usar `valido_a_partir_de` para excluir modelos com vigência futura (só aceita se nulo ou <= data de hoje).
+ * - REMOVER qualquer fallback que sugira modelo de OUTRA seguradora ou apenas por tipo de seguro.
+ * - Caso a seguradora tenha um modelo padrão sem produto específico (tipo_seguro vazio/nulo),
+ *   pode ser aceito SOMENTE SE for da mesma seguradora e com vigência atual.
  */
 export const findSuggestedModelo = async (
   seguradoraId?: string | null,
   tipoSeguro?: string | null,
+  referenceDateStr?: string,
 ): Promise<ModeloComissao | null> => {
+  if (!seguradoraId) return null
+
   try {
     const list = await pb.collection('modelos_comissao').getFullList<ModeloComissao>({
       filter: 'ativo = true',
@@ -125,30 +134,34 @@ export const findSuggestedModelo = async (
 
     if (list.length === 0) return null
 
-    // 1. Tentar match exato seguradora + tipo_seguro (produto comercial ou ramo)
-    if (seguradoraId && tipoSeguro) {
-      const matchBoth = list.find(
-        (m) =>
-          m.seguradora === seguradoraId &&
-          m.tipo_seguro &&
-          m.tipo_seguro.toLowerCase() === tipoSeguro.toLowerCase(),
+    const todayStr = referenceDateStr || formatDateForInput(new Date().toISOString()) || ''
+
+    // Filtrar apenas modelos da MESMA seguradora e cuja vigência não seja futura
+    const validosParaSeguradora = list.filter((m) => {
+      if (m.seguradora !== seguradoraId) return false
+      // Excluir modelos com vigência futura
+      if (m.valido_a_partir_de && todayStr && m.valido_a_partir_de > todayStr) {
+        return false
+      }
+      return true
+    })
+
+    if (validosParaSeguradora.length === 0) return null
+
+    // 1. Match estrito por seguradora E produto (tipo_seguro)
+    if (tipoSeguro && tipoSeguro.trim() !== '') {
+      const normalizedTipo = tipoSeguro.trim().toLowerCase()
+      const matchExact = validosParaSeguradora.find(
+        (m) => m.tipo_seguro && m.tipo_seguro.trim().toLowerCase() === normalizedTipo,
       )
-      if (matchBoth) return matchBoth
+      if (matchExact) return matchExact
     }
 
-    // 2. Tentar match exato apenas por tipo_seguro (caso modelo seja genérico daquele produto para todas as companhias)
-    if (tipoSeguro) {
-      const matchTipo = list.find(
-        (m) => m.tipo_seguro && m.tipo_seguro.toLowerCase() === tipoSeguro.toLowerCase(),
-      )
-      if (matchTipo) return matchTipo
-    }
-
-    // 3. Tentar match por seguradora (modelo padrão da companhia sem produto específico)
-    if (seguradoraId) {
-      const matchSeg = list.find((m) => m.seguradora === seguradoraId)
-      if (matchSeg) return matchSeg
-    }
+    // 2. Modelo geral da mesma seguradora sem produto restrito (tipo_seguro vazio)
+    const matchSeguradoraGeral = validosParaSeguradora.find(
+      (m) => !m.tipo_seguro || m.tipo_seguro.trim() === '',
+    )
+    if (matchSeguradoraGeral) return matchSeguradoraGeral
 
     return null
   } catch {
