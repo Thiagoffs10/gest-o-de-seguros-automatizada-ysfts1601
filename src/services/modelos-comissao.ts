@@ -306,34 +306,63 @@ export const syncPrevisoesForPolicy = async (
       filter: `policy = "${policy.id}"`,
     })
 
-  // Se já existem registros com recebimentos vinculados ou quitados, não apagamos nada que já foi realizado
-  // Apagar previsões pendentes não pagas para substituir pela nova grade
-  for (const prev of existentes) {
-    const temRecebimento = recebimentos.some(
-      (r) =>
-        r.comissao_prevista === prev.id || (r.competencia && r.competencia === prev.competencia),
-    )
-    if (!temRecebimento && prev.status === 'Pendente') {
-      try {
-        await pb.collection('comissoes_previstas').delete(prev.id)
-      } catch {
-        /* intentionally ignored */
-      }
-    }
+  // Mapear por chave estável para idempotência sem apagar dados à toa:
+  // prev_{policy}_{parcela}_{competencia}
+  const existingByKey = new Map<string, ComissaoPrevista>()
+  for (const p of existentes) {
+    const compClean = (p.competencia || '').replace('/', '_')
+    const k = p.chave_estavel || `prev_${p.policy}_${p.parcela_numero || 1}_${compClean}`
+    existingByKey.set(k, p)
   }
 
-  // 3. Inserir novas previsões calculadas
-  const criadas: ComissaoPrevista[] = []
+  // Identificar chaves calculadas para saber se alguma previsão não vinculada e pendente sobrou
+  const calculatedKeys = new Set<string>()
+
+  // 3. Inserir ou atualizar com idempotência
+  const resultado: ComissaoPrevista[] = []
   for (const item of itensCalculados) {
-    // Verifica se já existe previsão para mesma parcela ou competência
-    const jaExiste = existentes.find(
-      (e) => e.parcela_numero === item.parcela_numero || e.competencia === item.competencia,
-    )
+    const compClean = (item.competencia || '').replace('/', '_')
+    const stableKey = `prev_${policy.id}_${item.parcela_numero || 1}_${compClean}`
+    calculatedKeys.add(stableKey)
+
+    const jaExiste =
+      existingByKey.get(stableKey) ||
+      existentes.find(
+        (e) =>
+          e.chave_estavel === stableKey ||
+          (e.parcela_numero === item.parcela_numero && e.competencia === item.competencia),
+      )
+
     if (jaExiste) {
-      criadas.push(jaExiste)
+      // Se já existe e está Pendente, pode apenas sincronizar valores se necessário, sem apagar
+      if (jaExiste.status === 'Pendente') {
+        const precisaAtualizar =
+          jaExiste.valor_previsto !== item.valor_previsto ||
+          jaExiste.data_prevista !== item.data_prevista ||
+          !jaExiste.chave_estavel
+
+        if (precisaAtualizar) {
+          try {
+            const updated = await pb
+              .collection('comissoes_previstas')
+              .update<ComissaoPrevista>(jaExiste.id, {
+                valor_previsto: item.valor_previsto,
+                data_prevista: item.data_prevista,
+                chave_estavel: stableKey,
+                origem_modelo: item.origem_modelo,
+              })
+            resultado.push(updated)
+            continue
+          } catch {
+            /* intentionally ignored */
+          }
+        }
+      }
+      resultado.push(jaExiste)
       continue
     }
 
+    // Criar nova previsão com chave_estavel
     const payload = {
       policy: policy.id,
       competencia: item.competencia,
@@ -343,14 +372,43 @@ export const syncPrevisoesForPolicy = async (
       origem_modelo: item.origem_modelo,
       status: 'Pendente',
       observacao: item.observacao || '',
+      chave_estavel: stableKey,
     }
     try {
       const rec = await pb.collection('comissoes_previstas').create<ComissaoPrevista>(payload)
-      criadas.push(rec)
+      resultado.push(rec)
     } catch {
-      /* intentionally ignored */
+      // Se falhar por colisão de índice único, carregar existente
+      try {
+        const found = await pb
+          .collection('comissoes_previstas')
+          .getFirstListItem<ComissaoPrevista>(`chave_estavel = "${stableKey}"`)
+        resultado.push(found)
+      } catch {
+        /* intentionally ignored */
+      }
     }
   }
 
-  return criadas
+  // Previsões antigas que NÃO foram calculadas no novo modelo:
+  // Apenas deletamos se forem estritamente PENDENTES e NÃO tiverem NENHUM recebimento vinculado
+  for (const prev of existentes) {
+    const compClean = (prev.competencia || '').replace('/', '_')
+    const k = prev.chave_estavel || `prev_${prev.policy}_${prev.parcela_numero || 1}_${compClean}`
+    if (!calculatedKeys.has(k)) {
+      const temRecebimento = recebimentos.some((r) => r.comissao_prevista === prev.id)
+      if (!temRecebimento && prev.status === 'Pendente') {
+        try {
+          await pb.collection('comissoes_previstas').delete(prev.id)
+        } catch {
+          /* intentionally ignored */
+        }
+      } else {
+        // Preserva o histórico financeiro intacto
+        resultado.push(prev)
+      }
+    }
+  }
+
+  return resultado
 }

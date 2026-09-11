@@ -355,6 +355,7 @@ export interface ComissaoPrevista {
   origem_modelo?: string
   status: 'Pendente' | 'Parcial' | 'Recebida' | 'Cancelada'
   observacao?: string
+  chave_estavel?: string
   created: string
   updated: string
   expand?: {

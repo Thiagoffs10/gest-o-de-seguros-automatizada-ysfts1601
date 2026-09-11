@@ -114,18 +114,31 @@ export const recalcularStatusApolice = async (policyId: string) => {
     })
 
     // Sincronizar status das comissões previstas vinculadas (Pendente, Parcial, Recebida)
+    // Regra estrita de vínculo:
+    // O ID da previsão (comissao_prevista) é o identificador soberano.
+    // Competência NÃO deve alterar outra previsão nem ser o identificador principal.
     try {
       const prevs = await pb.collection('comissoes_previstas').getFullList({
         filter: `policy = "${policyId}"`,
       })
       if (prevs.length > 0) {
+        // Se houver previsões cadastradas para a apólice:
+        // 1. Recebimentos com comissao_prevista preenchida vinculam estritamente àquela previsão
+        // 2. Recebimentos legados sem comissao_prevista só vinculam por competência se NÃO houver comissao_prevista vinculada
+        const hasDirectLinks = allRecs.some((r) => Boolean(r.comissao_prevista))
+
         for (const p of prevs) {
-          // Soma de recebimentos associados a esta previsão (por id ou competência)
-          const recsDaPrevisao = allRecs.filter(
-            (r) =>
-              r.comissao_prevista === p.id ||
-              (r.competencia && p.competencia && r.competencia === p.competencia),
-          )
+          const recsDaPrevisao = allRecs.filter((r) => {
+            if (r.comissao_prevista) {
+              return r.comissao_prevista === p.id
+            }
+            // Fallback apenas para registros antigos legados onde comissao_prevista não estava gravada
+            if (!hasDirectLinks && r.competencia && p.competencia) {
+              return r.competencia === p.competencia
+            }
+            return false
+          })
+
           const brutoPrevisao =
             Math.round(
               recsDaPrevisao.reduce((acc, r) => acc + (Number(r.valor_bruto) || 0), 0) * 100,
