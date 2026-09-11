@@ -237,6 +237,65 @@ export type TipoModeloComissao =
   | 'POR_FASES'
   | 'POR_ESGOTAMENTO'
 
+export interface TipoNativoRecebimentoInfo {
+  id: TipoModeloComissao
+  nome: string
+  descricaoCurta: string
+  descricaoCompleta: string
+  resumoAposSelecao: string
+  exemplo: string
+}
+
+export const TIPOS_NATIVOS_RECEBIMENTO: Record<TipoModeloComissao, TipoNativoRecebimentoInfo> = {
+  A_VISTA: {
+    id: 'A_VISTA',
+    nome: 'À vista',
+    descricaoCurta: 'Comissão prevista para ser recebida uma única vez.',
+    descricaoCompleta: 'A comissão é prevista para ser recebida uma única vez.',
+    resumoAposSelecao: 'Pagamento único integral na primeira competência da apólice.',
+    exemplo: 'Ex.: Seguradora Y | Produto Automóvel | Tipo: À vista | Comissão: 20%',
+  },
+  PARCELADA: {
+    id: 'PARCELADA',
+    nome: 'Parcelada',
+    descricaoCurta:
+      'Distribuída em quantidade definida de competências; percentuais ou valores podem variar.',
+    descricaoCompleta:
+      'A comissão é distribuída em uma quantidade definida de competências. Os valores ou percentuais podem variar.',
+    resumoAposSelecao:
+      'Distribuída em competências definidas (iguais ou com percentuais por parcela).',
+    exemplo: 'Ex.: 7 competências com percentuais definidos ou divididos.',
+  },
+  RECORRENTE: {
+    id: 'RECORRENTE',
+    nome: 'Recorrente',
+    descricaoCurta: 'Recebida periodicamente enquanto o contrato ou condição continuar válida.',
+    descricaoCompleta:
+      'A comissão é recebida periodicamente enquanto o contrato ou a condição continuar válida.',
+    resumoAposSelecao: 'Recebimento contínuo mensal enquanto o contrato ou condição estiver ativo.',
+    exemplo: 'Ex.: 5% mensal durante a vigência do contrato.',
+  },
+  POR_FASES: {
+    id: 'POR_FASES',
+    nome: 'Por fases',
+    descricaoCurta:
+      'Forma de recebimento muda conforme o período (ex.: meses 1–3 → 100%, a partir do 4º → 2%).',
+    descricaoCompleta:
+      'A forma de recebimento muda ao longo do tempo. Ex.: 100% nos 3 primeiros meses e 2% a partir do 4º.',
+    resumoAposSelecao: 'Percentuais ou valores diferentes conforme o período.',
+    exemplo: 'Ex.: Saúde Seguradora X | Fase 1: Meses 1–3 → 100% | Fase 2: Mês 4+ → 2%',
+  },
+  POR_ESGOTAMENTO: {
+    id: 'POR_ESGOTAMENTO',
+    nome: 'Por saldo/esgotamento',
+    descricaoCurta: 'Existe um total a receber e cada recebimento reduz o saldo até zerar.',
+    descricaoCompleta:
+      'Existe um total de comissão a receber. Cada recebimento reduz esse saldo até ele ser totalmente esgotado.',
+    resumoAposSelecao: 'Existe um saldo total a receber; os recebimentos reduzem até zerar.',
+    exemplo: 'Ex.: Comissão total contratada de R$ 1.000,00 consumida em parcelas até esgotar.',
+  },
+}
+
 export interface FaseModelo {
   id?: string
   mes_inicio: number

@@ -1,5 +1,7 @@
 import { useState, useEffect, useRef } from 'react'
-import { Plus } from 'lucide-react'
+import { Plus, Info, ExternalLink, SlidersHorizontal, Sparkles } from 'lucide-react'
+import { Link } from 'react-router-dom'
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip'
 import { ClientFormDialog } from '@/components/ClientFormDialog'
 import { createClient } from '@/services/clients'
 import { useToast } from '@/hooks/use-toast'
@@ -23,7 +25,19 @@ import {
 import { Textarea } from '@/components/ui/textarea'
 import { Loader2 } from 'lucide-react'
 import { TIPOS_DE_SEGURO, TIPOS_DE_VENDA } from '@/lib/constants'
-import { Client, Seguradora, Parceiro, Policy, ModeloComissao, TipoSeguro, Produto } from '@/types'
+import {
+  Client,
+  Seguradora,
+  Parceiro,
+  Policy,
+  ModeloComissao,
+  TipoSeguro,
+  Produto,
+  TipoModeloComissao,
+  TIPOS_NATIVOS_RECEBIMENTO,
+  FaseModelo,
+  ParcelaModelo,
+} from '@/types'
 import { getModelosComissao, findSuggestedModelo } from '@/services/modelos-comissao'
 import { getTiposSeguro } from '@/services/tipos-seguro'
 import { getProdutos } from '@/services/produtos'
@@ -71,6 +85,12 @@ const DEFAULT_FORM = {
   comissao_personalizada: false,
   comissao_personalizada_config: null,
   motivo_personalizacao: '',
+  personalizada_tipo_modelo: 'A_VISTA' as TipoModeloComissao,
+  personalizada_qtd_competencias: 6,
+  personalizada_percentual_recorrente: 5,
+  personalizada_horizonte_meses: 12,
+  personalizada_saldo_total: 1000,
+  personalizada_valor_estimado_parcela: 250,
 }
 
 interface Props {
@@ -165,6 +185,7 @@ export function PolicyFormDialog({
           ? Number(initialData.valor_repasse)
           : Math.round(((vLiquido * pRepasse) / 100) * 100) / 100
 
+      const customCfg = initialData.comissao_personalizada_config || {}
       setForm({
         ...DEFAULT_FORM,
         client: initialData.client || (exp?.client?.id ?? ''),
@@ -200,6 +221,12 @@ export function PolicyFormDialog({
         comissao_personalizada: Boolean(initialData.comissao_personalizada),
         comissao_personalizada_config: initialData.comissao_personalizada_config || null,
         motivo_personalizacao: '',
+        personalizada_tipo_modelo: customCfg.tipo_modelo || 'A_VISTA',
+        personalizada_qtd_competencias: customCfg.quantidade_competencias || 6,
+        personalizada_percentual_recorrente: customCfg.percentual_recorrente || 5,
+        personalizada_horizonte_meses: customCfg.recorrencia_meses_horizonte || 12,
+        personalizada_saldo_total: customCfg.saldo_total || 1000,
+        personalizada_valor_estimado_parcela: customCfg.valor_estimado_parcela || 250,
       })
       if (initialData.modelo_comissao) {
         const m = modelosList.find((x) => x.id === initialData.modelo_comissao)
@@ -231,12 +258,16 @@ export function PolicyFormDialog({
     if (!open || initialData || form.comissao_personalizada) return
     if (form.seguradora || form.tipo_de_seguro) {
       findSuggestedModelo(form.seguradora, form.tipo_de_seguro).then((sugestao) => {
-        if (sugestao && (!form.modelo_comissao || form.modelo_comissao === '')) {
+        if (sugestao) {
           set('modelo_comissao', sugestao.id)
           setModeloAtivo(sugestao)
           if (sugestao.percentual_padrao && Number(sugestao.percentual_padrao) > 0) {
             set('commission_percent', Number(sugestao.percentual_padrao))
           }
+        } else {
+          // Se não houver modelo cadastrado para essa combinação, limpa sem assumir modelo silenciosamente
+          set('modelo_comissao', '')
+          setModeloAtivo(null)
         }
       })
     }
@@ -308,7 +339,42 @@ export function PolicyFormDialog({
     try {
       const endDate = new Date(form.end_date + 'T00:00:00')
       const renewalDate = toLocalDate(new Date(endDate.getTime() - 30 * 86400000))
-      await onSubmit({ ...form, renewal_date: renewalDate })
+
+      // Montar config de comissão personalizada se o usuário escolheu personalizar
+      let customConfigPayload = null
+      if (form.comissao_personalizada) {
+        customConfigPayload = {
+          tipo_modelo: form.personalizada_tipo_modelo || 'A_VISTA',
+          percentual_padrao: form.commission_percent,
+          quantidade_competencias:
+            form.personalizada_tipo_modelo === 'PARCELADA'
+              ? Number(form.personalizada_qtd_competencias || 1)
+              : undefined,
+          percentual_recorrente:
+            form.personalizada_tipo_modelo === 'RECORRENTE'
+              ? Number(form.personalizada_percentual_recorrente || form.commission_percent || 0)
+              : undefined,
+          recorrencia_meses_horizonte:
+            form.personalizada_tipo_modelo === 'RECORRENTE' ||
+            form.personalizada_tipo_modelo === 'POR_FASES'
+              ? Number(form.personalizada_horizonte_meses || 12)
+              : undefined,
+          saldo_total:
+            form.personalizada_tipo_modelo === 'POR_ESGOTAMENTO'
+              ? Number(form.personalizada_saldo_total || form.commission || 0)
+              : undefined,
+          valor_estimado_parcela:
+            form.personalizada_tipo_modelo === 'POR_ESGOTAMENTO'
+              ? Number(form.personalizada_valor_estimado_parcela || 0)
+              : undefined,
+        }
+      }
+
+      await onSubmit({
+        ...form,
+        renewal_date: renewalDate,
+        comissao_personalizada_config: customConfigPayload,
+      })
     } catch {
       setLoading(false)
     } finally {
@@ -480,36 +546,46 @@ export function PolicyFormDialog({
             </div>
           </div>
 
-          <div className="grid grid-cols-2 gap-2">
-            <div>
-              <Label className="text-xs font-semibold">Forma de pagamento</Label>
-              <Select
-                value={form.forma_pagamento || ''}
-                onValueChange={(v) => set('forma_pagamento', v)}
-              >
-                <SelectTrigger>
-                  <SelectValue placeholder="Selecione" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="Crédito">Crédito</SelectItem>
-                  <SelectItem value="Débito em conta">Débito em conta</SelectItem>
-                  <SelectItem value="Boleto">Boleto</SelectItem>
-                </SelectContent>
-              </Select>
+          {/* Pagamento do Prêmio do Seguro pelo Segurado/Cliente */}
+          <div className="p-2.5 bg-slate-50 border border-slate-200 rounded-md">
+            <div className="flex items-center justify-between mb-2">
+              <span className="text-[11px] font-bold uppercase tracking-wider text-slate-600">
+                Pagamento do Seguro (Cliente / Segurado)
+              </span>
+              <span className="text-[10px] text-slate-400">Como o cliente quita o prêmio</span>
             </div>
-            <div>
-              <Label className="text-xs font-semibold">Em quantas vezes</Label>
-              <Input
-                type="number"
-                min="1"
-                step="1"
-                placeholder="Ex: 1, 6, 10, 12"
-                value={form.parcelas ?? ''}
-                onChange={(e) => {
-                  const val = e.target.value === '' ? '' : parseInt(e.target.value, 10)
-                  set('parcelas', isNaN(val as number) ? '' : val)
-                }}
-              />
+            <div className="grid grid-cols-2 gap-2">
+              <div>
+                <Label className="text-xs font-semibold">Forma de Pagamento do Seguro</Label>
+                <Select
+                  value={form.forma_pagamento || ''}
+                  onValueChange={(v) => set('forma_pagamento', v)}
+                >
+                  <SelectTrigger className="bg-white">
+                    <SelectValue placeholder="Selecione" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="Crédito">Crédito</SelectItem>
+                    <SelectItem value="Débito em conta">Débito em conta</SelectItem>
+                    <SelectItem value="Boleto">Boleto</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+              <div>
+                <Label className="text-xs font-semibold">Parcelas do Seguro</Label>
+                <Input
+                  type="number"
+                  min="1"
+                  step="1"
+                  className="bg-white"
+                  placeholder="Ex: 1, 6, 10, 12"
+                  value={form.parcelas ?? ''}
+                  onChange={(e) => {
+                    const val = e.target.value === '' ? '' : parseInt(e.target.value, 10)
+                    set('parcelas', isNaN(val as number) ? '' : val)
+                  }}
+                />
+              </div>
             </div>
           </div>
 
@@ -557,10 +633,32 @@ export function PolicyFormDialog({
             </div>
           </div>
 
-          {/* Modelo de Recebimento de Comissão (ETAPA 2B — ITEM 2) */}
+          {/* Modelo de Recebimento de Comissão da Seguradora */}
           <div className="p-3 bg-blue-50/70 border border-blue-200 rounded-lg space-y-2.5">
             <div className="flex items-center justify-between">
-              <Label className="text-xs font-bold text-slate-900">Modelo de Recebimento</Label>
+              <div className="flex items-center gap-1.5">
+                <Label className="text-xs font-bold text-slate-900">
+                  Modelo de Recebimento (Comissão da Seguradora)
+                </Label>
+                <TooltipProvider delayDuration={150}>
+                  <Tooltip>
+                    <TooltipTrigger asChild>
+                      <button
+                        type="button"
+                        aria-label="Informações sobre o modelo de recebimento"
+                        className="text-blue-600 hover:text-blue-800 focus:outline-none"
+                      >
+                        <Info className="w-3.5 h-3.5" />
+                      </button>
+                    </TooltipTrigger>
+                    <TooltipContent className="max-w-xs text-xs p-2.5 bg-slate-900 text-white">
+                      Define como a seguradora pagará a comissão desta apólice (À vista, Parcelada,
+                      Recorrente, Por fases ou Por saldo).
+                    </TooltipContent>
+                  </Tooltip>
+                </TooltipProvider>
+              </div>
+
               <div className="flex items-center gap-1.5 text-xs">
                 <button
                   type="button"
@@ -592,57 +690,278 @@ export function PolicyFormDialog({
             </div>
 
             {!form.comissao_personalizada ? (
-              <div className="space-y-1.5">
+              <div className="space-y-2">
                 <div className="flex items-center justify-between text-xs">
                   <span className="text-slate-600 font-medium">Modelo de recebimento:</span>
                   {modeloAtivo ? (
-                    <span className="font-bold text-blue-700 bg-blue-100/80 px-2 py-0.5 rounded text-xs">
-                      {modeloAtivo.nome} ({modeloAtivo.tipo_modelo})
-                    </span>
+                    <div className="flex items-center gap-1.5">
+                      <span className="font-bold text-blue-700 bg-blue-100/80 px-2 py-0.5 rounded text-xs">
+                        {modeloAtivo.nome} (
+                        {TIPOS_NATIVOS_RECEBIMENTO[modeloAtivo.tipo_modelo]?.nome ||
+                          modeloAtivo.tipo_modelo}
+                        )
+                      </span>
+                      <TooltipProvider delayDuration={150}>
+                        <Tooltip>
+                          <TooltipTrigger asChild>
+                            <button
+                              type="button"
+                              className="text-blue-600 hover:text-blue-800"
+                              aria-label={`Ajuda sobre ${TIPOS_NATIVOS_RECEBIMENTO[modeloAtivo.tipo_modelo]?.nome}`}
+                            >
+                              <Info className="w-3.5 h-3.5" />
+                            </button>
+                          </TooltipTrigger>
+                          <TooltipContent className="max-w-xs text-xs p-2.5 bg-slate-900 text-white">
+                            <p className="font-bold mb-1">
+                              {TIPOS_NATIVOS_RECEBIMENTO[modeloAtivo.tipo_modelo]?.nome}
+                            </p>
+                            <p>
+                              {
+                                TIPOS_NATIVOS_RECEBIMENTO[modeloAtivo.tipo_modelo]
+                                  ?.descricaoCompleta
+                              }
+                            </p>
+                          </TooltipContent>
+                        </Tooltip>
+                      </TooltipProvider>
+                    </div>
                   ) : (
-                    <span className="text-slate-500 italic">
-                      Nenhum modelo específico sugerido (À vista padrão)
+                    <span className="text-amber-700 font-medium text-xs">
+                      Nenhum modelo configurado para esta Seguradora + Produto
                     </span>
                   )}
                 </div>
 
-                <Select
-                  value={form.modelo_comissao || 'none'}
-                  onValueChange={(v) => {
-                    const mId = v === 'none' ? '' : v
-                    set('modelo_comissao', mId)
-                    const m = modelosList.find((x) => x.id === mId)
-                    setModeloAtivo(m || null)
-                    if (m?.percentual_padrao && Number(m.percentual_padrao) > 0) {
-                      set('commission_percent', Number(m.percentual_padrao))
-                    }
-                  }}
-                >
-                  <SelectTrigger className="bg-white h-9 text-xs">
-                    <SelectValue placeholder="Trocar ou selecionar outro modelo..." />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="none">Sem modelo específico (À vista padrão)</SelectItem>
-                    {modelosList.map((m) => (
-                      <SelectItem key={m.id} value={m.id}>
-                        {m.nome} ({m.tipo_modelo})
-                        {m.percentual_padrao ? ` — ${m.percentual_padrao}%` : ''}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-
-                {modeloAtivo && (
-                  <p className="text-[11px] text-emerald-700 flex items-center gap-1">
-                    ✓ Modelo pronto: nenhuma configuração adicional necessária.
-                  </p>
+                {modeloAtivo ? (
+                  <div className="p-2.5 bg-emerald-50/70 border border-emerald-200 rounded text-xs space-y-1">
+                    <p className="font-semibold text-emerald-900 flex items-center gap-1.5">
+                      ✓ Modelo sugerido: {modeloAtivo.nome}
+                    </p>
+                    <p className="text-[11px] text-emerald-700">
+                      Tipo:{' '}
+                      <strong>
+                        {TIPOS_NATIVOS_RECEBIMENTO[modeloAtivo.tipo_modelo]?.nome ||
+                          modeloAtivo.tipo_modelo}
+                      </strong>{' '}
+                      — {TIPOS_NATIVOS_RECEBIMENTO[modeloAtivo.tipo_modelo]?.resumoAposSelecao}
+                    </p>
+                    <p className="text-[11px] text-slate-500">
+                      As competências e percentuais já foram preenchidos automaticamente. Basta
+                      confirmar e salvar.
+                    </p>
+                  </div>
+                ) : (
+                  <div className="p-2.5 bg-amber-50/80 border border-amber-200 rounded text-xs space-y-2">
+                    <div className="flex items-start gap-2">
+                      <Info className="w-4 h-4 text-amber-600 shrink-0 mt-0.5" />
+                      <div>
+                        <p className="font-semibold text-amber-900">
+                          Nenhum modelo configurado para esta Seguradora + Produto.
+                        </p>
+                        <p className="text-[11px] text-amber-800 mt-0.5">
+                          O sistema não assume nenhuma condição automaticamente. Você pode escolher
+                          um modelo da lista abaixo, clicar em &quot;Personalizar nesta
+                          apólice&quot; ou cadastrar um modelo padrão na Central de Cadastros.
+                        </p>
+                      </div>
+                    </div>
+                    <div className="flex items-center gap-2 pt-1 border-t border-amber-200/60">
+                      <button
+                        type="button"
+                        onClick={() => set('comissao_personalizada', true)}
+                        className="text-[11px] font-semibold text-amber-900 underline hover:text-amber-950"
+                      >
+                        Personalizar nesta apólice agora
+                      </button>
+                      <span className="text-amber-300">|</span>
+                      <a
+                        href="/cadastros?tab=modelos"
+                        target="_blank"
+                        rel="noreferrer"
+                        className="text-[11px] font-semibold text-blue-700 underline flex items-center gap-1 hover:text-blue-900"
+                      >
+                        Cadastrar modelo padrão <ExternalLink className="w-3 h-3" />
+                      </a>
+                    </div>
+                  </div>
                 )}
+
+                {/* Seletor manual para trocar ou selecionar outro modelo configurado */}
+                <div>
+                  <Label className="text-[11px] text-slate-500 font-medium mb-1 block">
+                    Ou selecione manualmente outro modelo configurado:
+                  </Label>
+                  <Select
+                    value={form.modelo_comissao || 'none'}
+                    onValueChange={(v) => {
+                      const mId = v === 'none' ? '' : v
+                      set('modelo_comissao', mId)
+                      const m = modelosList.find((x) => x.id === mId)
+                      setModeloAtivo(m || null)
+                      if (m?.percentual_padrao && Number(m.percentual_padrao) > 0) {
+                        set('commission_percent', Number(m.percentual_padrao))
+                      }
+                    }}
+                  >
+                    <SelectTrigger className="bg-white h-9 text-xs">
+                      <SelectValue placeholder="Selecione um modelo configurado..." />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="none">
+                        Nenhum modelo selecionado (Definir ou Personalizar)
+                      </SelectItem>
+                      {modelosList.map((m) => (
+                        <SelectItem key={m.id} value={m.id}>
+                          {m.nome} (
+                          {TIPOS_NATIVOS_RECEBIMENTO[m.tipo_modelo]?.nome || m.tipo_modelo})
+                          {m.percentual_padrao ? ` — ${m.percentual_padrao}%` : ''}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
               </div>
             ) : (
-              <div className="space-y-2 p-2.5 bg-amber-50 border border-amber-200 rounded text-xs">
-                <p className="text-[11px] font-medium text-amber-900">
-                  Condição exclusiva desta apólice. Não alterará os modelos cadastrados no sistema.
-                </p>
+              /* MODO PERSONALIZAR NESTA APÓLICE */
+              <div className="space-y-3 p-3 bg-amber-50 border border-amber-200 rounded text-xs">
+                <div className="flex items-center justify-between">
+                  <span className="font-bold text-amber-900">Condição Exclusiva desta Apólice</span>
+                  <span className="text-[10px] text-amber-700">
+                    Não altera os modelos cadastrados no sistema
+                  </span>
+                </div>
+
+                <div>
+                  <Label className="text-xs font-semibold text-slate-800">
+                    Tipo de Recebimento da Comissão *
+                  </Label>
+                  <Select
+                    value={form.personalizada_tipo_modelo || 'A_VISTA'}
+                    onValueChange={(v) => set('personalizada_tipo_modelo', v as TipoModeloComissao)}
+                  >
+                    <SelectTrigger className="bg-white h-9 mt-1">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {(
+                        [
+                          'A_VISTA',
+                          'PARCELADA',
+                          'RECORRENTE',
+                          'POR_FASES',
+                          'POR_ESGOTAMENTO',
+                        ] as TipoModeloComissao[]
+                      ).map((tipoKey, idx) => {
+                        const info = TIPOS_NATIVOS_RECEBIMENTO[tipoKey]
+                        return (
+                          <SelectItem key={tipoKey} value={tipoKey}>
+                            {idx + 1}. {info.nome} — {info.descricaoCurta}
+                          </SelectItem>
+                        )
+                      })}
+                    </SelectContent>
+                  </Select>
+                  <p className="text-[11px] text-slate-600 mt-1">
+                    {
+                      TIPOS_NATIVOS_RECEBIMENTO[
+                        (form.personalizada_tipo_modelo as TipoModeloComissao) || 'A_VISTA'
+                      ]?.resumoAposSelecao
+                    }
+                  </p>
+                </div>
+
+                {form.personalizada_tipo_modelo === 'PARCELADA' && (
+                  <div>
+                    <Label className="text-xs font-semibold text-slate-800">
+                      Quantidade de Competências de Comissão
+                    </Label>
+                    <Input
+                      type="number"
+                      min="1"
+                      max="36"
+                      className="bg-white h-8 mt-1 max-w-[140px]"
+                      value={form.personalizada_qtd_competencias || 6}
+                      onChange={(e) =>
+                        set(
+                          'personalizada_qtd_competencias',
+                          Math.max(1, parseInt(e.target.value || '1', 10)),
+                        )
+                      }
+                    />
+                    <p className="text-[10px] text-slate-500 mt-0.5">
+                      A comissão total prevista será dividida nessas competências.
+                    </p>
+                  </div>
+                )}
+
+                {form.personalizada_tipo_modelo === 'RECORRENTE' && (
+                  <div className="grid grid-cols-2 gap-2">
+                    <div>
+                      <Label className="text-xs font-semibold text-slate-800">
+                        % Mensal Recorrente
+                      </Label>
+                      <Input
+                        type="number"
+                        step="0.1"
+                        className="bg-white h-8 mt-1"
+                        value={
+                          form.personalizada_percentual_recorrente || form.commission_percent || 5
+                        }
+                        onChange={(e) =>
+                          set('personalizada_percentual_recorrente', Number(e.target.value))
+                        }
+                      />
+                    </div>
+                    <div>
+                      <Label className="text-xs font-semibold text-slate-800">
+                        Horizonte (meses)
+                      </Label>
+                      <Input
+                        type="number"
+                        min="1"
+                        max="36"
+                        className="bg-white h-8 mt-1"
+                        value={form.personalizada_horizonte_meses || 12}
+                        onChange={(e) =>
+                          set('personalizada_horizonte_meses', parseInt(e.target.value || '12', 10))
+                        }
+                      />
+                    </div>
+                  </div>
+                )}
+
+                {form.personalizada_tipo_modelo === 'POR_ESGOTAMENTO' && (
+                  <div className="grid grid-cols-2 gap-2">
+                    <div>
+                      <Label className="text-xs font-semibold text-slate-800">
+                        Saldo Total Previsto (R$)
+                      </Label>
+                      <Input
+                        type="number"
+                        step="0.01"
+                        className="bg-white h-8 mt-1"
+                        value={form.personalizada_saldo_total || form.commission || 1000}
+                        onChange={(e) => set('personalizada_saldo_total', Number(e.target.value))}
+                      />
+                    </div>
+                    <div>
+                      <Label className="text-xs font-semibold text-slate-800">
+                        Estimativa por Parcela (R$)
+                      </Label>
+                      <Input
+                        type="number"
+                        step="0.01"
+                        className="bg-white h-8 mt-1"
+                        value={form.personalizada_valor_estimado_parcela || 250}
+                        onChange={(e) =>
+                          set('personalizada_valor_estimado_parcela', Number(e.target.value))
+                        }
+                      />
+                    </div>
+                  </div>
+                )}
+
                 <div>
                   <Label className="text-[11px] font-semibold text-slate-700">
                     Motivo da personalização (opcional)

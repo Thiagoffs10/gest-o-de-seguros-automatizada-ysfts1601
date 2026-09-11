@@ -869,11 +869,14 @@ export default function PolicyDetail() {
             </p>
           </div>
           <div>
-            <p className="text-xs text-slate-500">Forma de Pagamento</p>
-            <p className="font-semibold">{policy.forma_pagamento || '-'}</p>
+            <p className="text-xs text-slate-500">Pagamento do Seguro (Cliente)</p>
+            <p className="font-semibold">
+              {policy.forma_pagamento ? `${policy.forma_pagamento}` : '-'}
+              {policy.parcelas ? ` (${policy.parcelas}x)` : ''}
+            </p>
           </div>
           <div>
-            <p className="text-xs text-slate-500">Parcelamento</p>
+            <p className="text-xs text-slate-500">Parcelas do Seguro</p>
             <p className="font-semibold">{policy.parcelas ? `${policy.parcelas}x` : '-'}</p>
           </div>
           <div>

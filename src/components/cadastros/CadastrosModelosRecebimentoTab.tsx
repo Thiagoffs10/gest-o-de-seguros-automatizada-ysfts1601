@@ -1,5 +1,15 @@
 import { useState, useEffect } from 'react'
-import { Layers, Plus, Edit2, Trash2, HelpCircle, Building2, Calendar } from 'lucide-react'
+import {
+  Layers,
+  Plus,
+  Edit2,
+  Trash2,
+  HelpCircle,
+  Building2,
+  Calendar,
+  Info,
+  Sparkles,
+} from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Card, CardHeader, CardTitle, CardContent, CardDescription } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
@@ -21,7 +31,13 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from '@/components/ui/alert-dialog'
-import { ModeloComissao, Seguradora, TipoSeguro } from '@/types'
+import {
+  ModeloComissao,
+  Seguradora,
+  TipoSeguro,
+  TipoModeloComissao,
+  TIPOS_NATIVOS_RECEBIMENTO,
+} from '@/types'
 import { getModelosComissao, deleteModeloComissao } from '@/services/modelos-comissao'
 import { getSeguradoras } from '@/services/seguradoras'
 import { getTiposSeguro } from '@/services/tipos-seguro'
@@ -102,30 +118,61 @@ export function CadastrosModelosRecebimentoTab() {
   }
 
   const getTipoModeloBadge = (tipo: string) => {
-    switch (tipo) {
-      case 'A_VISTA':
-        return <Badge className="bg-blue-100 text-blue-800 border-blue-200">1. À Vista</Badge>
-      case 'PARCELADA':
-        return <Badge className="bg-amber-100 text-amber-800 border-amber-200">2. Parcelada</Badge>
-      case 'RECORRENTE':
-        return (
-          <Badge className="bg-emerald-100 text-emerald-800 border-emerald-200">
-            3. Recorrente
-          </Badge>
-        )
-      case 'POR_FASES':
-        return (
-          <Badge className="bg-purple-100 text-purple-800 border-purple-200">4. Por Fases</Badge>
-        )
-      case 'POR_ESGOTAMENTO':
-        return (
-          <Badge className="bg-orange-100 text-orange-800 border-orange-200">
-            5. Por Esgotamento
-          </Badge>
-        )
-      default:
-        return <Badge variant="outline">{tipo}</Badge>
-    }
+    const info = TIPOS_NATIVOS_RECEBIMENTO[tipo as TipoModeloComissao]
+    const nome = info?.nome || tipo
+
+    const badgeEl = (() => {
+      switch (tipo) {
+        case 'A_VISTA':
+          return <Badge className="bg-blue-100 text-blue-800 border-blue-200">1. À Vista</Badge>
+        case 'PARCELADA':
+          return (
+            <Badge className="bg-amber-100 text-amber-800 border-amber-200">2. Parcelada</Badge>
+          )
+        case 'RECORRENTE':
+          return (
+            <Badge className="bg-emerald-100 text-emerald-800 border-emerald-200">
+              3. Recorrente
+            </Badge>
+          )
+        case 'POR_FASES':
+          return (
+            <Badge className="bg-purple-100 text-purple-800 border-purple-200">4. Por Fases</Badge>
+          )
+        case 'POR_ESGOTAMENTO':
+          return (
+            <Badge className="bg-orange-100 text-orange-800 border-orange-200">
+              5. Por Esgotamento
+            </Badge>
+          )
+        default:
+          return <Badge variant="outline">{tipo}</Badge>
+      }
+    })()
+
+    if (!info) return badgeEl
+
+    return (
+      <div className="flex items-center gap-1.5">
+        {badgeEl}
+        <Tooltip>
+          <TooltipTrigger asChild>
+            <button
+              type="button"
+              className="text-slate-400 hover:text-blue-600 focus:outline-none"
+              aria-label={`Mais informações sobre tipo ${nome}`}
+            >
+              <Info className="w-3.5 h-3.5" />
+            </button>
+          </TooltipTrigger>
+          <TooltipContent className="max-w-xs text-xs p-2.5 bg-slate-900 text-white">
+            <p className="font-bold mb-0.5">{nome}</p>
+            <p className="text-slate-200">{info.descricaoCompleta}</p>
+            <p className="text-[10px] text-slate-400 mt-1 italic">{info.exemplo}</p>
+          </TooltipContent>
+        </Tooltip>
+      </div>
+    )
   }
 
   const canCreate = can('modelos_comissao', 'create')
@@ -134,19 +181,79 @@ export function CadastrosModelosRecebimentoTab() {
 
   return (
     <div className="space-y-4">
+      {/* Card explicativo dos 5 Tipos Nativos de Recebimento */}
+      <div className="p-4 bg-gradient-to-r from-blue-50/70 to-slate-50 border border-blue-200/70 rounded-lg space-y-3">
+        <div className="flex items-center justify-between">
+          <div className="flex items-center gap-2">
+            <Layers className="w-4 h-4 text-blue-600" />
+            <h3 className="text-sm font-bold text-slate-900">
+              5 Tipos Nativos de Recebimento (Nativos do Sistema)
+            </h3>
+          </div>
+          <span className="text-[11px] text-blue-700 font-semibold bg-blue-100/70 px-2 py-0.5 rounded">
+            Nativo • Não requer cadastro manual
+          </span>
+        </div>
+        <p className="text-xs text-slate-600">
+          O sistema já dispõe nativamente dos 5 modos de operação da comissão. Abaixo, cadastre os{' '}
+          <strong>Modelos Configurados</strong> para vincular a condição comercial específica de{' '}
+          <strong>Seguradora + Produto</strong>.
+        </p>
+        <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-5 gap-2 pt-1">
+          {(
+            [
+              'A_VISTA',
+              'PARCELADA',
+              'RECORRENTE',
+              'POR_FASES',
+              'POR_ESGOTAMENTO',
+            ] as TipoModeloComissao[]
+          ).map((tipoKey, idx) => {
+            const info = TIPOS_NATIVOS_RECEBIMENTO[tipoKey]
+            return (
+              <div
+                key={tipoKey}
+                className="p-2.5 bg-white border border-slate-200 rounded text-xs space-y-1 shadow-xs"
+              >
+                <div className="flex items-center justify-between">
+                  <span className="font-bold text-slate-800">
+                    {idx + 1}. {info.nome}
+                  </span>
+                  <Tooltip>
+                    <TooltipTrigger asChild>
+                      <button
+                        type="button"
+                        aria-label={`Ajuda sobre ${info.nome}`}
+                        className="text-slate-400 hover:text-blue-600"
+                      >
+                        <Info className="w-3.5 h-3.5" />
+                      </button>
+                    </TooltipTrigger>
+                    <TooltipContent className="max-w-xs text-xs p-2.5 bg-slate-900 text-white">
+                      <p className="font-bold mb-1">{info.nome}</p>
+                      <p>{info.descricaoCompleta}</p>
+                      <p className="text-[10px] text-slate-300 mt-1 italic">{info.exemplo}</p>
+                    </TooltipContent>
+                  </Tooltip>
+                </div>
+                <p className="text-[11px] text-slate-500 line-clamp-2">{info.descricaoCurta}</p>
+              </div>
+            )
+          })}
+        </div>
+      </div>
+
       <Card className="border-slate-200 shadow-xs">
         <CardHeader className="p-4 pb-3 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3">
           <div>
             <div className="flex items-center gap-2">
-              <Layers className="w-5 h-5 text-blue-600" />
               <CardTitle className="text-base font-bold text-slate-900">
-                Modelos de Recebimento de Comissões
+                Modelos Configurados (Seguradora + Produto)
               </CardTitle>
             </div>
             <CardDescription className="text-xs text-slate-500 mt-1">
-              Centraliza os 5 modelos criados na ETAPA 2A (À vista, Parcelada, Recorrente, Por fases
-              e Por esgotamento). Relacione a <strong>Seguradora + Produto</strong> para sugestão
-              automática na apólice.
+              Cadastros das regras comerciais específicas. Quando o operador registrar uma apólice
+              com esta seguradora e produto, o modelo configurado será sugerido automaticamente.
             </CardDescription>
           </div>
           {canCreate && (
@@ -158,7 +265,7 @@ export function CadastrosModelosRecebimentoTab() {
               }}
               className="bg-blue-600 hover:bg-blue-700 text-white shrink-0"
             >
-              <Plus className="h-4 w-4 mr-1.5" /> Novo Modelo
+              <Plus className="h-4 w-4 mr-1.5" /> Novo Modelo Configurado
             </Button>
           )}
         </CardHeader>

@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react'
-import { Plus, Trash2, HelpCircle } from 'lucide-react'
+import { Plus, Trash2, HelpCircle, Info, Sparkles } from 'lucide-react'
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip'
 import {
   Dialog,
   DialogContent,
@@ -25,6 +26,7 @@ import {
   Produto,
   FaseModelo,
   ParcelaModelo,
+  TIPOS_NATIVOS_RECEBIMENTO,
 } from '@/types'
 import { createModeloComissao, updateModeloComissao } from '@/services/modelos-comissao'
 import { useToast } from '@/hooks/use-toast'
@@ -302,29 +304,99 @@ export function ModeloComissaoFormDialog({
             </div>
           </div>
 
-          {/* Modelo de Recebimento (os 5 modelos) */}
+          {/* Tipo Nativo de Recebimento (os 5 tipos nativos do sistema) */}
           <div>
-            <Label className="text-xs font-semibold">Modelo de Recebimento *</Label>
+            <div className="flex items-center justify-between mb-1">
+              <div className="flex items-center gap-1.5">
+                <Label className="text-xs font-semibold">Tipo de Recebimento (Nativo) *</Label>
+                <TooltipProvider delayDuration={150}>
+                  <Tooltip>
+                    <TooltipTrigger asChild>
+                      <button
+                        type="button"
+                        aria-label="Informações sobre os tipos nativos de recebimento"
+                        className="text-slate-400 hover:text-blue-600 focus:outline-none transition-colors"
+                      >
+                        <Info className="w-3.5 h-3.5" />
+                      </button>
+                    </TooltipTrigger>
+                    <TooltipContent className="max-w-xs text-xs p-2.5 bg-slate-900 text-white">
+                      Os 5 tipos de recebimento já existem nativamente no sistema e não precisam ser
+                      cadastrados do zero. Escolha o tipo adequado à regra de pagamento da
+                      seguradora.
+                    </TooltipContent>
+                  </Tooltip>
+                </TooltipProvider>
+              </div>
+              <span className="text-[10px] text-slate-400">Nativo do sistema (5 opções)</span>
+            </div>
+
             <Select
               value={tipoModelo}
               onValueChange={(v) => setTipoModelo(v as TipoModeloComissao)}
               disabled={loading}
             >
-              <SelectTrigger className="font-medium bg-slate-50">
+              <SelectTrigger className="font-medium bg-slate-50 h-9">
                 <SelectValue />
               </SelectTrigger>
               <SelectContent>
-                <SelectItem value="A_VISTA">1. À Vista (pagamento único)</SelectItem>
-                <SelectItem value="PARCELADA">2. Parcelada (em N competências)</SelectItem>
-                <SelectItem value="RECORRENTE">3. Recorrente (mensal contínuo)</SelectItem>
-                <SelectItem value="POR_FASES">
-                  4. Por Fases (percentual muda após período)
-                </SelectItem>
-                <SelectItem value="POR_ESGOTAMENTO">
-                  5. Por Saldo / Esgotamento (até consumir)
-                </SelectItem>
+                {(
+                  [
+                    'A_VISTA',
+                    'PARCELADA',
+                    'RECORRENTE',
+                    'POR_FASES',
+                    'POR_ESGOTAMENTO',
+                  ] as TipoModeloComissao[]
+                ).map((tipoKey, idx) => {
+                  const info = TIPOS_NATIVOS_RECEBIMENTO[tipoKey]
+                  return (
+                    <SelectItem key={tipoKey} value={tipoKey}>
+                      <div className="flex items-center justify-between gap-3 w-full py-0.5">
+                        <span className="font-medium text-slate-800">
+                          {idx + 1}. {info.nome}
+                        </span>
+                        <span className="text-[11px] text-slate-400 hidden sm:inline">
+                          — {info.descricaoCurta}
+                        </span>
+                      </div>
+                    </SelectItem>
+                  )
+                })}
               </SelectContent>
             </Select>
+
+            {/* Ajuda visual explicativa discreta após seleção */}
+            {tipoModelo && (
+              <div className="mt-1.5 p-2 bg-blue-50/60 border border-blue-100 rounded text-xs flex items-start gap-2">
+                <TooltipProvider delayDuration={150}>
+                  <Tooltip>
+                    <TooltipTrigger asChild>
+                      <button
+                        type="button"
+                        aria-label={`Ajuda sobre ${TIPOS_NATIVOS_RECEBIMENTO[tipoModelo].nome}`}
+                        className="text-blue-600 hover:text-blue-800 focus:outline-none shrink-0 mt-0.5"
+                      >
+                        <Info className="w-3.5 h-3.5" />
+                      </button>
+                    </TooltipTrigger>
+                    <TooltipContent className="max-w-xs text-xs p-2.5 bg-slate-900 text-white">
+                      <p className="font-bold mb-1">{TIPOS_NATIVOS_RECEBIMENTO[tipoModelo].nome}</p>
+                      <p>{TIPOS_NATIVOS_RECEBIMENTO[tipoModelo].descricaoCompleta}</p>
+                      <p className="text-[10px] text-slate-300 mt-1 italic">
+                        {TIPOS_NATIVOS_RECEBIMENTO[tipoModelo].exemplo}
+                      </p>
+                    </TooltipContent>
+                  </Tooltip>
+                </TooltipProvider>
+                <div className="text-slate-600 leading-tight">
+                  <span className="font-semibold text-slate-800">
+                    {TIPOS_NATIVOS_RECEBIMENTO[tipoModelo].nome}:
+                  </span>{' '}
+                  <span>{TIPOS_NATIVOS_RECEBIMENTO[tipoModelo].resumoAposSelecao}</span>
+                </div>
+              </div>
+            )}
           </div>
 
           {/* CAMPOS CONDICIONAIS CONFORME O MODELO SELECIONADO */}

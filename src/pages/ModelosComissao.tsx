@@ -9,7 +9,9 @@ import {
   Building2,
   ShieldAlert,
   Percent,
+  Info,
 } from 'lucide-react'
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip'
 import { Button } from '@/components/ui/button'
 import { Card, CardHeader, CardTitle, CardContent } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
@@ -31,7 +33,13 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from '@/components/ui/alert-dialog'
-import { ModeloComissao, Seguradora, TipoSeguro } from '@/types'
+import {
+  ModeloComissao,
+  Seguradora,
+  TipoSeguro,
+  TipoModeloComissao,
+  TIPOS_NATIVOS_RECEBIMENTO,
+} from '@/types'
 import { getModelosComissao, deleteModeloComissao } from '@/services/modelos-comissao'
 import { getSeguradoras } from '@/services/seguradoras'
 import { getTiposSeguro } from '@/services/tipos-seguro'
@@ -106,30 +114,61 @@ export function ModelosComissao() {
   }
 
   const getTipoModeloBadge = (tipo: string) => {
-    switch (tipo) {
-      case 'A_VISTA':
-        return <Badge className="bg-blue-100 text-blue-800 border-blue-200">1. À Vista</Badge>
-      case 'PARCELADA':
-        return <Badge className="bg-amber-100 text-amber-800 border-amber-200">2. Parcelada</Badge>
-      case 'RECORRENTE':
-        return (
-          <Badge className="bg-emerald-100 text-emerald-800 border-emerald-200">
-            3. Recorrente
-          </Badge>
-        )
-      case 'POR_FASES':
-        return (
-          <Badge className="bg-purple-100 text-purple-800 border-purple-200">4. Por Fases</Badge>
-        )
-      case 'POR_ESGOTAMENTO':
-        return (
-          <Badge className="bg-orange-100 text-orange-800 border-orange-200">
-            5. Por Esgotamento
-          </Badge>
-        )
-      default:
-        return <Badge variant="outline">{tipo}</Badge>
-    }
+    const info = TIPOS_NATIVOS_RECEBIMENTO[tipo as TipoModeloComissao]
+    const nome = info?.nome || tipo
+
+    const badgeEl = (() => {
+      switch (tipo) {
+        case 'A_VISTA':
+          return <Badge className="bg-blue-100 text-blue-800 border-blue-200">1. À Vista</Badge>
+        case 'PARCELADA':
+          return (
+            <Badge className="bg-amber-100 text-amber-800 border-amber-200">2. Parcelada</Badge>
+          )
+        case 'RECORRENTE':
+          return (
+            <Badge className="bg-emerald-100 text-emerald-800 border-emerald-200">
+              3. Recorrente
+            </Badge>
+          )
+        case 'POR_FASES':
+          return (
+            <Badge className="bg-purple-100 text-purple-800 border-purple-200">4. Por Fases</Badge>
+          )
+        case 'POR_ESGOTAMENTO':
+          return (
+            <Badge className="bg-orange-100 text-orange-800 border-orange-200">
+              5. Por Esgotamento
+            </Badge>
+          )
+        default:
+          return <Badge variant="outline">{tipo}</Badge>
+      }
+    })()
+
+    if (!info) return badgeEl
+
+    return (
+      <div className="flex items-center gap-1.5">
+        {badgeEl}
+        <Tooltip>
+          <TooltipTrigger asChild>
+            <button
+              type="button"
+              className="text-slate-400 hover:text-blue-600 focus:outline-none"
+              aria-label={`Mais informações sobre ${nome}`}
+            >
+              <Info className="w-3.5 h-3.5" />
+            </button>
+          </TooltipTrigger>
+          <TooltipContent className="max-w-xs text-xs p-2.5 bg-slate-900 text-white">
+            <p className="font-bold mb-0.5">{nome}</p>
+            <p className="text-slate-200">{info.descricaoCompleta}</p>
+            <p className="text-[10px] text-slate-400 mt-1 italic">{info.exemplo}</p>
+          </TooltipContent>
+        </Tooltip>
+      </div>
+    )
   }
 
   return (
