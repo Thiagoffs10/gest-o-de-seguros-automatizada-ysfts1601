@@ -409,8 +409,15 @@ export const syncPrevisoesForPolicy = async (
   }
 
   // Previsões antigas que NÃO foram calculadas no novo modelo:
-  // Apenas deletamos se forem estritamente PENDENTES e NÃO tiverem NENHUM recebimento vinculado
+  // Apenas deletamos se forem estritamente PENDENTES, NÃO tiverem NENHUM recebimento vinculado
+  // e NÃO forem vinculadas a um endosso (previsões de endosso têm seu próprio ciclo de vida!)
   for (const prev of existentes) {
+    // Se a previsão pertence a um endosso, preserva sempre!
+    if (prev.endorsement) {
+      resultado.push(prev)
+      continue
+    }
+
     const compClean = (prev.competencia || '').replace('/', '_')
     const k = prev.chave_estavel || `prev_${prev.policy}_${prev.parcela_numero || 1}_${compClean}`
     if (!calculatedKeys.has(k)) {
