@@ -25,6 +25,7 @@ interface Props {
   initialCompetencia?: string
   initialValorBruto?: number
   comissaoPrevistaId?: string
+  endorsementId?: string
   onSuccess: () => void
 }
 
@@ -37,6 +38,7 @@ export function RegistrarRecebimentoModal({
   initialCompetencia,
   initialValorBruto,
   comissaoPrevistaId,
+  endorsementId,
   onSuccess,
 }: Props) {
   const { toast } = useToast()
@@ -192,6 +194,7 @@ export function RegistrarRecebimentoModal({
         parcela: parcela !== '' ? Number(parcela) : undefined,
         competencia: competencia.trim() || undefined,
         comissao_prevista: cleanPrevId || undefined,
+        endorsement: endorsementId ? endorsementId.trim() : undefined,
         idempotency_key: idempotencyKey,
       })
 

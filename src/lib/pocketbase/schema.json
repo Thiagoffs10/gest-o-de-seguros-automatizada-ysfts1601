@@ -1,5 +1,5 @@
 {
-  "generatedAt": "2026-09-11T17:22:30.484Z",
+  "generatedAt": "2026-09-12T01:34:28.688Z",
   "collections": [
     {
       "name": "users",
@@ -1573,12 +1573,20 @@
           "required": false,
           "system": false,
           "collectionRef": "comissoes_previstas"
+        },
+        {
+          "name": "endorsement",
+          "type": "relation",
+          "required": false,
+          "system": false,
+          "collectionRef": "endorsements"
         }
       ],
       "indexes": [
         "CREATE INDEX idx_comissao_rec_policy ON comissao_recebimentos (policy)",
         "CREATE INDEX idx_comissao_rec_data ON comissao_recebimentos (data_recebimento)",
-        "CREATE UNIQUE INDEX idx_comissao_rec_idempotency ON comissao_recebimentos (idempotency_key) WHERE idempotency_key != \"\""
+        "CREATE UNIQUE INDEX idx_comissao_rec_idempotency ON comissao_recebimentos (idempotency_key) WHERE idempotency_key != \"\"",
+        "CREATE INDEX `idx_com_rec_endorsement` ON `comissao_recebimentos` (endorsement)"
       ]
     },
     {
@@ -1754,13 +1762,21 @@
           "type": "text",
           "required": false,
           "system": false
+        },
+        {
+          "name": "endorsement",
+          "type": "relation",
+          "required": false,
+          "system": false,
+          "collectionRef": "endorsements"
         }
       ],
       "indexes": [
         "CREATE INDEX idx_com_prev_policy ON comissoes_previstas (policy)",
         "CREATE INDEX idx_com_prev_data ON comissoes_previstas (data_prevista)",
         "CREATE INDEX idx_com_prev_comp ON comissoes_previstas (competencia)",
-        "CREATE UNIQUE INDEX `idx_com_prev_chave_estavel` ON `comissoes_previstas` (chave_estavel) WHERE chave_estavel != \"\""
+        "CREATE UNIQUE INDEX `idx_com_prev_chave_estavel` ON `comissoes_previstas` (chave_estavel) WHERE chave_estavel != \"\"",
+        "CREATE INDEX `idx_com_prev_endorsement` ON `comissoes_previstas` (endorsement)"
       ]
     },
     {
@@ -1831,6 +1847,110 @@
         "CREATE INDEX idx_produtos_nome ON produtos (nome)",
         "CREATE INDEX idx_produtos_seguradora ON produtos (seguradora)",
         "CREATE INDEX idx_produtos_ramo ON produtos (ramo)"
+      ]
+    },
+    {
+      "name": "endorsements",
+      "type": "base",
+      "apiRules": {
+        "list": "@request.auth.id != ''",
+        "view": "@request.auth.id != ''",
+        "create": "@request.auth.role = 'Admin' || @request.auth.role = 'Administrador' || @request.auth.role = 'Gerente' || @request.auth.role = 'Operador'",
+        "update": "@request.auth.role = 'Admin' || @request.auth.role = 'Administrador' || @request.auth.role = 'Gerente' || @request.auth.role = 'Operador'",
+        "delete": "@request.auth.role = 'Admin' || @request.auth.role = 'Administrador'"
+      },
+      "fields": [
+        {
+          "name": "policy",
+          "type": "relation",
+          "required": true,
+          "system": false,
+          "collectionRef": "policies"
+        },
+        {
+          "name": "tipo",
+          "type": "text",
+          "required": true,
+          "system": false
+        },
+        {
+          "name": "data_endosso",
+          "type": "date",
+          "required": true,
+          "system": false
+        },
+        {
+          "name": "numero_proposta",
+          "type": "text",
+          "required": false,
+          "system": false
+        },
+        {
+          "name": "placa",
+          "type": "text",
+          "required": false,
+          "system": false
+        },
+        {
+          "name": "chassi",
+          "type": "text",
+          "required": false,
+          "system": false
+        },
+        {
+          "name": "modelo_veiculo",
+          "type": "text",
+          "required": false,
+          "system": false
+        },
+        {
+          "name": "valor_bruto",
+          "type": "number",
+          "required": false,
+          "system": false
+        },
+        {
+          "name": "valor_liquido",
+          "type": "number",
+          "required": false,
+          "system": false
+        },
+        {
+          "name": "comissao_percent",
+          "type": "number",
+          "required": false,
+          "system": false
+        },
+        {
+          "name": "comissao_valor",
+          "type": "number",
+          "required": false,
+          "system": false
+        },
+        {
+          "name": "observacao",
+          "type": "text",
+          "required": false,
+          "system": false
+        },
+        {
+          "name": "created",
+          "type": "autodate",
+          "required": false,
+          "system": false,
+          "autodateTriggers": ["onCreate"]
+        },
+        {
+          "name": "updated",
+          "type": "autodate",
+          "required": false,
+          "system": false,
+          "autodateTriggers": ["onCreate", "onUpdate"]
+        }
+      ],
+      "indexes": [
+        "CREATE INDEX idx_endorsements_policy ON endorsements (policy)",
+        "CREATE INDEX idx_endorsements_data ON endorsements (data_endosso)"
       ]
     }
   ]

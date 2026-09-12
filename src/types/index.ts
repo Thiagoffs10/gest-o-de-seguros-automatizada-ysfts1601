@@ -359,6 +359,34 @@ export interface ModeloComissao {
   }
 }
 
+export interface Endorsement {
+  id: string
+  policy: string
+  tipo: string // Ex: "Substituição de veículo"
+  data_endosso: string // YYYY-MM-DD
+  numero_proposta?: string
+  placa?: string
+  chassi?: string
+  modelo_veiculo?: string
+  valor_bruto?: number
+  valor_liquido?: number
+  comissao_percent?: number
+  comissao_valor?: number
+  observacao?: string
+  created: string
+  updated: string
+  expand?: {
+    policy?: Policy
+  }
+}
+
+export type EndorsementFinancialStatus =
+  | 'Sem impacto financeiro'
+  | 'Pendente'
+  | 'Parcialmente recebido'
+  | 'Recebido'
+  | 'Estornado / Ajustado'
+
 export interface ComissaoPrevista {
   id: string
   policy: string
@@ -370,10 +398,12 @@ export interface ComissaoPrevista {
   status: 'Pendente' | 'Parcial' | 'Recebida' | 'Cancelada'
   observacao?: string
   chave_estavel?: string
+  endorsement?: string
   created: string
   updated: string
   expand?: {
     policy?: Policy
+    endorsement?: Endorsement
   }
 }
 
@@ -413,6 +443,7 @@ export interface ComissaoRecebimento {
   recebimento_original?: string
   motivo_estorno?: string
   comissao_prevista?: string
+  endorsement?: string
   created: string
   updated: string
 }

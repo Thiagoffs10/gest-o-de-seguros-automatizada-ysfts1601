@@ -32,12 +32,21 @@ import {
   Parceiro,
   ComissaoRecebimento,
   ComissaoPrevista,
+  Endorsement,
 } from '@/types'
 import {
   getComissaoRecebimentosByPolicy,
   deleteComissaoRecebimento,
 } from '@/services/comissao-recebimentos'
 import { getComissoesPrevistasByPolicy } from '@/services/modelos-comissao'
+import {
+  getEndorsementsByPolicy,
+  deleteEndorsement,
+  computeEndorsementFinancialStatus,
+  getVeiculoVigente,
+} from '@/services/endorsements'
+import { EndorsementFormDialog } from '@/components/EndorsementFormDialog'
+import { Car, FileSignature, ArrowRight, ShieldCheck } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs'
@@ -82,6 +91,7 @@ export default function PolicyDetail() {
   const [payments, setPayments] = useState<Payment[]>([])
   const [recebimentos, setRecebimentos] = useState<ComissaoRecebimento[]>([])
   const [previsoes, setPrevisoes] = useState<ComissaoPrevista[]>([])
+  const [endorsements, setEndorsements] = useState<Endorsement[]>([])
   const [clients, setClients] = useState<Client[]>([])
   const [seguradoras, setSeguradoras] = useState<Seguradora[]>([])
   const [parceiros, setParceiros] = useState<Parceiro[]>([])
@@ -93,6 +103,15 @@ export default function PolicyDetail() {
   const [deleteLoading, setDeleteLoading] = useState(false)
   const [cancelOpen, setCancelOpen] = useState(false)
   const [relatedCount, setRelatedCount] = useState({ payments: 0, reminders: 0 })
+
+  // Estados de Endosso
+  const [isEndorsementModalOpen, setIsEndorsementModalOpen] = useState(false)
+  const [editingEndorsement, setEditingEndorsement] = useState<Endorsement | null>(null)
+  const [selectedEndorsementDetail, setSelectedEndorsementDetail] = useState<Endorsement | null>(
+    null,
+  )
+  const [deletingEndorsement, setDeletingEndorsement] = useState<Endorsement | null>(null)
+  const [deleteEndorsementLoading, setDeleteEndorsementLoading] = useState(false)
 
   // Estados para edição e exclusão de recebimento com confirmação
   // Separação de aberto/fechado de item selecionado para evitar desmontagem abrupta e flicker
@@ -120,10 +139,11 @@ export default function PolicyDetail() {
     try {
       const p = await getPolicy(id)
       setPolicy(p)
-      const [pays, recs, prevList, cls, segs, pars] = await Promise.all([
+      const [pays, recs, prevList, ends, cls, segs, pars] = await Promise.all([
         getPayments(`policy = "${id}"`),
         getComissaoRecebimentosByPolicy(id),
         getComissoesPrevistasByPolicy(id).catch(() => []),
+        getEndorsementsByPolicy(id).catch(() => []),
         getClients(),
         getSeguradoras(),
         getParceiros(),
@@ -131,6 +151,7 @@ export default function PolicyDetail() {
       setPayments(pays)
       setRecebimentos(recs)
       setPrevisoes(prevList)
+      setEndorsements(ends)
       setClients(cls)
       setSeguradoras(segs)
       setParceiros(pars)
@@ -159,6 +180,11 @@ export default function PolicyDetail() {
     }
   })
   useRealtime('comissoes_previstas', () => {
+    if (!isOperationInProgressRef.current) {
+      loadData()
+    }
+  })
+  useRealtime('endorsements', () => {
     if (!isOperationInProgressRef.current) {
       loadData()
     }
@@ -349,6 +375,30 @@ export default function PolicyDetail() {
   const saldoAReceber = Math.max(0, Math.round((comissaoPrevista - jaRecebido) * 100) / 100)
   const temDivergenciaExcesso = jaRecebido > comissaoPrevista && comissaoPrevista > 0
 
+  // Cálculo do veículo vigente (sem destruir registros históricos)
+  const veiculoVigente = getVeiculoVigente(policy, endorsements)
+
+  const handleConfirmDeleteEndorsement = async () => {
+    if (!deletingEndorsement || deleteEndorsementLoading) return
+    setDeleteEndorsementLoading(true)
+    isOperationInProgressRef.current = true
+    try {
+      await deleteEndorsement(deletingEndorsement.id)
+      toast({ title: 'Endosso excluído com sucesso!' })
+      setDeletingEndorsement(null)
+      await loadData()
+    } catch (err: any) {
+      toast({
+        title: 'Erro ao excluir endosso',
+        description: getErrorMessage(err),
+        variant: 'destructive',
+      })
+    } finally {
+      setDeleteEndorsementLoading(false)
+      isOperationInProgressRef.current = false
+    }
+  }
+
   // Total estornado e recebido para exibição simplificada
   const totalRecebimentosNormais =
     Math.round(
@@ -403,6 +453,18 @@ export default function PolicyDetail() {
               onClick={() => setCancelOpen(true)}
             >
               <Ban className="w-4 h-4 mr-2" /> Cancelar Apólice
+            </Button>
+          )}
+          {can('policies', 'create') && policy.status !== 'Cancelada' && (
+            <Button
+              variant="outline"
+              className="border-blue-300 text-blue-700 hover:bg-blue-50"
+              onClick={() => {
+                setEditingEndorsement(null)
+                setIsEndorsementModalOpen(true)
+              }}
+            >
+              <FileSignature className="w-4 h-4 mr-2" /> Endosso
             </Button>
           )}
           {can('policies', 'create') && policy.status !== 'Cancelada' && (
@@ -845,16 +907,38 @@ export default function PolicyDetail() {
           {policy.tipo_de_seguro === 'Auto' && (
             <>
               <div>
-                <p className="text-xs text-slate-500">Placa</p>
-                <p className="font-semibold">{policy.placa || '-'}</p>
+                <p className="text-xs text-slate-500 flex items-center gap-1">
+                  Placa
+                  {veiculoVigente.origem !== 'Apólice original' && (
+                    <Badge
+                      variant="outline"
+                      className="text-[9px] px-1 py-0 bg-blue-50 text-blue-700"
+                    >
+                      Vigente
+                    </Badge>
+                  )}
+                </p>
+                <p className="font-semibold text-slate-900">{veiculoVigente.placa || '-'}</p>
+                {policy.placa && policy.placa !== veiculoVigente.placa && (
+                  <p className="text-[10px] text-slate-400">Orig: {policy.placa}</p>
+                )}
               </div>
               <div>
                 <p className="text-xs text-slate-500">Chassi</p>
-                <p className="font-semibold">{policy.chassi || '-'}</p>
+                <p className="font-semibold text-slate-900">{veiculoVigente.chassi || '-'}</p>
+                {policy.chassi && policy.chassi !== veiculoVigente.chassi && (
+                  <p className="text-[10px] text-slate-400">Orig: {policy.chassi}</p>
+                )}
               </div>
               <div>
                 <p className="text-xs text-slate-500">Modelo do Veículo</p>
-                <p className="font-semibold">{policy.modelo_veiculo || '-'}</p>
+                <p className="font-semibold text-slate-900">
+                  {veiculoVigente.modelo_veiculo || '-'}
+                </p>
+                {policy.modelo_veiculo &&
+                  policy.modelo_veiculo !== veiculoVigente.modelo_veiculo && (
+                    <p className="text-[10px] text-slate-400">Orig: {policy.modelo_veiculo}</p>
+                  )}
               </div>
             </>
           )}
@@ -943,6 +1027,191 @@ export default function PolicyDetail() {
         </CardContent>
       </Card>
 
+      {/* SEÇÃO DE HISTÓRICO DE ENDOSSOS */}
+      <Card className="border-slate-200 bg-white shadow-sm overflow-hidden">
+        <CardHeader className="bg-slate-50/70 border-b pb-3.5 pt-4">
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+            <div>
+              <div className="flex items-center gap-2">
+                <FileSignature className="w-4 h-4 text-blue-600" />
+                <CardTitle className="text-base font-bold text-slate-900">
+                  Histórico de Endossos ({endorsements.length})
+                </CardTitle>
+              </div>
+              <p className="text-xs text-slate-500 mt-0.5">
+                Alterações contratuais durante a vigência com preservação permanente de histórico e
+                efeito financeiro
+              </p>
+            </div>
+            {can('policies', 'create') && policy.status !== 'Cancelada' && (
+              <Button
+                size="sm"
+                className="bg-blue-600 hover:bg-blue-700 text-white shrink-0 h-8"
+                onClick={() => {
+                  setEditingEndorsement(null)
+                  setIsEndorsementModalOpen(true)
+                }}
+              >
+                <Plus className="w-3.5 h-3.5 mr-1" />
+                Novo Endosso
+              </Button>
+            )}
+          </div>
+        </CardHeader>
+        <CardContent className="p-4 sm:p-5 space-y-4">
+          {/* Visualização de sequência veicular quando houver histórico */}
+          {policy.tipo_de_seguro === 'Auto' && (
+            <div className="p-3 bg-slate-50 rounded-lg border text-xs">
+              <span className="font-semibold text-slate-700 block mb-1.5">
+                Sequência Histórica do Veículo:
+              </span>
+              <div className="flex flex-wrap items-center gap-2">
+                <span className="px-2.5 py-1 bg-white rounded border border-slate-300 font-medium text-slate-800">
+                  Original: {policy.modelo_veiculo || 'Modelo ñ inf.'}{' '}
+                  {policy.placa ? `(${policy.placa})` : ''}
+                </span>
+                {endorsements
+                  .filter((e) => Boolean(e.modelo_veiculo || e.placa))
+                  .sort((a, b) => (a.data_endosso || '').localeCompare(b.data_endosso || ''))
+                  .map((e, idx) => (
+                    <div key={e.id} className="flex items-center gap-2">
+                      <ArrowRight className="w-3.5 h-3.5 text-slate-400" />
+                      <span className="px-2.5 py-1 bg-blue-50 text-blue-900 rounded border border-blue-200 font-medium">
+                        Endosso {idx + 1}: {e.modelo_veiculo || 'Substituição'}{' '}
+                        {e.placa ? `(${e.placa})` : ''}
+                      </span>
+                    </div>
+                  ))}
+              </div>
+            </div>
+          )}
+
+          {endorsements.length === 0 ? (
+            <div className="p-6 bg-slate-50 border rounded-lg text-center text-xs text-slate-500">
+              Nenhum endosso registrado para esta apólice.
+            </div>
+          ) : (
+            <div className="overflow-x-auto border rounded-lg bg-white">
+              <table className="w-full text-left text-xs text-slate-700">
+                <thead className="bg-slate-50 text-slate-600 font-semibold border-b">
+                  <tr>
+                    <th className="p-2.5">Data</th>
+                    <th className="p-2.5">Tipo</th>
+                    <th className="p-2.5">Proposta</th>
+                    <th className="p-2.5">Placa</th>
+                    <th className="p-2.5">Modelo</th>
+                    <th className="p-2.5 text-right">Valor Bruto</th>
+                    <th className="p-2.5 text-right">Valor Líquido</th>
+                    <th className="p-2.5 text-right">Comissão</th>
+                    <th className="p-2.5 text-center">Situação Financeira</th>
+                    <th className="p-2.5 text-right">Ações</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-slate-100">
+                  {endorsements.map((end) => {
+                    const statusFin = computeEndorsementFinancialStatus(
+                      end,
+                      previsoes,
+                      recebimentos,
+                    )
+                    const vBruto = Number(end.valor_bruto || 0)
+                    const vLiq = Number(end.valor_liquido || 0)
+                    const vComm = Number(end.comissao_valor || 0)
+
+                    return (
+                      <tr
+                        key={end.id}
+                        className="hover:bg-slate-50/80 cursor-pointer"
+                        onClick={() => setSelectedEndorsementDetail(end)}
+                      >
+                        <td className="p-2.5 font-medium text-slate-900">
+                          {formatDateDisplay(end.data_endosso)}
+                        </td>
+                        <td className="p-2.5 font-semibold text-slate-800">{end.tipo}</td>
+                        <td className="p-2.5 text-slate-600">{end.numero_proposta || '-'}</td>
+                        <td className="p-2.5 font-mono font-medium text-slate-700">
+                          {end.placa || '-'}
+                        </td>
+                        <td className="p-2.5 text-slate-800">{end.modelo_veiculo || '-'}</td>
+                        <td className="p-2.5 text-right">
+                          {vBruto < 0
+                            ? `- R$ ${fmtMoney(Math.abs(vBruto))}`
+                            : `R$ ${fmtMoney(vBruto)}`}
+                        </td>
+                        <td className="p-2.5 text-right font-medium">
+                          {vLiq < 0 ? `- R$ ${fmtMoney(Math.abs(vLiq))}` : `R$ ${fmtMoney(vLiq)}`}
+                        </td>
+                        <td
+                          className={`p-2.5 text-right font-bold ${
+                            vComm > 0
+                              ? 'text-emerald-700'
+                              : vComm < 0
+                                ? 'text-rose-600'
+                                : 'text-slate-500'
+                          }`}
+                        >
+                          {vComm > 0
+                            ? `+ R$ ${fmtMoney(vComm)}`
+                            : vComm < 0
+                              ? `- R$ ${fmtMoney(Math.abs(vComm))}`
+                              : 'R$ 0,00'}
+                        </td>
+                        <td className="p-2.5 text-center">
+                          <Badge
+                            className={
+                              statusFin === 'Recebido'
+                                ? 'bg-emerald-600 text-white'
+                                : statusFin === 'Parcialmente recebido'
+                                  ? 'bg-blue-600 text-white'
+                                  : statusFin === 'Estornado / Ajustado'
+                                    ? 'bg-rose-600 text-white'
+                                    : statusFin === 'Sem impacto financeiro'
+                                      ? 'bg-slate-400 text-white'
+                                      : 'bg-amber-500 text-white'
+                            }
+                          >
+                            {statusFin}
+                          </Badge>
+                        </td>
+                        <td className="p-2.5 text-right" onClick={(e) => e.stopPropagation()}>
+                          <div className="flex items-center justify-end gap-1">
+                            {can('policies', 'update') && (
+                              <Button
+                                variant="ghost"
+                                size="sm"
+                                className="text-blue-600 hover:text-blue-800 hover:bg-blue-50 h-7 px-2"
+                                onClick={() => {
+                                  setEditingEndorsement(end)
+                                  setIsEndorsementModalOpen(true)
+                                }}
+                                title="Editar endosso"
+                              >
+                                <Pencil className="w-3.5 h-3.5" />
+                              </Button>
+                            )}
+                            {can('policies', 'delete') && (
+                              <Button
+                                variant="ghost"
+                                size="sm"
+                                className="text-red-500 hover:text-red-700 hover:bg-red-50 h-7 px-2"
+                                onClick={() => setDeletingEndorsement(end)}
+                                title="Excluir endosso"
+                              >
+                                <Trash2 className="w-3.5 h-3.5" />
+                              </Button>
+                            )}
+                          </div>
+                        </td>
+                      </tr>
+                    )
+                  })}
+                </tbody>
+              </table>
+            </div>
+          )}
+        </CardContent>
+      </Card>
+
       <Tabs defaultValue="payments">
         <TabsList>
           <TabsTrigger value="payments">Pagamentos ({payments.length})</TabsTrigger>
@@ -1019,6 +1288,180 @@ export default function PolicyDetail() {
         onConfirm={handleCancelConfirm}
         policyNumber={policy.policy_number || policy.numero_proposta || ''}
       />
+
+      {/* Modal de Cadastro / Edição de Endosso */}
+      <EndorsementFormDialog
+        open={isEndorsementModalOpen}
+        onOpenChange={(open) => {
+          setIsEndorsementModalOpen(open)
+          if (!open) setEditingEndorsement(null)
+        }}
+        policy={policy}
+        endorsementToEdit={editingEndorsement}
+        onSuccess={() => {
+          setTimeout(() => {
+            loadData()
+          }, 50)
+        }}
+      />
+
+      {/* Modal de Detalhes do Endosso */}
+      <Dialog
+        open={selectedEndorsementDetail !== null}
+        onOpenChange={(open) => {
+          if (!open) setSelectedEndorsementDetail(null)
+        }}
+      >
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <FileSignature className="w-5 h-5 text-blue-600" />
+              <span>Detalhes do Endosso</span>
+            </DialogTitle>
+          </DialogHeader>
+
+          {selectedEndorsementDetail && (
+            <div className="space-y-3 text-xs text-slate-700 py-1">
+              <div className="grid grid-cols-2 gap-2 p-3 bg-slate-50 border rounded-lg">
+                <div>
+                  <span className="text-slate-400 block text-[11px]">Tipo de Endosso</span>
+                  <strong className="text-slate-900">{selectedEndorsementDetail.tipo}</strong>
+                </div>
+                <div>
+                  <span className="text-slate-400 block text-[11px]">Data do Endosso</span>
+                  <strong className="text-slate-900">
+                    {formatDateDisplay(selectedEndorsementDetail.data_endosso)}
+                  </strong>
+                </div>
+                <div>
+                  <span className="text-slate-400 block text-[11px]">Nº da Proposta</span>
+                  <span>{selectedEndorsementDetail.numero_proposta || 'Não informada'}</span>
+                </div>
+                <div>
+                  <span className="text-slate-400 block text-[11px]">Placa do Veículo</span>
+                  <span className="font-mono font-medium">
+                    {selectedEndorsementDetail.placa || '-'}
+                  </span>
+                </div>
+                <div>
+                  <span className="text-slate-400 block text-[11px]">Chassi</span>
+                  <span className="font-mono">{selectedEndorsementDetail.chassi || '-'}</span>
+                </div>
+                <div>
+                  <span className="text-slate-400 block text-[11px]">Modelo do Veículo</span>
+                  <span>{selectedEndorsementDetail.modelo_veiculo || '-'}</span>
+                </div>
+              </div>
+
+              <div className="p-3 bg-slate-50 border rounded-lg space-y-1">
+                <span className="font-semibold text-slate-800 block mb-1">
+                  Valores e Comissionamento
+                </span>
+                <div className="grid grid-cols-3 gap-2">
+                  <div>
+                    <span className="text-slate-400 block text-[11px]">Valor Bruto</span>
+                    <strong className="text-slate-800">
+                      R$ {fmtMoney(selectedEndorsementDetail.valor_bruto || 0)}
+                    </strong>
+                  </div>
+                  <div>
+                    <span className="text-slate-400 block text-[11px]">Valor Líquido</span>
+                    <strong className="text-slate-800">
+                      R$ {fmtMoney(selectedEndorsementDetail.valor_liquido || 0)}
+                    </strong>
+                  </div>
+                  <div>
+                    <span className="text-slate-400 block text-[11px]">
+                      Comissão ({selectedEndorsementDetail.comissao_percent || 0}%)
+                    </span>
+                    <strong
+                      className={
+                        (selectedEndorsementDetail.comissao_valor || 0) > 0
+                          ? 'text-emerald-700'
+                          : (selectedEndorsementDetail.comissao_valor || 0) < 0
+                            ? 'text-rose-600'
+                            : 'text-slate-600'
+                      }
+                    >
+                      R$ {fmtMoney(selectedEndorsementDetail.comissao_valor || 0)}
+                    </strong>
+                  </div>
+                </div>
+              </div>
+
+              {selectedEndorsementDetail.observacao && (
+                <div className="p-3 bg-slate-50 border rounded-lg">
+                  <span className="text-slate-400 block text-[11px] mb-1">Observações</span>
+                  <p className="text-slate-800 whitespace-pre-wrap">
+                    {selectedEndorsementDetail.observacao}
+                  </p>
+                </div>
+              )}
+            </div>
+          )}
+
+          <DialogFooter className="pt-2">
+            <Button
+              type="button"
+              variant="outline"
+              onClick={() => setSelectedEndorsementDetail(null)}
+            >
+              Fechar
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Diálogo de Confirmação para Excluir Endosso */}
+      <Dialog
+        open={deletingEndorsement !== null}
+        onOpenChange={(open) => {
+          if (!open) setDeletingEndorsement(null)
+        }}
+      >
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2 text-red-600">
+              <AlertTriangle className="w-5 h-5 text-red-600" />
+              <span>Excluir Endosso?</span>
+            </DialogTitle>
+          </DialogHeader>
+
+          {deletingEndorsement && (
+            <div className="space-y-3 text-sm text-slate-600 py-1">
+              <p>
+                Tem certeza de que deseja excluir este endosso (
+                <strong>{deletingEndorsement.tipo}</strong> —{' '}
+                {formatDateDisplay(deletingEndorsement.data_endosso)})?
+              </p>
+              <p className="text-xs text-slate-500">
+                Se houver comissões previstas estritamente pendentes vinculadas a este endosso, elas
+                serão removidas. Endossos com movimentações já recebidas ou estornadas não podem ser
+                excluídos para proteger o histórico financeiro.
+              </p>
+            </div>
+          )}
+
+          <DialogFooter className="pt-2">
+            <Button
+              type="button"
+              variant="outline"
+              onClick={() => setDeletingEndorsement(null)}
+              disabled={deleteEndorsementLoading}
+            >
+              Cancelar
+            </Button>
+            <Button
+              type="button"
+              variant="destructive"
+              onClick={handleConfirmDeleteEndorsement}
+              disabled={deleteEndorsementLoading}
+            >
+              {deleteEndorsementLoading ? 'Excluindo...' : 'Confirmar Exclusão'}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
 
       {/* Modal de Estorno de Recebimento */}
       <EstornoRecebimentoModal

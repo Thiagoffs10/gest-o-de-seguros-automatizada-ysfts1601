@@ -511,6 +511,26 @@ export const deletePolicyWithRelations = async (id: string) => {
   for (const r of reminders) {
     await pb.collection('reminders').delete(r.id)
   }
+  try {
+    const endorsements = await pb
+      .collection('endorsements')
+      .getFullList({ filter: `policy = "${id}"` })
+    for (const e of endorsements) {
+      await pb.collection('endorsements').delete(e.id)
+    }
+  } catch {
+    /* intentionally ignored */
+  }
+  try {
+    const prevs = await pb
+      .collection('comissoes_previstas')
+      .getFullList({ filter: `policy = "${id}"` })
+    for (const p of prevs) {
+      await pb.collection('comissoes_previstas').delete(p.id)
+    }
+  } catch {
+    /* intentionally ignored */
+  }
   await pb.collection('policies').delete(id)
 }
 

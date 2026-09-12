@@ -222,7 +222,7 @@ export const getComissoesPrevistasPaginated = async (
       .getList<ComissaoPrevista>(page, perPage, {
         filter: filterStr || undefined,
         sort: 'data_prevista,parcela_numero',
-        expand: 'policy,policy.client,policy.seguradora,policy.produto,modelo_comissao',
+        expand: 'policy,policy.client,policy.seguradora,policy.produto,modelo_comissao,endorsement',
       })
     return {
       items: res.items,

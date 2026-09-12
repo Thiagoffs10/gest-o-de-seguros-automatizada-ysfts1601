@@ -5,7 +5,7 @@ import { formatDateForInput } from '@/lib/utils'
 export const getComissaoRecebimentos = async (
   filter?: string,
   sort = '-data_recebimento',
-  expand = 'policy,policy.client,policy.seguradora,policy.parceiro',
+  expand = 'policy,policy.client,policy.seguradora,policy.parceiro,endorsement',
 ): Promise<ComissaoRecebimento[]> => {
   return pb.collection('comissao_recebimentos').getFullList<ComissaoRecebimento>({
     filter,
@@ -20,7 +20,7 @@ export const getComissaoRecebimentosByPolicy = async (
   return pb.collection('comissao_recebimentos').getFullList<ComissaoRecebimento>({
     filter: `policy = "${policyId}"`,
     sort: '-data_recebimento',
-    expand: 'policy',
+    expand: 'policy,endorsement',
   })
 }
 
@@ -40,6 +40,7 @@ export interface CreateComissaoRecebimentoPayload {
   recebimento_original?: string | null
   motivo_estorno?: string
   comissao_prevista?: string | null
+  endorsement?: string | null
 }
 
 export interface UpdateComissaoRecebimentoPayload {
@@ -260,6 +261,10 @@ export const createComissaoRecebimento = async (
     payload.comissao_prevista = data.comissao_prevista.trim()
   } else if (data.comissao_prevista === '') {
     throw new Error('O ID da comissão prevista não pode ser uma string vazia.')
+  }
+
+  if (data.endorsement && data.endorsement.trim() !== '') {
+    payload.endorsement = data.endorsement.trim()
   }
 
   if (data.aliquota_imposto !== undefined && data.aliquota_imposto !== null) {

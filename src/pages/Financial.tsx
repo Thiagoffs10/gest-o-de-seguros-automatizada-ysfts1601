@@ -112,6 +112,9 @@ export default function Financial() {
   const [recebimentoInitialValor, setRecebimentoInitialValor] = useState<number | undefined>(
     undefined,
   )
+  const [recebimentoInitialEndorsementId, setRecebimentoInitialEndorsementId] = useState<
+    string | undefined
+  >(undefined)
   const [historyPolicy, setHistoryPolicy] = useState<Policy | null>(null)
   const [isEditRecebimentoOpen, setIsEditRecebimentoOpen] = useState(false)
   const [editingRecebimento, setEditingRecebimento] = useState<ComissaoRecebimento | null>(null)
@@ -160,6 +163,7 @@ export default function Financial() {
     const urlComp = searchParams.get('competencia')
     const urlPrevId = searchParams.get('prevId')
     const urlValor = searchParams.get('valor')
+    const urlEndorsementId = searchParams.get('endorsementId')
     if (urlPolicy) {
       setPolicySearchFilter(urlPolicy)
     }
@@ -174,6 +178,9 @@ export default function Financial() {
       if (!isNaN(parsedVal) && parsedVal > 0) {
         setRecebimentoInitialValor(parsedVal)
       }
+    }
+    if (urlEndorsementId) {
+      setRecebimentoInitialEndorsementId(urlEndorsementId)
     }
   }, [searchParams])
 
@@ -549,11 +556,13 @@ export default function Financial() {
     competenciaPreenchida?: string,
     prevId?: string,
     valorPrevisto?: number,
+    endorsementId?: string,
   ) => {
     setRecebimentoPolicy(policy)
     setRecebimentoInitialComp(competenciaPreenchida || undefined)
     setRecebimentoInitialPrevId(prevId)
     setRecebimentoInitialValor(valorPrevisto)
+    setRecebimentoInitialEndorsementId(endorsementId)
   }
 
   const handleConfirmDeleteRecebimento = async () => {
@@ -840,6 +849,7 @@ export default function Financial() {
               <table className="w-full text-left text-xs text-slate-700">
                 <thead className="bg-slate-100 text-slate-600 font-semibold border-b">
                   <tr>
+                    <th className="p-3">Origem</th>
                     <th className="p-3">Cliente</th>
                     <th className="p-3">Seguradora</th>
                     <th className="p-3">Produto</th>
@@ -847,7 +857,7 @@ export default function Financial() {
                     <th className="p-3 text-right">Previsto</th>
                     <th className="p-3 text-right">Recebido</th>
                     <th className="p-3 text-right">Saldo</th>
-                    <th className="p-3 text-center">Status</th>
+                    <th className="p-3 text-center">Situação</th>
                     <th className="p-3 text-right">Ação</th>
                   </tr>
                 </thead>
@@ -904,6 +914,23 @@ export default function Financial() {
 
                       return (
                         <tr key={prev.id} className="hover:bg-slate-50/80">
+                          <td className="p-3">
+                            {prev.endorsement ? (
+                              <Badge
+                                variant="outline"
+                                className="text-[10px] bg-blue-50 text-blue-700 border-blue-200"
+                              >
+                                Endosso
+                              </Badge>
+                            ) : (
+                              <Badge
+                                variant="outline"
+                                className="text-[10px] bg-slate-50 text-slate-700 border-slate-200"
+                              >
+                                Apólice
+                              </Badge>
+                            )}
+                          </td>
                           <td className="p-3 font-semibold text-slate-900">{clientName}</td>
                           <td className="p-3">{segNome}</td>
                           <td className="p-3">{prodNome}</td>
@@ -949,6 +976,7 @@ export default function Financial() {
                                     prev.competencia,
                                     prev.id,
                                     Number(prev.valor_previsto),
+                                    prev.endorsement,
                                   )
                                 }
                               >
@@ -1290,6 +1318,7 @@ export default function Financial() {
             setRecebimentoInitialComp(undefined)
             setRecebimentoInitialPrevId(undefined)
             setRecebimentoInitialValor(undefined)
+            setRecebimentoInitialEndorsementId(undefined)
           }
         }}
         policy={recebimentoPolicy}
@@ -1297,6 +1326,7 @@ export default function Financial() {
         initialCompetencia={recebimentoInitialComp}
         comissaoPrevistaId={recebimentoInitialPrevId}
         initialValorBruto={recebimentoInitialValor}
+        endorsementId={recebimentoInitialEndorsementId}
         alreadyReceived={
           recebimentoPolicy
             ? (receivedGrossByPolicy.get(recebimentoPolicy.id) ??
@@ -1304,6 +1334,11 @@ export default function Financial() {
             : 0
         }
         onSuccess={() => {
+          setRecebimentoPolicy(null)
+          setRecebimentoInitialComp(undefined)
+          setRecebimentoInitialPrevId(undefined)
+          setRecebimentoInitialValor(undefined)
+          setRecebimentoInitialEndorsementId(undefined)
           loadData()
         }}
       />
@@ -1347,11 +1382,12 @@ export default function Financial() {
                 <table className="w-full text-left text-xs text-slate-700">
                   <thead className="bg-slate-100 text-slate-600 font-semibold border-b">
                     <tr>
+                      <th className="p-2.5">Origem</th>
                       <th className="p-2.5">Data</th>
                       <th className="p-2.5">Valor Bruto</th>
                       <th className="p-2.5">Imposto</th>
                       <th className="p-2.5">Valor Líquido</th>
-                      <th className="p-2.5">Origem / Obs</th>
+                      <th className="p-2.5">Detalhes / Obs</th>
                       <th className="p-2.5 text-right">Ações</th>
                     </tr>
                   </thead>
@@ -1360,6 +1396,23 @@ export default function Financial() {
                       .filter((r) => r.policy === historyPolicy.id)
                       .map((rec) => (
                         <tr key={rec.id} className="hover:bg-slate-50">
+                          <td className="p-2.5">
+                            {rec.endorsement ? (
+                              <Badge
+                                variant="outline"
+                                className="text-[10px] bg-blue-50 text-blue-700 border-blue-200"
+                              >
+                                Endosso
+                              </Badge>
+                            ) : (
+                              <Badge
+                                variant="outline"
+                                className="text-[10px] bg-slate-50 text-slate-600 border-slate-200"
+                              >
+                                Apólice
+                              </Badge>
+                            )}
+                          </td>
                           <td className="p-2.5 font-medium">
                             {formatDateDisplay(rec.data_recebimento)}
                           </td>
