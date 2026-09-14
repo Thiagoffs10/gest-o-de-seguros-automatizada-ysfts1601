@@ -32,6 +32,7 @@ import {
   FilterState,
   ComissaoRecebimento,
   Produto,
+  ComissaoPrevista,
 } from '@/types'
 import { Card, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
@@ -1852,35 +1853,31 @@ export default function Financial() {
           </DialogHeader>
 
           {!selectedSeguradoraDetail ? (
-            // VISÃO 1: LISTAGEM DAS SEGURADORAS
+            // VISÃO 1 (NÍVEL 1): LISTAGEM DAS SEGURADORAS ORDENADA POR MAIOR SALDO A RECEBER
             <div className="space-y-4 pt-2">
               <div className="p-3 bg-amber-50/70 border border-amber-200 rounded-lg flex items-center justify-between text-xs">
                 <div>
-                  <span className="text-amber-800 font-semibold block">Total Geral Acumulado</span>
+                  <span className="text-amber-800 font-semibold block">Total Geral a Receber</span>
                   <span className="text-amber-700">
                     Soma exata das {metrics.seguradorasBreakdown.length} seguradora
-                    {metrics.seguradorasBreakdown.length !== 1 ? 's' : ''} com pendência
+                    {metrics.seguradorasBreakdown.length !== 1 ? 's' : ''} com pendência (inclui
+                    apólices e endossos)
                   </span>
                 </div>
                 <div className="text-right">
                   <span className="text-lg font-bold text-amber-900">
                     R$ {fmtMoney(metrics.totalSeguradorasSaldo)}
                   </span>
-                  {Math.abs(metrics.totalSeguradorasSaldo - metrics.pendingCommissions) > 0.009 ? (
-                    <span className="block text-[11px] text-red-600 font-semibold">
-                      Divergência detectada
-                    </span>
-                  ) : (
-                    <span className="block text-[11px] text-emerald-700 font-medium">
-                      ✓ Bate 100% com o saldo geral
-                    </span>
-                  )}
+                  <span className="block text-[11px] text-slate-600 font-medium">
+                    {metrics.seguradorasBreakdown.reduce((sum, s) => sum + s.itens.length, 0)}{' '}
+                    pendência(s) no total
+                  </span>
                 </div>
               </div>
 
               {metrics.seguradorasBreakdown.length === 0 ? (
                 <div className="text-center py-8 text-slate-500 text-sm">
-                  Nenhuma apólice com saldo pendente de comissão no período selecionado.
+                  Nenhuma pendência ou saldo a receber para seguradoras no momento.
                 </div>
               ) : (
                 <div className="overflow-x-auto border rounded-lg bg-white">
@@ -1888,8 +1885,8 @@ export default function Financial() {
                     <thead className="bg-slate-50 text-slate-600 font-semibold border-b">
                       <tr>
                         <th className="p-3">Seguradora</th>
-                        <th className="p-3 text-center">Apólices Pendentes</th>
-                        <th className="p-3 text-right">Saldo Bruto a Receber</th>
+                        <th className="p-3 text-center">Pendências</th>
+                        <th className="p-3 text-right">Saldo a Receber</th>
                         <th className="p-3 text-right">Ação</th>
                       </tr>
                     </thead>
@@ -1908,7 +1905,7 @@ export default function Financial() {
                           </td>
                           <td className="p-3 text-center">
                             <Badge variant="secondary" className="font-semibold text-xs">
-                              {seg.policies.length} apólice{seg.policies.length !== 1 ? 's' : ''}
+                              {seg.itens.length} pendência{seg.itens.length !== 1 ? 's' : ''}
                             </Badge>
                           </td>
                           <td className="p-3 text-right font-bold text-amber-700 text-sm">
@@ -1924,7 +1921,7 @@ export default function Financial() {
                                 setSelectedSeguradoraDetail({ id: seg.id, nome: seg.nome })
                               }}
                             >
-                              Ver apólices <ChevronRight className="w-3.5 h-3.5 ml-1" />
+                              Ver clientes <ChevronRight className="w-3.5 h-3.5 ml-1" />
                             </Button>
                           </td>
                         </tr>
@@ -1934,7 +1931,8 @@ export default function Financial() {
                       <tr>
                         <td className="p-3 text-slate-800">Total Consolidado</td>
                         <td className="p-3 text-center text-slate-800">
-                          {metrics.pendingPoliciesList?.length || 0} apólices
+                          {metrics.seguradorasBreakdown.reduce((sum, s) => sum + s.itens.length, 0)}{' '}
+                          pendências
                         </td>
                         <td className="p-3 text-right text-amber-800 text-sm">
                           R$ {fmtMoney(metrics.totalSeguradorasSaldo)}
@@ -1947,36 +1945,43 @@ export default function Financial() {
               )}
             </div>
           ) : (
-            // VISÃO 2: APÓLICES QUE COMPÕEM O SALDO DA SEGURADORA SELECIONADA
+            // VISÃO 2 (NÍVEL 2): LISTAGEM POR CLIENTE COM DETALHAMENTO DE PROPOSTA, PARCELA E ENDOSSOS
             <div className="space-y-4 pt-2">
               {(() => {
                 const segData = metrics.seguradorasBreakdown.find(
                   (s) => s.id === selectedSeguradoraDetail.id,
                 )
-                if (!segData) {
+                if (!segData || segData.itens.length === 0) {
                   return (
                     <div className="p-4 text-center text-slate-500">
-                      Nenhuma apólice encontrada para esta seguradora.
+                      Nenhum item pendente encontrado para esta seguradora.
                     </div>
                   )
                 }
 
+                const totalPrevisto =
+                  Math.round(segData.itens.reduce((sum, it) => sum + it.valorPrevisto, 0) * 100) /
+                  100
+                const totalRecebido =
+                  Math.round(segData.itens.reduce((sum, it) => sum + it.valorRecebido, 0) * 100) /
+                  100
+
                 return (
                   <>
-                    <div className="flex items-center justify-between p-3 bg-slate-50 rounded-lg border text-xs">
+                    <div className="flex flex-wrap items-center justify-between gap-3 p-3 bg-slate-50 rounded-lg border text-xs">
                       <div>
-                        <span className="text-slate-500 block">Seguradora Selecionada</span>
+                        <span className="text-slate-500 block">Seguradora</span>
                         <strong className="text-slate-900 text-sm">{segData.nome}</strong>
                       </div>
                       <div className="text-center">
-                        <span className="text-slate-500 block">Quantidade</span>
+                        <span className="text-slate-500 block">Pendências</span>
                         <strong className="text-slate-800 text-sm">
-                          {segData.policies.length} apólice
-                          {segData.policies.length !== 1 ? 's' : ''}
+                          {segData.itens.length} registro
+                          {segData.itens.length !== 1 ? 's' : ''}
                         </strong>
                       </div>
                       <div className="text-right">
-                        <span className="text-slate-500 block">Saldo Bruto a Receber</span>
+                        <span className="text-slate-500 block">Saldo a Receber</span>
                         <strong className="text-amber-700 text-sm">
                           R$ {fmtMoney(segData.saldoTotal)}
                         </strong>
@@ -1987,43 +1992,56 @@ export default function Financial() {
                       <table className="w-full text-left text-xs text-slate-700">
                         <thead className="bg-slate-50 text-slate-600 font-semibold border-b">
                           <tr>
-                            <th className="p-2.5">Apólice</th>
+                            <th className="p-2.5">Tipo</th>
                             <th className="p-2.5">Cliente</th>
-                            <th className="p-2.5 text-right">Comissão Prevista</th>
-                            <th className="p-2.5 text-right">Já Recebido</th>
-                            <th className="p-2.5 text-right">Saldo a Receber</th>
-                            <th className="p-2.5 text-center">Status</th>
+                            <th className="p-2.5">Nº Proposta</th>
+                            <th className="p-2.5">Competência / Parcela</th>
+                            <th className="p-2.5 text-right">Previsto</th>
+                            <th className="p-2.5 text-right">Recebido</th>
+                            <th className="p-2.5 text-right">Saldo</th>
+                            <th className="p-2.5 text-center">Situação</th>
                           </tr>
                         </thead>
                         <tbody className="divide-y divide-slate-100">
-                          {segData.policies.map(({ policy, previsto, rec, saldo }) => (
-                            <tr key={policy.id} className="hover:bg-slate-50">
-                              <td className="p-2.5 font-bold text-slate-900">
-                                {policy.policy_number}
+                          {segData.itens.map((item) => (
+                            <tr key={item.id} className="hover:bg-slate-50">
+                              <td className="p-2.5">
+                                <Badge
+                                  variant="outline"
+                                  className={`text-[11px] font-semibold ${
+                                    item.tipo === 'Endosso'
+                                      ? 'border-purple-300 text-purple-700 bg-purple-50'
+                                      : 'border-blue-300 text-blue-700 bg-blue-50'
+                                  }`}
+                                >
+                                  {item.tipo}
+                                </Badge>
                               </td>
-                              <td className="p-2.5 font-medium">
-                                {policy.expand?.client?.name || 'Cliente'}
+                              <td className="p-2.5 font-medium text-slate-900">
+                                {item.clienteNome}
                               </td>
+                              <td className="p-2.5 text-slate-700 font-mono text-[11px]">
+                                {item.propostaNumero}
+                              </td>
+                              <td className="p-2.5 text-slate-700">{item.competenciaOuOrigem}</td>
                               <td className="p-2.5 text-right text-slate-800">
-                                R$ {fmtMoney(previsto)}
+                                R$ {fmtMoney(item.valorPrevisto)}
                               </td>
                               <td className="p-2.5 text-right text-emerald-700 font-medium">
-                                R$ {fmtMoney(rec)}
+                                R$ {fmtMoney(item.valorRecebido)}
                               </td>
                               <td className="p-2.5 text-right font-bold text-amber-700">
-                                R$ {fmtMoney(saldo)}
+                                R$ {fmtMoney(item.saldo)}
                               </td>
                               <td className="p-2.5 text-center">
                                 <Badge
                                   className={
-                                    policy.status === 'Ativa'
-                                      ? 'bg-emerald-500'
-                                      : policy.status === 'Renovação Pendente'
-                                        ? 'bg-amber-500'
-                                        : 'bg-slate-500'
+                                    item.status === 'Parcial'
+                                      ? 'bg-amber-100 text-amber-800 hover:bg-amber-100 border border-amber-300 text-[11px]'
+                                      : 'bg-slate-100 text-slate-700 hover:bg-slate-100 border border-slate-300 text-[11px]'
                                   }
                                 >
-                                  {policy.status}
+                                  {item.status}
                                 </Badge>
                               </td>
                             </tr>
@@ -2031,24 +2049,14 @@ export default function Financial() {
                         </tbody>
                         <tfoot className="bg-slate-50 font-bold border-t">
                           <tr>
-                            <td className="p-2.5 text-slate-800" colSpan={2}>
-                              Subtotal da Seguradora
+                            <td className="p-2.5 text-slate-800" colSpan={4}>
+                              Subtotal da Seguradora ({segData.itens.length} itens)
                             </td>
                             <td className="p-2.5 text-right text-slate-800">
-                              R${' '}
-                              {fmtMoney(
-                                Math.round(
-                                  segData.policies.reduce((sum, p) => sum + p.previsto, 0) * 100,
-                                ) / 100,
-                              )}
+                              R$ {fmtMoney(totalPrevisto)}
                             </td>
                             <td className="p-2.5 text-right text-emerald-700">
-                              R${' '}
-                              {fmtMoney(
-                                Math.round(
-                                  segData.policies.reduce((sum, p) => sum + p.rec, 0) * 100,
-                                ) / 100,
-                              )}
+                              R$ {fmtMoney(totalRecebido)}
                             </td>
                             <td className="p-2.5 text-right text-amber-700">
                               R$ {fmtMoney(segData.saldoTotal)}
@@ -2063,7 +2071,6 @@ export default function Financial() {
               })()}
             </div>
           )}
-
           <DialogFooter className="pt-2">
             {selectedSeguradoraDetail ? (
               <Button variant="outline" onClick={() => setSelectedSeguradoraDetail(null)}>
