@@ -335,9 +335,11 @@ export default function Financial() {
       }
       if (policySearchFilter.trim()) {
         const query = policySearchFilter.trim().toLowerCase()
+        const propNum = (p.numero_proposta || '').toLowerCase()
         const polNum = (p.policy_number || '').toLowerCase()
         const clientName = (p.expand?.client?.name || '').toLowerCase()
-        if (!polNum.includes(query) && !clientName.includes(query)) return false
+        if (!propNum.includes(query) && !polNum.includes(query) && !clientName.includes(query))
+          return false
       }
       return true
     },
@@ -673,7 +675,7 @@ export default function Financial() {
         />
         <div className="flex flex-wrap items-center gap-2">
           <Input
-            placeholder="Buscar por Apólice / Cliente"
+            placeholder="Buscar por Proposta / Cliente"
             value={policySearchFilter}
             onChange={(e) => setPolicySearchFilter(e.target.value)}
             className="w-[200px] text-xs h-9 bg-white"
@@ -1030,7 +1032,7 @@ export default function Financial() {
               <table className="w-full text-left text-sm text-slate-700">
                 <thead className="bg-slate-100 text-slate-600 font-semibold border-b">
                   <tr>
-                    <th className="p-3">Apólice</th>
+                    <th className="p-3">Proposta</th>
                     <th className="p-3">Cliente</th>
                     <th className="p-3">Seguradora</th>
                     <th className="p-3">Tipo</th>
@@ -1074,7 +1076,12 @@ export default function Financial() {
 
                       return (
                         <tr key={p.id} className="hover:bg-slate-50/80">
-                          <td className="p-3 font-bold text-slate-900">{p.policy_number}</td>
+                          <td
+                            className="p-3 font-bold text-slate-900"
+                            title={p.policy_number ? `Apólice: ${p.policy_number}` : undefined}
+                          >
+                            {p.numero_proposta || '-'}
+                          </td>
                           <td className="p-3">{p.expand?.client?.name || '-'}</td>
                           <td className="p-3">
                             {p.expand?.seguradora?.nome || p.insurance_company || '-'}
@@ -1346,11 +1353,18 @@ export default function Financial() {
       <Dialog open={!!historyPolicy} onOpenChange={(open) => !open && setHistoryPolicy(null)}>
         <DialogContent className="sm:max-w-2xl max-h-[85vh] overflow-y-auto">
           <DialogHeader>
-            <DialogTitle>Histórico de Recebimentos da Apólice</DialogTitle>
+            <DialogTitle>Histórico de Recebimentos da Venda</DialogTitle>
             {historyPolicy && (
               <p className="text-xs text-slate-500">
-                Apólice {historyPolicy.policy_number} —{' '}
-                {historyPolicy.expand?.client?.name || 'Cliente'}
+                {historyPolicy.numero_proposta
+                  ? `Proposta ${historyPolicy.numero_proposta}`
+                  : historyPolicy.policy_number
+                    ? `Apólice ${historyPolicy.policy_number}`
+                    : 'Venda'}{' '}
+                {historyPolicy.policy_number && historyPolicy.numero_proposta
+                  ? `(Apólice: ${historyPolicy.policy_number}) `
+                  : ''}
+                — {historyPolicy.expand?.client?.name || 'Cliente'}
               </p>
             )}
           </DialogHeader>

@@ -88,4 +88,33 @@ describe('Item 11 ETAPA 2A: Separação de Proposta e Apólice e Preservação d
     expect(recebimento.policy).toBe(policyId)
     expect(previsao.policy).toBe(policyId)
   })
+
+  it('6. Filtro de busca localiza por número da proposta e por nome do cliente sem depender de apólice', () => {
+    const policyWithProposalOnly = {
+      id: 'pol_prop_only',
+      numero_proposta: 'PROP-778899',
+      policy_number: '',
+      expand: {
+        client: {
+          name: 'Maria Silva Santos',
+        },
+      },
+    }
+
+    const matchSearch = (p: typeof policyWithProposalOnly, queryStr: string) => {
+      const query = queryStr.trim().toLowerCase()
+      const propNum = (p.numero_proposta || '').toLowerCase()
+      const polNum = (p.policy_number || '').toLowerCase()
+      const clientName = (p.expand?.client?.name || '').toLowerCase()
+      return propNum.includes(query) || polNum.includes(query) || clientName.includes(query)
+    }
+
+    // Busca por número da proposta
+    expect(matchSearch(policyWithProposalOnly, '778899')).toBe(true)
+    expect(matchSearch(policyWithProposalOnly, 'PROP-778899')).toBe(true)
+    // Busca por nome do cliente
+    expect(matchSearch(policyWithProposalOnly, 'Maria Silva')).toBe(true)
+    // Busca não correspondente
+    expect(matchSearch(policyWithProposalOnly, 'XYZ123')).toBe(false)
+  })
 })
