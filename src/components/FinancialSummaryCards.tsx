@@ -5,6 +5,7 @@ import { formatCurrency } from '@/lib/utils'
 interface Props {
   expectedCommissions: number
   receivedCommissions: number
+  systemReceivedCommissions?: number
   legacyReceivedCommissions?: number
   pendingCommissions: number
   hasPartialReceipts?: boolean
@@ -21,6 +22,7 @@ interface Props {
 export function FinancialSummaryCards({
   expectedCommissions,
   receivedCommissions,
+  systemReceivedCommissions,
   legacyReceivedCommissions = 0,
   pendingCommissions,
   hasPartialReceipts = false,
@@ -33,6 +35,14 @@ export function FinancialSummaryCards({
   periodLabel,
   onSaldoAReceberClick,
 }: Props) {
+  // Se systemReceivedCommissions foi passado explicitamente, usamos ele; se não, derivamos
+  const sistemaVal =
+    systemReceivedCommissions !== undefined
+      ? systemReceivedCommissions
+      : Math.max(0, Math.round((receivedCommissions - legacyReceivedCommissions) * 100) / 100)
+
+  const showBreakdown = legacyReceivedCommissions > 0 || sistemaVal > 0
+
   const groups = [
     {
       title: 'RECEITAS',
@@ -42,11 +52,14 @@ export function FinancialSummaryCards({
           value: receivedCommissions,
           icon: CheckCircle2,
           color: 'text-emerald-700',
-          secondaryText:
-            legacyReceivedCommissions > 0
-              ? `Histórico legado importado: R$ ${formatCurrency(legacyReceivedCommissions)}`
-              : undefined,
-          tooltip: 'Recebimentos reais registrados no sistema no mês selecionado',
+          breakdown: showBreakdown
+            ? [
+                `Baixado no sistema: R$ ${formatCurrency(sistemaVal)}`,
+                `Histórico legado importado: R$ ${formatCurrency(legacyReceivedCommissions)}`,
+              ]
+            : undefined,
+          tooltip:
+            'Recebimentos reais registrados no sistema e histórico legado recebidos no mês selecionado',
         },
         {
           label: 'Comissão Prevista (vendas do mês)',
@@ -146,7 +159,16 @@ export function FinancialSummaryCards({
                           </span>
                         )}
                       </div>
-                      {c.secondaryText && (
+                      {c.breakdown && c.breakdown.length > 0 && (
+                        <div className="space-y-0.5 mt-1.5 pt-1.5 border-t border-slate-100">
+                          {c.breakdown.map((line: string, idx: number) => (
+                            <p key={idx} className="text-[11px] text-slate-500 font-normal">
+                              {line}
+                            </p>
+                          ))}
+                        </div>
+                      )}
+                      {c.secondaryText && !c.breakdown && (
                         <p className="text-[11px] text-slate-500 mt-1 font-normal">
                           {c.secondaryText}
                         </p>

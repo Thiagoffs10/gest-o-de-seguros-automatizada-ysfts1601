@@ -435,12 +435,13 @@ export default function Financial() {
       return true
     })
 
-    // Recebimentos reais (exclui origem 'Legado')
+    // Recebimentos do sistema (exclui origem 'Legado')
     const realRecsInPeriod = recsInPeriod.filter((r) => r.origem !== 'Legado')
+    // Recebimentos do legado
     const legacyRecsInPeriod = recsInPeriod.filter((r) => r.origem === 'Legado')
 
-    // Soma principal de dinheiro real que entrou na corretora no mês
-    const receivedCommissions =
+    // Baixas reais registradas no sistema no mês
+    const systemReceivedCommissions =
       Math.round(
         realRecsInPeriod.reduce(
           (s, r) =>
@@ -449,7 +450,7 @@ export default function Financial() {
         ) * 100,
       ) / 100
 
-    // Soma do histórico legado importado (informativo)
+    // Recebimentos do histórico legado importado no mês
     const legacyReceivedCommissions =
       Math.round(
         legacyRecsInPeriod.reduce(
@@ -458,6 +459,10 @@ export default function Financial() {
           0,
         ) * 100,
       ) / 100
+
+    // Valor PRINCIPAL de "Comissão Recebida no Mês" = baixas do sistema + legado recebido no mês
+    const receivedCommissions =
+      Math.round((systemReceivedCommissions + legacyReceivedCommissions) * 100) / 100
 
     // Saldo a receber = Comissão prevista (bruta) - total BRUTO recebido das vendas do mês
     let hasPartialReceipts = false
@@ -684,6 +689,7 @@ export default function Financial() {
     return {
       expectedCommissions,
       receivedCommissions,
+      systemReceivedCommissions,
       legacyReceivedCommissions,
       pendingCommissions,
       hasPartialReceipts,
@@ -812,6 +818,7 @@ export default function Financial() {
       <FinancialSummaryCards
         expectedCommissions={metrics.expectedCommissions}
         receivedCommissions={metrics.receivedCommissions}
+        systemReceivedCommissions={metrics.systemReceivedCommissions}
         legacyReceivedCommissions={metrics.legacyReceivedCommissions}
         pendingCommissions={metrics.pendingCommissions}
         hasPartialReceipts={metrics.hasPartialReceipts}
