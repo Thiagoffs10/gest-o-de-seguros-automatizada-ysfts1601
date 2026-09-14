@@ -243,6 +243,13 @@ export const getComissoesPrevistasPaginated = async (
   }
 }
 
+export const getAllComissoesPrevistas = async (): Promise<ComissaoPrevista[]> => {
+  return pb.collection('comissoes_previstas').getFullList<ComissaoPrevista>({
+    sort: 'data_prevista,parcela_numero',
+    expand: 'policy.client,policy.seguradora,endorsement',
+  })
+}
+
 export const getComissoesPrevistasByPolicy = async (
   policyId: string,
 ): Promise<ComissaoPrevista[]> => {

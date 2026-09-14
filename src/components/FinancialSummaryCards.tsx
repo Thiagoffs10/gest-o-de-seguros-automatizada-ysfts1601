@@ -5,7 +5,9 @@ import { formatCurrency } from '@/lib/utils'
 interface Props {
   expectedCommissions: number
   receivedCommissions: number
+  legacyReceivedCommissions?: number
   pendingCommissions: number
+  hasPartialReceipts?: boolean
   paidRepasses?: number
   pendingRepasses: number
   paidCosts: number
@@ -19,7 +21,9 @@ interface Props {
 export function FinancialSummaryCards({
   expectedCommissions,
   receivedCommissions,
+  legacyReceivedCommissions = 0,
   pendingCommissions,
+  hasPartialReceipts = false,
   paidRepasses = 0,
   pendingRepasses,
   paidCosts,
@@ -34,24 +38,32 @@ export function FinancialSummaryCards({
       title: 'RECEITAS',
       cards: [
         {
-          label: 'Comissão Prevista',
-          value: expectedCommissions,
-          icon: TrendingUp,
-          color: 'text-slate-700',
-        },
-        {
-          label: 'Receita Líquida Realizada',
+          label: 'Comissão Recebida no Mês',
           value: receivedCommissions,
           icon: CheckCircle2,
           color: 'text-emerald-700',
+          secondaryText:
+            legacyReceivedCommissions > 0
+              ? `Histórico legado importado: R$ ${formatCurrency(legacyReceivedCommissions)}`
+              : undefined,
+          tooltip: 'Recebimentos reais registrados no sistema no mês selecionado',
         },
         {
-          label: 'Saldo a Receber',
+          label: 'Comissão Prevista (vendas do mês)',
+          value: expectedCommissions,
+          icon: TrendingUp,
+          color: 'text-slate-700',
+          tooltip: 'Comissão líquida prevista das vendas iniciadas no mês selecionado',
+        },
+        {
+          label: 'Saldo a Receber (vendas do mês)',
           value: pendingCommissions,
           icon: Clock,
           color: 'text-amber-700',
           clickable: true,
           badge: 'Ver por seguradora',
+          statusBadge: hasPartialReceipts ? 'Parcial' : undefined,
+          tooltip: 'Previsto das vendas do período menos o valor recebido delas',
         },
       ],
     },
@@ -124,9 +136,21 @@ export function FinancialSummaryCards({
                       />
                     </CardHeader>
                     <CardContent className="px-4 pb-3">
-                      <div className={`text-lg font-bold ${c.color}`}>
-                        R$ {formatCurrency(c.value)}
+                      <div className="flex items-baseline justify-between gap-2">
+                        <div className={`text-lg font-bold ${c.color}`}>
+                          R$ {formatCurrency(c.value)}
+                        </div>
+                        {c.statusBadge && (
+                          <span className="text-[10px] font-semibold bg-blue-100 text-blue-700 border border-blue-200 px-1.5 py-0.5 rounded">
+                            {c.statusBadge}
+                          </span>
+                        )}
                       </div>
+                      {c.secondaryText && (
+                        <p className="text-[11px] text-slate-500 mt-1 font-normal">
+                          {c.secondaryText}
+                        </p>
+                      )}
                     </CardContent>
                   </Card>
                 )

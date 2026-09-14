@@ -21,6 +21,7 @@ import { getComissaoRecebimentos } from '@/services/comissao-recebimentos'
 import {
   getComissoesPrevistasPaginated,
   ComissoesPrevistasPaginatedResult,
+  getAllComissoesPrevistas,
 } from '@/services/modelos-comissao'
 import { getProdutos } from '@/services/produtos'
 import {
@@ -93,6 +94,7 @@ export default function Financial() {
   const [seguradoras, setSeguradoras] = useState<Seguradora[]>([])
   const [custosFixos, setCustosFixos] = useState<CustoFixo[]>([])
   const [recebimentos, setRecebimentos] = useState<ComissaoRecebimento[]>([])
+  const [allComissoesPrevistasList, setAllComissoesPrevistasList] = useState<ComissaoPrevista[]>([])
   const [filters, setFilters] = useState<FilterState>({
     year: String(new Date().getFullYear()),
     month: String(new Date().getMonth() + 1),
@@ -192,13 +194,14 @@ export default function Financial() {
   const loadData = useCallback(async () => {
     setLoading(true)
     try {
-      const [pols, pars, segs, custos, recs, prods] = await Promise.all([
+      const [pols, pars, segs, custos, recs, prods, prevs] = await Promise.all([
         getPolicies(),
         getParceiros(),
         getSeguradoras(),
         getCustosFixos(),
         getComissaoRecebimentos().catch(() => []),
         getProdutos().catch(() => []),
+        getAllComissoesPrevistas().catch(() => []),
       ])
       setAllPolicies(pols)
       setParceiros(pars)
@@ -206,6 +209,7 @@ export default function Financial() {
       setCustosFixos(custos)
       setRecebimentos(recs)
       setProdutos(prods)
+      setAllComissoesPrevistasList(prevs)
     } catch {
       /* ignored */
     }
@@ -259,6 +263,7 @@ export default function Financial() {
   useRealtime('comissoes_previstas', () => {
     if (!isOperationInProgressRef.current) {
       loadPrevisoesServerSide()
+      loadData()
     }
   })
 
@@ -420,9 +425,41 @@ export default function Financial() {
     // Apólices iniciadas no período (produção do mês)
     const periodStartPolicies = matchingPolicies.filter((p) => isDateInPeriod(period, p.start_date))
     const expectedCommissions = computeExpectedCommissions(periodStartPolicies, period)
-    // Comissões recebidas (Receita líquida realizada no período)
-    const receivedCommissions = computeReceivedCommissions(matchingPolicies, period, recebimentos)
-    // Saldo a receber = Comissão prevista (bruta) - total BRUTO recebido
+
+    // Filtra recebimentos do período separando recebimentos reais registrados pelo sistema dos legados/importados
+    const matchingPolicyIds = new Set(matchingPolicies.map((p) => p.id))
+    const recsInPeriod = recebimentos.filter((r) => {
+      if (!r.data_recebimento || !isDateInPeriod(period, r.data_recebimento)) return false
+      if (matchingPolicies.length > 0 && !matchingPolicyIds.has(r.policy)) return false
+      return true
+    })
+
+    // Recebimentos reais (exclui origem 'Legado')
+    const realRecsInPeriod = recsInPeriod.filter((r) => r.origem !== 'Legado')
+    const legacyRecsInPeriod = recsInPeriod.filter((r) => r.origem === 'Legado')
+
+    // Soma principal de dinheiro real que entrou na corretora no mês
+    const receivedCommissions =
+      Math.round(
+        realRecsInPeriod.reduce(
+          (s, r) =>
+            s + (r.valor_liquido != null ? Number(r.valor_liquido) : Number(r.valor_bruto) || 0),
+          0,
+        ) * 100,
+      ) / 100
+
+    // Soma do histórico legado importado (informativo)
+    const legacyReceivedCommissions =
+      Math.round(
+        legacyRecsInPeriod.reduce(
+          (s, r) =>
+            s + (r.valor_liquido != null ? Number(r.valor_liquido) : Number(r.valor_bruto) || 0),
+          0,
+        ) * 100,
+      ) / 100
+
+    // Saldo a receber = Comissão prevista (bruta) - total BRUTO recebido das vendas do mês
+    let hasPartialReceipts = false
     const pendingCommissions = periodStartPolicies.reduce((sum, p) => {
       const previsto =
         p.commission != null
@@ -433,6 +470,9 @@ export default function Financial() {
             ) / 100
       const rec = receivedGrossByPolicy.get(p.id) ?? (p.comissao_recebida ? previsto : 0)
       const saldo = Math.max(0, Math.round((previsto - rec) * 100) / 100)
+      if (saldo > 0 && rec > 0) {
+        hasPartialReceipts = true
+      }
       return sum + saldo
     }, 0)
     // Repasses pagos: data de pagamento pertence ao período selecionado
@@ -478,41 +518,158 @@ export default function Financial() {
       })
       .filter((item) => item.saldo > 0)
 
-    // Agrupamento por seguradora
+    // Agrupamento por seguradora (Nível 1 e Nível 2)
+    // Coleta saldo a receber vigente por seguradora considerando:
+    // a) Previsões de comissão vigentes não canceladas (comissoes_previstas), incluindo parcelas de apólices e de endossos
+    // b) Apólices ativas/vigentes com comissão ainda não recebida que ainda não possuem parcelamento em comissoes_previstas (legado direto)
+    const policiesWithPrevisoes = new Set(allComissoesPrevistasList.map((cp) => cp.policy))
+
+    // Prepara mapa de seguradoras
     const seguradoraMap = new Map<
       string,
       {
         id: string
         nome: string
         saldoTotal: number
-        policies: Array<{
-          policy: Policy
-          previsto: number
-          rec: number
+        itens: Array<{
+          id: string
+          tipo: 'Apolice' | 'Endosso'
+          clienteNome: string
+          propostaNumero: string
+          apoliceNumero?: string
+          competenciaOuOrigem: string
+          valorPrevisto: number
+          valorRecebido: number
           saldo: number
+          status: 'Pendente' | 'Parcial'
+          policy?: Policy
         }>
       }
     >()
 
-    for (const item of pendingPoliciesList) {
-      const segId = item.policy.seguradora || item.policy.insurance_company || 'nao_identificada'
-      const segNome =
-        seguradoras.find((s) => s.id === item.policy.seguradora)?.nome ||
-        item.policy.expand?.seguradora?.nome ||
-        item.policy.insurance_company ||
-        'Seguradora Não Identificada'
-
+    const getOrCreateSegEntry = (segId: string, segNome: string) => {
       if (!seguradoraMap.has(segId)) {
         seguradoraMap.set(segId, {
           id: segId,
           nome: segNome,
           saldoTotal: 0,
-          policies: [],
+          itens: [],
         })
       }
-      const entry = seguradoraMap.get(segId)!
-      entry.saldoTotal = Math.round((entry.saldoTotal + item.saldo) * 100) / 100
-      entry.policies.push(item)
+      return seguradoraMap.get(segId)!
+    }
+
+    // 1. Processar comissoes_previstas ativas
+    for (const prev of allComissoesPrevistasList) {
+      if (prev.status === 'Cancelada' || prev.status === 'Recebida') continue
+
+      const recsDesta = recebimentos.filter(
+        (r) =>
+          r.comissao_prevista === prev.id ||
+          (r.policy === prev.policy &&
+            r.competencia &&
+            prev.competencia &&
+            r.competencia === prev.competencia),
+      )
+      const recBrutoDesta =
+        Math.round(recsDesta.reduce((acc, r) => acc + (Number(r.valor_bruto) || 0), 0) * 100) / 100
+      const vPrev = Number(prev.valor_previsto) || 0
+      const saldoDesta = Math.max(0, Math.round((vPrev - recBrutoDesta) * 100) / 100)
+
+      if (saldoDesta <= 0) continue
+
+      const targetPolicy =
+        (prev as any).expand?.policy || allPolicies.find((p) => p.id === prev.policy)
+
+      // Se a apólice associada foi cancelada, não contabilizar como saldo ativo
+      if (targetPolicy && targetPolicy.status === 'Cancelada') continue
+
+      const segId =
+        targetPolicy?.seguradora ||
+        (prev as any).expand?.policy?.seguradora ||
+        targetPolicy?.insurance_company ||
+        'nao_identificada'
+
+      const segNome =
+        seguradoras.find((s) => s.id === segId)?.nome ||
+        (prev as any).expand?.policy?.expand?.seguradora?.nome ||
+        targetPolicy?.expand?.seguradora?.nome ||
+        targetPolicy?.insurance_company ||
+        'Seguradora Não Identificada'
+
+      const clienteNome =
+        (prev as any).expand?.policy?.expand?.client?.name ||
+        targetPolicy?.expand?.client?.name ||
+        'Cliente Não Identificado'
+
+      const propostaNumero =
+        targetPolicy?.numero_proposta ||
+        (prev as any).expand?.policy?.numero_proposta ||
+        targetPolicy?.policy_number ||
+        '-'
+
+      const apoliceNumero =
+        targetPolicy?.policy_number || (prev as any).expand?.policy?.policy_number
+
+      const entry = getOrCreateSegEntry(segId, segNome)
+      entry.saldoTotal = Math.round((entry.saldoTotal + saldoDesta) * 100) / 100
+      entry.itens.push({
+        id: prev.id,
+        tipo: prev.endorsement ? 'Endosso' : 'Apolice',
+        clienteNome,
+        propostaNumero,
+        apoliceNumero,
+        competenciaOuOrigem: prev.competencia || `Parc. ${prev.parcela_numero || 1}`,
+        valorPrevisto: vPrev,
+        valorRecebido: recBrutoDesta,
+        saldo: saldoDesta,
+        status: recBrutoDesta > 0 ? 'Parcial' : 'Pendente',
+        policy: targetPolicy,
+      })
+    }
+
+    // 2. Processar apólices que NÃO têm comissoes_previstas geradas mas têm comissão pendente
+    for (const p of allPolicies) {
+      if (p.status === 'Cancelada' || p.comissao_recebida) continue
+      if (policiesWithPrevisoes.has(p.id)) continue
+
+      const previsto =
+        p.commission != null
+          ? Number(p.commission)
+          : Math.round(
+              (((p.valor_liquido || p.premium_amount || 0) * (p.commission_percent || 0)) / 100) *
+                100,
+            ) / 100
+
+      const rec = receivedGrossByPolicy.get(p.id) ?? 0
+      const saldo = Math.max(0, Math.round((previsto - rec) * 100) / 100)
+      if (saldo <= 0) continue
+
+      const segId = p.seguradora || p.insurance_company || 'nao_identificada'
+      const segNome =
+        seguradoras.find((s) => s.id === p.seguradora)?.nome ||
+        p.expand?.seguradora?.nome ||
+        p.insurance_company ||
+        'Seguradora Não Identificada'
+
+      const clienteNome = p.expand?.client?.name || 'Cliente Não Identificado'
+      const propostaNumero = p.numero_proposta || p.policy_number || '-'
+
+      const entry = getOrCreateSegEntry(segId, segNome)
+      entry.saldoTotal = Math.round((entry.saldoTotal + saldo) * 100) / 100
+      entry.itens.push({
+        id: `pol_${p.id}`,
+        tipo: 'Apolice',
+        clienteNome,
+        propostaNumero,
+        apoliceNumero: p.policy_number,
+        competenciaOuOrigem: 'À Vista',
+        valorPrevisto: previsto,
+        valorRecebido: rec,
+        saldo,
+        status: rec > 0 ? 'Parcial' : 'Pendente',
+        policy: p,
+      })
     }
 
     const seguradorasBreakdown = Array.from(seguradoraMap.values()).sort(
@@ -526,7 +683,9 @@ export default function Financial() {
     return {
       expectedCommissions,
       receivedCommissions,
+      legacyReceivedCommissions,
       pendingCommissions,
+      hasPartialReceipts,
       paidRepasses,
       pendingRepasses,
       paidCosts,
@@ -538,7 +697,16 @@ export default function Financial() {
       seguradorasBreakdown,
       totalSeguradorasSaldo,
     }
-  }, [matchingPolicies, custosFixos, period, recebimentos, receivedGrossByPolicy, seguradoras])
+  }, [
+    matchingPolicies,
+    custosFixos,
+    period,
+    recebimentos,
+    receivedGrossByPolicy,
+    seguradoras,
+    allComissoesPrevistasList,
+    allPolicies,
+  ])
 
   const totalCommPages = Math.ceil(tablePolicies.length / ITEMS_PER_PAGE) || 1
   const paginatedCommPolicies = useMemo(() => {
@@ -643,7 +811,9 @@ export default function Financial() {
       <FinancialSummaryCards
         expectedCommissions={metrics.expectedCommissions}
         receivedCommissions={metrics.receivedCommissions}
+        legacyReceivedCommissions={metrics.legacyReceivedCommissions}
         pendingCommissions={metrics.pendingCommissions}
+        hasPartialReceipts={metrics.hasPartialReceipts}
         paidRepasses={metrics.paidRepasses}
         pendingRepasses={metrics.pendingRepasses}
         paidCosts={metrics.paidCosts}

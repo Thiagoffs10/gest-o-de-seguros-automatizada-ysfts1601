@@ -13,6 +13,12 @@ import {
   recalcularStatusApolice,
 } from '@/services/comissao-recebimentos'
 
+export const getAllEndorsements = async (): Promise<Endorsement[]> => {
+  return pb.collection('endorsements').getFullList<Endorsement>({
+    sort: '-data_endosso,-created',
+  })
+}
+
 export const getEndorsementsByPolicy = async (policyId: string): Promise<Endorsement[]> => {
   return pb.collection('endorsements').getFullList<Endorsement>({
     filter: `policy = "${policyId}"`,
