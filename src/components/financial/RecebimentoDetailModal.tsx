@@ -21,7 +21,12 @@ import {
   TrendingDown,
 } from 'lucide-react'
 
-export type RecebimentoDetailType = 'recebida' | 'parcial' | 'nao_recebida' | 'saldo_total'
+export type RecebimentoDetailType =
+  | 'recebida'
+  | 'parcial'
+  | 'nao_recebida'
+  | 'saldo_total'
+  | 'sem_previsao'
 
 interface Props {
   open: boolean
@@ -78,6 +83,12 @@ export function RecebimentoDetailModal({
           subtitle: `Vendas de ${periodLabel} para as quais ainda não ocorreu nenhum recebimento`,
           mode: 'propostas' as const,
         }
+      case 'sem_previsao':
+        return {
+          title: 'Detalhamento: Saldo Sem Previsão Definida',
+          subtitle: `Vendas de ${periodLabel} com saldo residual sem parcelas de comissão previstas`,
+          mode: 'propostas' as const,
+        }
       case 'saldo_total':
       default:
         return {
@@ -89,6 +100,7 @@ export function RecebimentoDetailModal({
   }, [type, periodLabel])
 
   // Normalização para o modo MOVIMENTOS (Comissão Recebida)
+  // Ordem de colunas requerida: Proposta | Cliente | Seguradora | Produção | Data do Recebimento | Valor Recebido | Saldo
   const movimentosRows = useMemo(() => {
     if (type !== 'recebida') return []
     const policyMap = new Map<string, Policy>()
@@ -104,12 +116,54 @@ export function RecebimentoDetailModal({
       const deducoes = Number(r.descontos_impostos || 0)
       const valorLiquido = r.valor_liquido != null ? Number(r.valor_liquido) : valorBruto - deducoes
 
+      // Produção da venda = mês/ano de início da vigência (start_date)
+      let producaoLabel = '-'
+      if (policy?.start_date) {
+        const parts = policy.start_date.split('T')[0].split('-')
+        if (parts.length >= 2) {
+          const m = parseInt(parts[1], 10)
+          const y = parts[0].slice(-2)
+          const months = [
+            'Jan',
+            'Fev',
+            'Mar',
+            'Abr',
+            'Mai',
+            'Jun',
+            'Jul',
+            'Ago',
+            'Set',
+            'Out',
+            'Nov',
+            'Dez',
+          ]
+          producaoLabel = `${months[m - 1]}/${y}`
+        }
+      }
+
+      // Saldo da apólice
+      const previsto = policy
+        ? policy.commission != null
+          ? Number(policy.commission)
+          : Math.round(
+              (((policy.valor_liquido || policy.premium_amount || 0) *
+                (policy.commission_percent || 0)) /
+                100) *
+                100,
+            ) / 100
+        : 0
+      const recAcumulado = policy
+        ? (receivedGrossByPolicy.get(policy.id) ?? (policy.comissao_recebida ? previsto : 0))
+        : 0
+      const saldoApolice = Math.max(0, Math.round((previsto - recAcumulado) * 100) / 100)
+
       return {
         id: r.id,
         proposta,
         apolice,
         clienteNome,
         seguradoraNome,
+        producaoLabel,
         dataRecebimento: r.data_recebimento,
         competencia: r.competencia || '-',
         origem: r.origem || 'Sistema',
@@ -117,10 +171,11 @@ export function RecebimentoDetailModal({
         valorBruto,
         deducoes,
         valorLiquido,
+        saldoApolice,
         observacao: r.observacao || '',
       }
     })
-  }, [type, recsInPeriod, allPolicies])
+  }, [type, recsInPeriod, allPolicies, receivedGrossByPolicy])
 
   // Normalização para o modo PROPOSTAS (Parciais, Não Recebidas, Saldo Total)
   const propostasRows = useMemo(() => {
@@ -171,6 +226,7 @@ export function RecebimentoDetailModal({
         if (type === 'parcial') return row.isPartial
         if (type === 'nao_recebida') return row.isPending
         if (type === 'saldo_total') return row.saldo > 0
+        if (type === 'sem_previsao') return row.saldo > 0
         return true
       })
   }, [type, periodStartPolicies, receivedGrossByPolicy, lastReceiptDateByPolicy])
@@ -356,30 +412,29 @@ export function RecebimentoDetailModal({
             <table className="w-full text-left text-xs text-slate-700">
               <thead className="bg-slate-100 text-slate-600 font-semibold border-b sticky top-0 z-10">
                 <tr>
-                  <th className="p-2.5">Data Baixa</th>
                   <th className="p-2.5">Proposta</th>
                   <th className="p-2.5">Cliente</th>
                   <th className="p-2.5">Seguradora</th>
-                  <th className="p-2.5">Competência</th>
-                  <th className="p-2.5">Origem</th>
-                  <th className="p-2.5 text-right">Valor Bruto</th>
-                  <th className="p-2.5 text-right">Deduções</th>
+                  <th className="p-2.5">Produção</th>
+                  <th className="p-2.5">Data do Recebimento</th>
                   <th className="p-2.5 text-right font-bold text-emerald-800 bg-emerald-100/60">
-                    Valor Líquido (Recebido)
+                    Valor Recebido
+                  </th>
+                  <th className="p-2.5 text-right font-bold text-amber-900 bg-amber-50/50">
+                    Saldo
                   </th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-100">
                 {paginatedMovimentos.length === 0 ? (
                   <tr>
-                    <td colSpan={9} className="text-center p-8 text-slate-500">
+                    <td colSpan={7} className="text-center p-8 text-slate-500">
                       Nenhum recebimento registrado neste período.
                     </td>
                   </tr>
                 ) : (
                   paginatedMovimentos.map((r) => (
                     <tr key={r.id} className="hover:bg-slate-50/80">
-                      <td className="p-2.5 font-medium">{formatDateDisplay(r.dataRecebimento)}</td>
                       <td className="p-2.5 font-bold text-slate-900">
                         <div className="flex flex-col">
                           <span>{r.proposta}</span>
@@ -394,29 +449,15 @@ export function RecebimentoDetailModal({
                         {r.clienteNome}
                       </td>
                       <td className="p-2.5 text-slate-700">{r.seguradoraNome}</td>
-                      <td className="p-2.5 text-slate-700 font-mono text-[11px]">
-                        {r.competencia}
+                      <td className="p-2.5 font-mono text-[11px] text-slate-700">
+                        {r.producaoLabel}
                       </td>
-                      <td className="p-2.5">
-                        <Badge
-                          variant="outline"
-                          className={
-                            r.origem === 'Legado'
-                              ? 'bg-amber-50 text-amber-700 border-amber-200 text-[10px]'
-                              : 'bg-slate-50 text-slate-700 border-slate-200 text-[10px]'
-                          }
-                        >
-                          {r.origem}
-                        </Badge>
-                      </td>
-                      <td className="p-2.5 text-right text-slate-800 font-medium">
-                        R$ {formatCurrency(r.valorBruto)}
-                      </td>
-                      <td className="p-2.5 text-right text-slate-500">
-                        {r.deducoes > 0 ? `R$ ${formatCurrency(r.deducoes)}` : '-'}
-                      </td>
+                      <td className="p-2.5 font-medium">{formatDateDisplay(r.dataRecebimento)}</td>
                       <td className="p-2.5 text-right font-bold text-emerald-700 bg-emerald-50/50">
                         R$ {formatCurrency(r.valorLiquido)}
+                      </td>
+                      <td className="p-2.5 text-right font-semibold text-amber-800 bg-amber-50/30">
+                        R$ {formatCurrency(r.saldoApolice)}
                       </td>
                     </tr>
                   ))
@@ -424,16 +465,13 @@ export function RecebimentoDetailModal({
               </tbody>
               <tfoot className="bg-slate-100 font-bold border-t sticky bottom-0 z-10 text-slate-900">
                 <tr>
-                  <td className="p-2.5" colSpan={6}>
+                  <td className="p-2.5" colSpan={5}>
                     Total Consolidado ({movimentosRows.length} lançamentos)
                   </td>
-                  <td className="p-2.5 text-right">
-                    R$ {formatCurrency(totalMovimentos.totalBruto)}
-                  </td>
-                  <td className="p-2.5 text-right text-slate-500">-</td>
                   <td className="p-2.5 text-right text-emerald-800 bg-emerald-200/70 text-sm font-extrabold">
                     R$ {formatCurrency(totalMovimentos.totalLiquido)}
                   </td>
+                  <td className="p-2.5 text-right text-slate-500">-</td>
                 </tr>
               </tfoot>
             </table>

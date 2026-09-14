@@ -50,6 +50,10 @@ interface Props {
   // BLOCO 3: PROJEÇÃO DE RECEBIMENTOS
   projecoesCompetencias?: CompetenciaProjecaoCard[]
   onCompetenciaClick?: (competenciaRaw: string) => void
+  saldoSemPrevisao?: number
+  countSemPrevisao?: number
+  onSemPrevisaoClick?: () => void
+  onExpectedProfitClick?: () => void
 
   // RESULTADO PROJETADO (renomeado de Lucro Previsto, destacado na seção de projeção)
   expectedProfit: number
@@ -97,6 +101,10 @@ export function FinancialSummaryCards({
   // BLOCO 3
   projecoesCompetencias = [],
   onCompetenciaClick,
+  saldoSemPrevisao = 0,
+  countSemPrevisao = 0,
+  onSemPrevisaoClick,
+  onExpectedProfitClick,
 
   // RESULTADO PROJETADO
   expectedProfit,
@@ -468,11 +476,49 @@ export function FinancialSummaryCards({
               )
             })}
 
-            {/* Card de RESULTADO LÍQUIDO PROJETADO (renomeado de Lucro Previsto, mantido nesta área) */}
-            <Card className="shadow-xs bg-slate-50 border-slate-300 col-span-2 sm:col-span-1">
+            {/* Card de SEM PREVISÃO DEFINIDA (quando não há competência futura confiável) */}
+            <Card
+              onClick={onSemPrevisaoClick}
+              className={`shadow-xs cursor-pointer hover:border-slate-400 hover:shadow-md transition-all group border-slate-200 ${
+                saldoSemPrevisao > 0 ? 'bg-amber-50/40 border-amber-200' : 'bg-slate-50/50'
+              }`}
+            >
               <CardHeader className="p-2.5 pb-1 flex flex-row items-center justify-between">
                 <div className="flex items-center gap-1">
-                  <span className="text-[11px] font-bold text-slate-700 uppercase">
+                  <span className="text-[11px] font-bold text-slate-700 uppercase group-hover:text-amber-800 transition-colors">
+                    Sem Previsão
+                  </span>
+                  <Tooltip>
+                    <TooltipTrigger asChild>
+                      <HelpCircle className="w-3 h-3 text-slate-400" />
+                    </TooltipTrigger>
+                    <TooltipContent className="text-xs max-w-xs">
+                      Comissões pendentes ou com saldo sem competência futura definida. Conciliação:
+                      Projeções com data + Sem previsão = Saldo Total a Receber.
+                    </TooltipContent>
+                  </Tooltip>
+                </div>
+                <Clock className="w-3.5 h-3.5 text-slate-400 group-hover:text-amber-700" />
+              </CardHeader>
+              <CardContent className="p-2.5 pt-0">
+                <div className="text-sm font-bold text-slate-800">
+                  R$ {formatCurrency(saldoSemPrevisao)}
+                </div>
+                <div className="flex items-center justify-between text-[10px] text-slate-500 mt-1">
+                  <span>{countSemPrevisao} item(ns)</span>
+                  <span className="text-amber-700 font-medium group-hover:underline">Ver</span>
+                </div>
+              </CardContent>
+            </Card>
+
+            {/* Card de RESULTADO LÍQUIDO PROJETADO (clicável com memória simples) */}
+            <Card
+              onClick={onExpectedProfitClick}
+              className="shadow-xs cursor-pointer hover:border-slate-400 hover:shadow-md transition-all group bg-slate-50 border-slate-300 col-span-2 sm:col-span-1"
+            >
+              <CardHeader className="p-2.5 pb-1 flex flex-row items-center justify-between">
+                <div className="flex items-center gap-1">
+                  <span className="text-[11px] font-bold text-slate-700 uppercase group-hover:text-indigo-600 transition-colors">
                     Res. Líq. Projetado
                   </span>
                   <Tooltip>
@@ -480,12 +526,13 @@ export function FinancialSummaryCards({
                       <HelpCircle className="w-3 h-3 text-slate-400" />
                     </TooltipTrigger>
                     <TooltipContent className="text-xs max-w-xs">
-                      Comissão Prevista Líquida das vendas iniciadas no mês menos repasses previstos
-                      e custos totais do período. Valor ESTIMADO, nunca apresentado como recebido.
+                      (+) Receitas previstas (-) Repasses previstos (-) Custos previstos = Resultado
+                      Líquido Projetado. Valor ESTIMADO, nunca apresentado como recebido. Clique
+                      para ver memória.
                     </TooltipContent>
                   </Tooltip>
                 </div>
-                <TrendingUp className="w-3.5 h-3.5 text-slate-500" />
+                <TrendingUp className="w-3.5 h-3.5 text-slate-500 group-hover:text-indigo-600 transition-colors" />
               </CardHeader>
               <CardContent className="p-2.5 pt-0">
                 <div
@@ -495,7 +542,10 @@ export function FinancialSummaryCards({
                 >
                   R$ {formatCurrency(expectedProfit)}
                 </div>
-                <p className="text-[10px] text-slate-500 mt-1">Estimativa de fechamento</p>
+                <div className="flex items-center justify-between text-[10px] text-slate-500 mt-1">
+                  <span>Estimativa</span>
+                  <span className="text-indigo-600 font-medium group-hover:underline">Memória</span>
+                </div>
               </CardContent>
             </Card>
           </div>
