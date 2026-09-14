@@ -1,5 +1,5 @@
 import { useEffect, useState, useCallback, useMemo } from 'react'
-import { useNavigate } from 'react-router-dom'
+import { useNavigate, useSearchParams } from 'react-router-dom'
 import {
   ArrowLeft,
   FileDown,
@@ -70,17 +70,38 @@ export default function PartnerReport() {
   const { toast } = useToast()
   const { user } = useAuth()
 
+  const [searchParams] = useSearchParams()
+  const initialStatus = searchParams.get('status')
+  const initialYear = searchParams.get('year')
+  const initialMonth = searchParams.get('month')
+
+  // Se ano e mês vieram na URL, calcular data inicial e final do mês
+  let initialDateFrom = ''
+  let initialDateTo = ''
+  if (initialYear && initialMonth) {
+    const y = parseInt(initialYear, 10)
+    const m = parseInt(initialMonth, 10)
+    if (!isNaN(y) && !isNaN(m) && m >= 1 && m <= 12) {
+      const padM = String(m).padStart(2, '0')
+      const lastDay = new Date(y, m, 0).getDate()
+      initialDateFrom = `${y}-${padM}-01`
+      initialDateTo = `${y}-${padM}-${String(lastDay).padStart(2, '0')}`
+    }
+  }
+
   const [policies, setPolicies] = useState<Policy[]>([])
   const [parceiros, setParceiros] = useState<Parceiro[]>([])
   const [partnerSearch, setPartnerSearch] = useState('')
   const [selectedPartner, setSelectedPartner] = useState('all')
-  const [repasseStatus, setRepasseStatus] = useState('all') // 'all' | 'paid' | 'pending'
+  const [repasseStatus, setRepasseStatus] = useState(
+    initialStatus === 'pago' ? 'paid' : initialStatus === 'pendente' ? 'pending' : 'all',
+  )
   const [seguradoraStatus, setSeguradoraStatus] = useState('all') // 'all' | 'received' | 'pending'
   const [cpfCnpjSearch, setCpfCnpjSearch] = useState('')
   const [foundClient, setFoundClient] = useState<Client | null>(null)
   const [documentNotFound, setDocumentNotFound] = useState(false)
-  const [dateFrom, setDateFrom] = useState('')
-  const [dateTo, setDateTo] = useState('')
+  const [dateFrom, setDateFrom] = useState(initialDateFrom)
+  const [dateTo, setDateTo] = useState(initialDateTo)
   const [page, setPage] = useState(1)
   const PAGE_SIZE = 10
 

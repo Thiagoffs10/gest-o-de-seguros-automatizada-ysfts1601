@@ -1,5 +1,5 @@
 import { useEffect, useState, useCallback, useMemo, useRef } from 'react'
-import { useSearchParams } from 'react-router-dom'
+import { useSearchParams, useNavigate } from 'react-router-dom'
 import {
   Edit2,
   CheckCircle2,
@@ -39,7 +39,17 @@ import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
 import { Input } from '@/components/ui/input'
 import { GlobalFilters } from '@/components/GlobalFilters'
-import { FinancialSummaryCards } from '@/components/FinancialSummaryCards'
+import { FinancialSummaryCards, CompetenciaProjecaoCard } from '@/components/FinancialSummaryCards'
+import { ProducaoDetailModal, ProducaoDetailType } from '@/components/financial/ProducaoDetailModal'
+import {
+  RecebimentoDetailModal,
+  RecebimentoDetailType,
+} from '@/components/financial/RecebimentoDetailModal'
+import {
+  ProjecaoCompetenciaModal,
+  CompetenciaProjecaoItem,
+} from '@/components/financial/ProjecaoCompetenciaModal'
+import { LucroRealizadoModal } from '@/components/financial/LucroRealizadoModal'
 import { CommissionEditDialog, FinancialEditData } from '@/components/CommissionEditDialog'
 import { RegistrarRecebimentoModal } from '@/components/RegistrarRecebimentoModal'
 import { EditRecebimentoModal } from '@/components/EditRecebimentoModal'
@@ -129,12 +139,22 @@ export default function Financial() {
   const [deletingRecebimento, setDeletingRecebimento] = useState<ComissaoRecebimento | null>(null)
   const [deleteLoading, setDeleteLoading] = useState(false)
 
+  const navigate = useNavigate()
+
   // Estados para modal de Detalhamento do Saldo a Receber por Seguradora
   const [isSeguradorasModalOpen, setIsSeguradorasModalOpen] = useState(false)
   const [selectedSeguradoraDetail, setSelectedSeguradoraDetail] = useState<{
     id: string
     nome: string
   } | null>(null)
+
+  // Estados dos Modais de Detalhamento dos 5 Blocos (UX Operacional e Auditável)
+  const [producaoModalType, setProducaoModalType] = useState<ProducaoDetailType | null>(null)
+  const [recebimentoModalType, setRecebimentoModalType] = useState<RecebimentoDetailType | null>(
+    null,
+  )
+  const [selectedProjecaoComp, setSelectedProjecaoComp] = useState<string | null>(null)
+  const [isLucroRealModalOpen, setIsLucroRealModalOpen] = useState(false)
 
   const isOperationInProgressRef = useRef(false)
   const [saving, setSaving] = useState(false)
@@ -276,6 +296,20 @@ export default function Financial() {
     for (const r of recebimentos) {
       const val = Number(r.valor_bruto) || 0
       map.set(r.policy, (map.get(r.policy) || 0) + val)
+    }
+    return map
+  }, [recebimentos])
+
+  // Mapa de última data de recebimento por apólice
+  const lastReceiptDateByPolicy = useMemo(() => {
+    const map = new Map<string, string>()
+    for (const r of recebimentos) {
+      if (r.data_recebimento) {
+        const curr = map.get(r.policy)
+        if (!curr || r.data_recebimento > curr) {
+          map.set(r.policy, r.data_recebimento)
+        }
+      }
     }
     return map
   }, [recebimentos])
@@ -464,9 +498,41 @@ export default function Financial() {
     const receivedCommissions =
       Math.round((systemReceivedCommissions + legacyReceivedCommissions) * 100) / 100
 
-    // Saldo a receber = Comissão prevista (bruta) - total BRUTO recebido das vendas do mês
+    // BLOCO 1 — PRODUÇÃO E COMISSÕES
+    const premioLiquidoVendido =
+      Math.round(
+        periodStartPolicies.reduce((sum, p) => {
+          return sum + Number(p.valor_liquido || p.premium_amount || 0)
+        }, 0) * 100,
+      ) / 100
+
+    const comissaoBrutaPrevista =
+      Math.round(
+        periodStartPolicies.reduce((sum, p) => {
+          const premio = Number(p.valor_liquido || p.premium_amount || 0)
+          const pct = Number(p.commission_percent || 0)
+          const cBruta =
+            p.commission != null
+              ? Number(p.commission)
+              : Math.round(((premio * pct) / 100) * 100) / 100
+          return sum + cBruta
+        }, 0) * 100,
+      ) / 100
+
+    const issDeducoesPrevistas =
+      Math.round(periodStartPolicies.reduce((sum, p) => sum + Number(p.iss || 0), 0) * 100) / 100
+
+    const comissaoLiquidaPrevista = Math.max(
+      0,
+      Math.round((comissaoBrutaPrevista - issDeducoesPrevistas) * 100) / 100,
+    )
+
+    // BLOCO 2 — RECEBIMENTOS: decomposição entre saldo parcial e comissões ainda não recebidas
     let hasPartialReceipts = false
-    const pendingCommissions = periodStartPolicies.reduce((sum, p) => {
+    let saldoParcialRecebido = 0
+    let comissoesNaoRecebidas = 0
+
+    periodStartPolicies.forEach((p) => {
       const previsto =
         p.commission != null
           ? Number(p.commission)
@@ -476,11 +542,21 @@ export default function Financial() {
             ) / 100
       const rec = receivedGrossByPolicy.get(p.id) ?? (p.comissao_recebida ? previsto : 0)
       const saldo = Math.max(0, Math.round((previsto - rec) * 100) / 100)
-      if (saldo > 0 && rec > 0) {
-        hasPartialReceipts = true
+
+      if (saldo > 0.009) {
+        if (rec > 0.009) {
+          hasPartialReceipts = true
+          saldoParcialRecebido = Math.round((saldoParcialRecebido + saldo) * 100) / 100
+        } else {
+          comissoesNaoRecebidas = Math.round((comissoesNaoRecebidas + saldo) * 100) / 100
+        }
       }
-      return sum + saldo
-    }, 0)
+    })
+
+    const saldoTotalAReceber =
+      Math.round((saldoParcialRecebido + comissoesNaoRecebidas) * 100) / 100
+    const pendingCommissions = saldoTotalAReceber
+
     // Repasses pagos: data de pagamento pertence ao período selecionado
     const paidRepasses = computePaidRepasses(matchingPolicies, period)
     const pendingRepasses = computePendingRepasses(periodStartPolicies)
@@ -686,11 +762,155 @@ export default function Financial() {
     const totalSeguradorasSaldo =
       Math.round(seguradorasBreakdown.reduce((sum, s) => sum + s.saldoTotal, 0) * 100) / 100
 
+    // PROJEÇÃO DE RECEBIMENTOS (BLOCO 3)
+    // Agrupa comissões previstas ativas com saldo > 0 por competência
+    const compProjMap = new Map<
+      string,
+      {
+        competenciaRaw: string
+        competenciaLabel: string
+        valorPrevisto: number
+        valorRecebido: number
+        saldoPrevisto: number
+        count: number
+      }
+    >()
+
+    const projecaoItemsList: CompetenciaProjecaoItem[] = []
+
+    for (const prev of allComissoesPrevistasList) {
+      if (prev.status === 'Cancelada' || prev.status === 'Recebida') continue
+
+      const recsDesta = recebimentos.filter(
+        (r) =>
+          r.comissao_prevista === prev.id ||
+          (r.policy === prev.policy &&
+            r.competencia &&
+            prev.competencia &&
+            r.competencia === prev.competencia),
+      )
+      const recBrutoDesta =
+        Math.round(recsDesta.reduce((acc, r) => acc + (Number(r.valor_bruto) || 0), 0) * 100) / 100
+      const vPrev = Number(prev.valor_previsto) || 0
+      const saldoDesta = Math.max(0, Math.round((vPrev - recBrutoDesta) * 100) / 100)
+
+      if (saldoDesta <= 0) continue
+
+      const targetPolicy =
+        (prev as any).expand?.policy || allPolicies.find((p) => p.id === prev.policy)
+      if (targetPolicy && targetPolicy.status === 'Cancelada') continue
+
+      // Formatar chave de competência: ex "09/2026" -> "SET/26"
+      const rawComp = prev.competencia || 'Sem Data'
+      let labelComp = rawComp
+      if (rawComp.includes('/')) {
+        const [mStr, yStr] = rawComp.split('/')
+        const mNum = parseInt(mStr, 10)
+        const monthNames = [
+          'JAN',
+          'FEV',
+          'MAR',
+          'ABR',
+          'MAI',
+          'JUN',
+          'JUL',
+          'AGO',
+          'SET',
+          'OUT',
+          'NOV',
+          'DEZ',
+        ]
+        if (mNum >= 1 && mNum <= 12) {
+          const shortYear = yStr ? yStr.slice(-2) : ''
+          labelComp = `${monthNames[mNum - 1]}/${shortYear}`
+        }
+      }
+
+      const clienteNome =
+        (prev as any).expand?.policy?.expand?.client?.name ||
+        targetPolicy?.expand?.client?.name ||
+        'Cliente Não Identificado'
+      const segNome =
+        seguradoras.find(
+          (s) => s.id === (targetPolicy?.seguradora || (prev as any).expand?.policy?.seguradora),
+        )?.nome ||
+        (prev as any).expand?.policy?.expand?.seguradora?.nome ||
+        targetPolicy?.expand?.seguradora?.nome ||
+        targetPolicy?.insurance_company ||
+        '-'
+      const prodNome =
+        (prev as any).expand?.policy?.expand?.produto?.nome ||
+        targetPolicy?.expand?.produto?.nome ||
+        targetPolicy?.tipo_de_seguro ||
+        '-'
+      const propNum =
+        targetPolicy?.numero_proposta ||
+        (prev as any).expand?.policy?.numero_proposta ||
+        targetPolicy?.policy_number ||
+        '-'
+      const apolNum = targetPolicy?.policy_number || (prev as any).expand?.policy?.policy_number
+
+      if (!compProjMap.has(rawComp)) {
+        compProjMap.set(rawComp, {
+          competenciaRaw: rawComp,
+          competenciaLabel: labelComp,
+          valorPrevisto: 0,
+          valorRecebido: 0,
+          saldoPrevisto: 0,
+          count: 0,
+        })
+      }
+
+      const cEntry = compProjMap.get(rawComp)!
+      cEntry.valorPrevisto = Math.round((cEntry.valorPrevisto + vPrev) * 100) / 100
+      cEntry.valorRecebido = Math.round((cEntry.valorRecebido + recBrutoDesta) * 100) / 100
+      cEntry.saldoPrevisto = Math.round((cEntry.saldoPrevisto + saldoDesta) * 100) / 100
+      cEntry.count += 1
+
+      projecaoItemsList.push({
+        id: prev.id,
+        propostaNumero: propNum,
+        apoliceNumero: apolNum,
+        clienteNome,
+        seguradoraNome: segNome,
+        produtoNome: prodNome,
+        competencia: rawComp,
+        valorPrevisto: vPrev,
+        valorRecebido: recBrutoDesta,
+        saldoPrevisto: saldoDesta,
+        origem: prev.endorsement ? 'Endosso' : 'Apólice',
+      })
+    }
+
+    // Ordena competências cronologicamente (MM/YYYY)
+    const sortedCompCards: CompetenciaProjecaoCard[] = Array.from(compProjMap.values())
+      .sort((a, b) => {
+        if (!a.competenciaRaw.includes('/') || !b.competenciaRaw.includes('/')) return 0
+        const [ma, ya] = a.competenciaRaw.split('/').map(Number)
+        const [mb, yb] = b.competenciaRaw.split('/').map(Number)
+        return ya !== yb ? ya - yb : ma - mb
+      })
+      .map((c) => ({
+        competencia: c.competenciaLabel,
+        competenciaRaw: c.competenciaRaw,
+        valorPrevisto: c.valorPrevisto,
+        valorRecebido: c.valorRecebido,
+        saldoPrevisto: c.saldoPrevisto,
+        count: c.count,
+      }))
+
     return {
+      premioLiquidoVendido,
+      comissaoBrutaPrevista,
+      issDeducoesPrevistas,
+      comissaoLiquidaPrevista,
       expectedCommissions,
       receivedCommissions,
       systemReceivedCommissions,
       legacyReceivedCommissions,
+      saldoParcialRecebido,
+      comissoesNaoRecebidas,
+      saldoTotalAReceber,
       pendingCommissions,
       hasPartialReceipts,
       paidRepasses,
@@ -701,8 +921,12 @@ export default function Financial() {
       realProfit,
       partnerPols,
       pendingPoliciesList,
+      periodStartPolicies,
+      recsInPeriod,
       seguradorasBreakdown,
       totalSeguradorasSaldo,
+      sortedCompCards,
+      projecaoItemsList,
     }
   }, [
     matchingPolicies,
@@ -815,24 +1039,60 @@ export default function Financial() {
         <PortfolioExportButton policies={tablePolicies} />
       </div>
 
+      {/* 5 BLOCOS OPERACIONAIS REORGANIZADOS COM TODOS OS CARDS CLICÁVEIS */}
       <FinancialSummaryCards
-        expectedCommissions={metrics.expectedCommissions}
+        // BLOCO 1: PRODUÇÃO E COMISSÕES
+        premioLiquidoVendido={metrics.premioLiquidoVendido}
+        comissaoBrutaPrevista={metrics.comissaoBrutaPrevista}
+        issDeducoesPrevistas={metrics.issDeducoesPrevistas}
+        comissaoLiquidaPrevista={metrics.comissaoLiquidaPrevista}
+        onPremioLiquidoClick={() => setProducaoModalType('premio_liquido')}
+        onComissaoBrutaClick={() => setProducaoModalType('comissao_bruta')}
+        onIssDeducoesClick={() => setProducaoModalType('iss_deducoes')}
+        onComissaoLiquidaClick={() => setProducaoModalType('comissao_liquida')}
+        // BLOCO 2: RECEBIMENTO DE COMISSÕES
         receivedCommissions={metrics.receivedCommissions}
         systemReceivedCommissions={metrics.systemReceivedCommissions}
         legacyReceivedCommissions={metrics.legacyReceivedCommissions}
-        pendingCommissions={metrics.pendingCommissions}
-        hasPartialReceipts={metrics.hasPartialReceipts}
-        paidRepasses={metrics.paidRepasses}
-        pendingRepasses={metrics.pendingRepasses}
-        paidCosts={metrics.paidCosts}
-        pendingCosts={metrics.pendingCosts}
+        saldoParcialRecebido={metrics.saldoParcialRecebido}
+        comissoesNaoRecebidas={metrics.comissoesNaoRecebidas}
+        saldoTotalAReceber={metrics.saldoTotalAReceber}
+        onComissaoRecebidaClick={() => setRecebimentoModalType('recebida')}
+        onSaldoParcialClick={() => setRecebimentoModalType('parcial')}
+        onComissoesNaoRecebidasClick={() => setRecebimentoModalType('nao_recebida')}
+        onSaldoTotalClick={() => setRecebimentoModalType('saldo_total')}
+        // BLOCO 3: PROJEÇÃO DE RECEBIMENTOS
+        projecoesCompetencias={metrics.sortedCompCards}
+        onCompetenciaClick={(compRaw) => setSelectedProjecaoComp(compRaw)}
+        // RESULTADO PROJETADO (renomeado de Lucro Previsto, isolado na projeção)
         expectedProfit={metrics.expectedProfit}
+        // BLOCO 4: RESULTADO REAL DO PERÍODO
         realProfit={metrics.realProfit}
-        periodLabel={period.label}
-        onSaldoAReceberClick={() => {
-          setSelectedSeguradoraDetail(null)
-          setIsSeguradorasModalOpen(true)
+        paidRepasses={metrics.paidRepasses}
+        paidCosts={metrics.paidCosts}
+        onRealProfitClick={() => setIsLucroRealModalOpen(true)}
+        onPaidRepassesClick={() => {
+          // Navega para a tela /relatorio-comissoes com filtro Pago e período atual
+          navigate(`/relatorio-comissoes?status=pago&year=${filters.year}&month=${filters.month}`)
         }}
+        onPaidCostsClick={() => {
+          // Navega para a tela /custos-fixos com filtro Pago e período atual
+          navigate(`/custos-fixos?status=pago&year=${filters.year}&month=${filters.month}`)
+        }}
+        // BLOCO 5: OBRIGAÇÕES EM ABERTO
+        pendingRepasses={metrics.pendingRepasses}
+        pendingCosts={metrics.pendingCosts}
+        onPendingRepassesClick={() => {
+          // Navega para a tela /relatorio-comissoes com filtro Pendente
+          navigate(
+            `/relatorio-comissoes?status=pendente&year=${filters.year}&month=${filters.month}`,
+          )
+        }}
+        onPendingCostsClick={() => {
+          // Navega para a tela /custos-fixos com filtro Pendente
+          navigate(`/custos-fixos?status=pendente&year=${filters.year}&month=${filters.month}`)
+        }}
+        periodLabel={period.label}
       />
 
       <DevTrackingPanel
@@ -1392,7 +1652,7 @@ export default function Financial() {
           <table className="w-full text-left text-sm text-slate-700">
             <thead className="bg-slate-100 text-slate-600 font-semibold border-b">
               <tr>
-                <th className="p-3">Apólice</th>
+                <th className="p-3">Proposta</th>
                 <th className="p-3">Cliente</th>
                 <th className="p-3">Parceiro</th>
                 <th className="p-3 text-right">Líquido</th>
@@ -1407,13 +1667,27 @@ export default function Financial() {
               {metrics.partnerPols.length === 0 ? (
                 <tr>
                   <td colSpan={9} className="text-center p-6 text-slate-500">
-                    Nenhuma apólice de parceiro encontrada.
+                    Nenhuma proposta/apólice de parceiro encontrada.
                   </td>
                 </tr>
               ) : (
                 paginatedPartnerPols.map((p) => (
                   <tr key={p.id} className="hover:bg-slate-50/80">
-                    <td className="p-3 font-bold text-slate-900">{p.policy_number}</td>
+                    <td
+                      className="p-3 font-bold text-slate-900"
+                      title={p.policy_number ? `Apólice: ${p.policy_number}` : undefined}
+                    >
+                      <div className="flex flex-col">
+                        <span>{p.numero_proposta || p.policy_number || '-'}</span>
+                        {p.policy_number &&
+                          p.numero_proposta &&
+                          p.policy_number !== p.numero_proposta && (
+                            <span className="text-[10px] text-slate-400 font-normal">
+                              Apólice: {p.policy_number}
+                            </span>
+                          )}
+                      </div>
+                    </td>{' '}
                     <td className="p-3">{p.expand?.client?.name || '-'}</td>
                     <td className="p-3">{p.expand?.parceiro?.nome || '-'}</td>
                     <td className="p-3 text-right font-bold">
@@ -2090,6 +2364,62 @@ export default function Financial() {
           </DialogFooter>
         </DialogContent>
       </Dialog>
+
+      {/* MODAL BLOCO 1: DETALHAMENTO DA PRODUÇÃO (Prêmio, Bruta, ISS, Líquida) */}
+      <ProducaoDetailModal
+        open={producaoModalType !== null}
+        onOpenChange={(open) => !open && setProducaoModalType(null)}
+        type={producaoModalType}
+        policies={metrics.periodStartPolicies || []}
+        periodLabel={period.label}
+      />
+
+      {/* MODAL BLOCO 2: DETALHAMENTO DE RECEBIMENTOS (Recebida, Saldo Parcial, Não Recebida, Saldo Total) */}
+      <RecebimentoDetailModal
+        open={recebimentoModalType !== null}
+        onOpenChange={(open) => !open && setRecebimentoModalType(null)}
+        type={recebimentoModalType}
+        periodLabel={period.label}
+        recsInPeriod={metrics.recsInPeriod || []}
+        allPolicies={allPolicies}
+        periodStartPolicies={metrics.periodStartPolicies || []}
+        receivedGrossByPolicy={receivedGrossByPolicy}
+        lastReceiptDateByPolicy={lastReceiptDateByPolicy}
+        systemReceivedCommissions={metrics.systemReceivedCommissions}
+        legacyReceivedCommissions={metrics.legacyReceivedCommissions}
+      />
+
+      {/* MODAL BLOCO 3: PROJEÇÃO POR COMPETÊNCIA */}
+      <ProjecaoCompetenciaModal
+        open={selectedProjecaoComp !== null}
+        onOpenChange={(open) => !open && setSelectedProjecaoComp(null)}
+        competencia={selectedProjecaoComp}
+        items={metrics.projecaoItemsList || []}
+        totalPrevistoCompetencia={
+          metrics.sortedCompCards?.find((c) => c.competenciaRaw === selectedProjecaoComp)
+            ?.saldoPrevisto || 0
+        }
+      />
+
+      {/* MODAL BLOCO 4: MEMÓRIA DE CÁLCULO DO LUCRO LÍQUIDO REALIZADO */}
+      <LucroRealizadoModal
+        open={isLucroRealModalOpen}
+        onOpenChange={setIsLucroRealModalOpen}
+        receivedCommissions={metrics.receivedCommissions}
+        systemReceivedCommissions={metrics.systemReceivedCommissions}
+        legacyReceivedCommissions={metrics.legacyReceivedCommissions}
+        paidRepasses={metrics.paidRepasses}
+        paidCosts={metrics.paidCosts}
+        realProfit={metrics.realProfit}
+        periodLabel={period.label}
+        onOpenRecebimentos={() => setRecebimentoModalType('recebida')}
+        onOpenRepassesPagos={() =>
+          navigate(`/relatorio-comissoes?status=pago&year=${filters.year}&month=${filters.month}`)
+        }
+        onOpenCustosPagos={() =>
+          navigate(`/custos-fixos?status=pago&year=${filters.year}&month=${filters.month}`)
+        }
+      />
     </div>
   )
 }

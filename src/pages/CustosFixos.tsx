@@ -13,6 +13,13 @@ import { Button } from '@/components/ui/button'
 import { Card } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
 import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select'
+import {
   Dialog,
   DialogContent,
   DialogHeader,
@@ -53,15 +60,26 @@ const CATEGORIA_COLORS: Record<string, string> = {
 const fmt = (v: number) =>
   v.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })
 
+import { useSearchParams, useNavigate } from 'react-router-dom'
+import { ArrowLeft } from 'lucide-react'
+
 export default function CustosFixos() {
+  const [searchParams] = useSearchParams()
+  const navigate = useNavigate()
   const { toast } = useToast()
   const { can } = usePermissions()
   const [costs, setCosts] = useState<CustoFixo[]>([])
   const [policies, setPolicies] = useState<Policy[]>([])
+
+  const initialYear = searchParams.get('year') || String(new Date().getFullYear())
+  const initialMonth = searchParams.get('month') || String(new Date().getMonth() + 1)
+  const initialStatus = searchParams.get('status') || 'ALL'
+
   const [filters, setFilters] = useState<FilterState>({
-    year: String(new Date().getFullYear()),
-    month: String(new Date().getMonth() + 1),
+    year: initialYear,
+    month: initialMonth,
   })
+  const [statusFilter, setStatusFilter] = useState<string>(initialStatus)
   const [isModalOpen, setIsModalOpen] = useState(false)
   const [editingItem, setEditingItem] = useState<Partial<CustoFixo> | null>(null)
   const [isEditOpen, setIsEditOpen] = useState(false)
@@ -110,12 +128,16 @@ export default function CustosFixos() {
 
   const periodCosts = useMemo(() => {
     return costs.filter((c) => {
+      // Filtro de status vindo da URL ou do Select (pago / pendente)
+      if (statusFilter === 'pago' && !c.pago) return false
+      if (statusFilter === 'pendente' && c.pago) return false
+
       if (c.pago && c.data_pagamento) {
         return isDateInPeriod(effectivePeriod, c.data_pagamento)
       }
       return isDateInPeriod(effectivePeriod, c.data)
     })
-  }, [costs, effectivePeriod])
+  }, [costs, effectivePeriod, statusFilter])
 
   const sortedCosts = [...periodCosts].sort((a, b) => {
     const cmp =
@@ -173,11 +195,21 @@ export default function CustosFixos() {
   return (
     <div className="space-y-6">
       <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
-        <div>
-          <h1 className="text-2xl font-bold text-slate-900">Custos</h1>
-          <p className="text-slate-500 text-sm">
-            Gerencie despesas fixas e variáveis da corretora.
-          </p>
+        <div className="flex items-center gap-3">
+          <Button
+            variant="ghost"
+            size="sm"
+            onClick={() => navigate('/financeiro')}
+            className="text-slate-600 hover:text-slate-900 -ml-2 text-xs"
+          >
+            <ArrowLeft className="w-4 h-4 mr-1" /> Voltar ao Financeiro
+          </Button>
+          <div>
+            <h1 className="text-2xl font-bold text-slate-900">Custos</h1>
+            <p className="text-slate-500 text-sm">
+              Gerencie despesas fixas e variáveis da corretora.
+            </p>
+          </div>
         </div>
         {can('custos_fixos', 'create') && (
           <Button className="bg-blue-600 hover:bg-blue-700" onClick={() => setIsModalOpen(true)}>
@@ -220,16 +252,29 @@ export default function CustosFixos() {
       </div>
 
       <div className="flex flex-wrap items-center justify-between gap-2">
-        <GlobalFilters filters={filters} onFilterChange={setFilters} />
+        <div className="flex flex-wrap items-center gap-2">
+          <GlobalFilters filters={filters} onFilterChange={setFilters} />
+          <Select value={statusFilter} onValueChange={setStatusFilter}>
+            <SelectTrigger className="w-[150px] bg-white h-9 text-xs">
+              <SelectValue placeholder="Situação" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="ALL">Todas Situações</SelectItem>
+              <SelectItem value="pago">Somente Pagos</SelectItem>
+              <SelectItem value="pendente">Somente Pendentes</SelectItem>
+            </SelectContent>
+          </Select>
+        </div>
         <Button
           variant="outline"
           size="sm"
-          onClick={() =>
+          onClick={() => {
             setFilters({
               year: String(new Date().getFullYear()),
               month: String(new Date().getMonth() + 1),
             })
-          }
+            setStatusFilter('ALL')
+          }}
         >
           Limpar filtros
         </Button>

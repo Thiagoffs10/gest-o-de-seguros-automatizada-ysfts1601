@@ -1,186 +1,720 @@
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
-import { TrendingUp, CheckCircle2, Clock, AlertCircle, Target, Banknote } from 'lucide-react'
+import {
+  TrendingUp,
+  CheckCircle2,
+  Clock,
+  AlertCircle,
+  Banknote,
+  Receipt,
+  Handshake,
+  DollarSign,
+  ChevronRight,
+  HelpCircle,
+  Calendar,
+} from 'lucide-react'
 import { formatCurrency } from '@/lib/utils'
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip'
+
+export interface CompetenciaProjecaoCard {
+  competencia: string // ex: "SET/26" ou "09/2026"
+  competenciaRaw: string // ex: "09/2026"
+  valorPrevisto: number
+  valorRecebido: number
+  saldoPrevisto: number
+  count: number
+}
 
 interface Props {
-  expectedCommissions: number
+  // BLOCO 1: PRODUÇÃO E COMISSÕES
+  premioLiquidoVendido: number
+  comissaoBrutaPrevista: number
+  issDeducoesPrevistas: number
+  comissaoLiquidaPrevista: number
+  onPremioLiquidoClick?: () => void
+  onComissaoBrutaClick?: () => void
+  onIssDeducoesClick?: () => void
+  onComissaoLiquidaClick?: () => void
+
+  // BLOCO 2: RECEBIMENTO DE COMISSÕES
   receivedCommissions: number
   systemReceivedCommissions?: number
   legacyReceivedCommissions?: number
-  pendingCommissions: number
-  hasPartialReceipts?: boolean
-  paidRepasses?: number
-  pendingRepasses: number
-  paidCosts: number
-  pendingCosts: number
+  saldoParcialRecebido: number
+  comissoesNaoRecebidas: number
+  saldoTotalAReceber: number
+  onComissaoRecebidaClick?: () => void
+  onSaldoParcialClick?: () => void
+  onComissoesNaoRecebidasClick?: () => void
+  onSaldoTotalClick?: () => void
+
+  // BLOCO 3: PROJEÇÃO DE RECEBIMENTOS
+  projecoesCompetencias?: CompetenciaProjecaoCard[]
+  onCompetenciaClick?: (competenciaRaw: string) => void
+
+  // RESULTADO PROJETADO (renomeado de Lucro Previsto, destacado na seção de projeção)
   expectedProfit: number
+
+  // BLOCO 4: RESULTADO REAL DO PERÍODO
   realProfit: number
+  paidRepasses: number
+  paidCosts: number
+  onRealProfitClick?: () => void
+  onPaidRepassesClick?: () => void
+  onPaidCostsClick?: () => void
+
+  // BLOCO 5: OBRIGAÇÕES PENDENTES
+  pendingRepasses: number
+  pendingCosts: number
+  onPendingRepassesClick?: () => void
+  onPendingCostsClick?: () => void
+
   periodLabel: string
-  onSaldoAReceberClick?: () => void
 }
 
 export function FinancialSummaryCards({
-  expectedCommissions,
+  // BLOCO 1
+  premioLiquidoVendido,
+  comissaoBrutaPrevista,
+  issDeducoesPrevistas,
+  comissaoLiquidaPrevista,
+  onPremioLiquidoClick,
+  onComissaoBrutaClick,
+  onIssDeducoesClick,
+  onComissaoLiquidaClick,
+
+  // BLOCO 2
   receivedCommissions,
   systemReceivedCommissions,
   legacyReceivedCommissions = 0,
-  pendingCommissions,
-  hasPartialReceipts = false,
-  paidRepasses = 0,
-  pendingRepasses,
-  paidCosts,
-  pendingCosts,
+  saldoParcialRecebido,
+  comissoesNaoRecebidas,
+  saldoTotalAReceber,
+  onComissaoRecebidaClick,
+  onSaldoParcialClick,
+  onComissoesNaoRecebidasClick,
+  onSaldoTotalClick,
+
+  // BLOCO 3
+  projecoesCompetencias = [],
+  onCompetenciaClick,
+
+  // RESULTADO PROJETADO
   expectedProfit,
+
+  // BLOCO 4
   realProfit,
+  paidRepasses,
+  paidCosts,
+  onRealProfitClick,
+  onPaidRepassesClick,
+  onPaidCostsClick,
+
+  // BLOCO 5
+  pendingRepasses,
+  pendingCosts,
+  onPendingRepassesClick,
+  onPendingCostsClick,
+
   periodLabel,
-  onSaldoAReceberClick,
 }: Props) {
-  // Se systemReceivedCommissions foi passado explicitamente, usamos ele; se não, derivamos
   const sistemaVal =
     systemReceivedCommissions !== undefined
       ? systemReceivedCommissions
       : Math.max(0, Math.round((receivedCommissions - legacyReceivedCommissions) * 100) / 100)
 
   const showBreakdown = legacyReceivedCommissions > 0 || sistemaVal > 0
-
-  const groups = [
-    {
-      title: 'RECEITAS',
-      cards: [
-        {
-          label: 'Comissão Recebida no Mês',
-          value: receivedCommissions,
-          icon: CheckCircle2,
-          color: 'text-emerald-700',
-          breakdown: showBreakdown
-            ? [
-                `Baixado no sistema: R$ ${formatCurrency(sistemaVal)}`,
-                `Histórico legado importado: R$ ${formatCurrency(legacyReceivedCommissions)}`,
-              ]
-            : undefined,
-          tooltip:
-            'Recebimentos reais registrados no sistema e histórico legado recebidos no mês selecionado',
-        },
-        {
-          label: 'Comissão Prevista (vendas do mês)',
-          value: expectedCommissions,
-          icon: TrendingUp,
-          color: 'text-slate-700',
-          tooltip: 'Comissão líquida prevista das vendas iniciadas no mês selecionado',
-        },
-        {
-          label: 'Saldo a Receber (vendas do mês)',
-          value: pendingCommissions,
-          icon: Clock,
-          color: 'text-amber-700',
-          clickable: true,
-          badge: 'Ver por seguradora',
-          statusBadge: hasPartialReceipts ? 'Parcial' : undefined,
-          tooltip: 'Previsto das vendas do período menos o valor recebido delas',
-        },
-      ],
-    },
-    {
-      title: 'OBRIGAÇÕES',
-      cards: [
-        {
-          label: 'Repasses Pagos no Mês',
-          value: paidRepasses,
-          icon: CheckCircle2,
-          color: 'text-emerald-700',
-        },
-        {
-          label: 'Repasses Pendentes',
-          value: pendingRepasses,
-          icon: AlertCircle,
-          color: 'text-blue-700',
-        },
-        { label: 'Custos Pagos', value: paidCosts, icon: CheckCircle2, color: 'text-emerald-700' },
-        { label: 'Custos Pendentes', value: pendingCosts, icon: Clock, color: 'text-red-700' },
-      ],
-    },
-    {
-      title: 'RESULTADO',
-      cards: [
-        { label: 'Lucro Previsto', value: expectedProfit, icon: Target, color: 'text-slate-700' },
-        { label: 'Lucro Real', value: realProfit, icon: Banknote, color: 'text-blue-700' },
-      ],
-    },
-  ]
+  const isLucroRealNegativo = realProfit < 0
+  const isLucroProjetadoNegativo = expectedProfit < 0
 
   return (
-    <div className="space-y-3">
-      <p className="text-xs text-slate-500 font-medium">Período: {periodLabel}</p>
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
-        {groups.map((group) => (
-          <div key={group.title} className="space-y-2">
-            <h3 className="text-xs font-bold text-slate-500 uppercase tracking-wider px-1">
-              {group.title}
+    <TooltipProvider delayDuration={200}>
+      <div className="space-y-6">
+        <div className="flex items-center justify-between">
+          <p className="text-xs text-slate-500 font-semibold uppercase tracking-wider">
+            Painel Financeiro Consolidado • Período Selecionado: {periodLabel}
+          </p>
+        </div>
+
+        {/* ============================================================ */}
+        {/* BLOCO 1 — PRODUÇÃO DO PERÍODO ("PRODUÇÃO E COMISSÕES")       */}
+        {/* ============================================================ */}
+        <div className="space-y-2">
+          <div className="flex items-center justify-between px-1">
+            <h3 className="text-xs font-bold text-slate-700 uppercase tracking-wider flex items-center gap-1.5">
+              <span className="w-2 h-2 rounded-full bg-blue-600 inline-block" />
+              1. PRODUÇÃO E COMISSÕES
             </h3>
-            <div className="space-y-2">
-              {group.cards.map((c: any) => {
-                const Icon = c.icon
-                const isClickable = c.clickable && onSaldoAReceberClick
-                return (
-                  <Card
-                    key={c.label}
-                    onClick={isClickable ? onSaldoAReceberClick : undefined}
-                    className={`shadow-sm transition-all ${
-                      isClickable
-                        ? 'cursor-pointer hover:border-amber-400 hover:shadow-md border-amber-200/80 bg-amber-50/20 group'
-                        : ''
+            <span className="text-[11px] text-slate-400">Vendas correspondentes ao período</span>
+          </div>
+
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
+            {/* 1. Prêmio Líquido Vendido */}
+            <Card
+              onClick={onPremioLiquidoClick}
+              className="shadow-xs cursor-pointer hover:border-blue-400 hover:shadow-md transition-all group bg-white border-slate-200"
+            >
+              <CardHeader className="flex flex-row items-center justify-between pb-1 pt-3 px-3.5">
+                <div className="flex items-center gap-1">
+                  <CardTitle className="text-xs font-medium text-slate-600">
+                    Prêmio Líquido Vendido
+                  </CardTitle>
+                  <Tooltip>
+                    <TooltipTrigger asChild>
+                      <HelpCircle className="w-3 h-3 text-slate-400" />
+                    </TooltipTrigger>
+                    <TooltipContent className="text-xs">
+                      Soma do prêmio líquido das vendas correspondentes ao período/filtros
+                    </TooltipContent>
+                  </Tooltip>
+                </div>
+                <DollarSign className="w-4 h-4 text-blue-600 group-hover:scale-110 transition-transform" />
+              </CardHeader>
+              <CardContent className="px-3.5 pb-3">
+                <div className="text-lg font-bold text-slate-900">
+                  R$ {formatCurrency(premioLiquidoVendido)}
+                </div>
+                <div className="flex items-center justify-between text-[11px] text-slate-500 mt-1">
+                  <span>Base de cálculo</span>
+                  <span className="text-blue-600 font-medium group-hover:underline flex items-center">
+                    Auditar <ChevronRight className="w-3 h-3 ml-0.5" />
+                  </span>
+                </div>
+              </CardContent>
+            </Card>
+
+            {/* 2. Comissão Bruta Prevista */}
+            <Card
+              onClick={onComissaoBrutaClick}
+              className="shadow-xs cursor-pointer hover:border-slate-400 hover:shadow-md transition-all group bg-white border-slate-200"
+            >
+              <CardHeader className="flex flex-row items-center justify-between pb-1 pt-3 px-3.5">
+                <div className="flex items-center gap-1">
+                  <CardTitle className="text-xs font-medium text-slate-600">
+                    Comissão Bruta Prevista
+                  </CardTitle>
+                  <Tooltip>
+                    <TooltipTrigger asChild>
+                      <HelpCircle className="w-3 h-3 text-slate-400" />
+                    </TooltipTrigger>
+                    <TooltipContent className="text-xs">
+                      Soma da comissão bruta gerada pelas vendas do período antes de ISS e deduções
+                    </TooltipContent>
+                  </Tooltip>
+                </div>
+                <TrendingUp className="w-4 h-4 text-slate-600 group-hover:scale-110 transition-transform" />
+              </CardHeader>
+              <CardContent className="px-3.5 pb-3">
+                <div className="text-lg font-bold text-slate-800">
+                  R$ {formatCurrency(comissaoBrutaPrevista)}
+                </div>
+                <div className="flex items-center justify-between text-[11px] text-slate-500 mt-1">
+                  <span>Antes de impostos</span>
+                  <span className="text-slate-600 font-medium group-hover:underline flex items-center">
+                    Composição <ChevronRight className="w-3 h-3 ml-0.5" />
+                  </span>
+                </div>
+              </CardContent>
+            </Card>
+
+            {/* 3. ISS / Deduções Previstas */}
+            <Card
+              onClick={onIssDeducoesClick}
+              className="shadow-xs cursor-pointer hover:border-amber-400 hover:shadow-md transition-all group bg-white border-slate-200"
+            >
+              <CardHeader className="flex flex-row items-center justify-between pb-1 pt-3 px-3.5">
+                <div className="flex items-center gap-1">
+                  <CardTitle className="text-xs font-medium text-slate-600">
+                    ISS / Deduções Previstas
+                  </CardTitle>
+                  <Tooltip>
+                    <TooltipTrigger asChild>
+                      <HelpCircle className="w-3 h-3 text-slate-400" />
+                    </TooltipTrigger>
+                    <TooltipContent className="text-xs">
+                      Total de deduções e impostos aplicáveis sobre a comissão do período
+                    </TooltipContent>
+                  </Tooltip>
+                </div>
+                <Receipt className="w-4 h-4 text-amber-600 group-hover:scale-110 transition-transform" />
+              </CardHeader>
+              <CardContent className="px-3.5 pb-3">
+                <div className="text-lg font-bold text-amber-700">
+                  R$ {formatCurrency(issDeducoesPrevistas)}
+                </div>
+                <div className="flex items-center justify-between text-[11px] text-slate-500 mt-1">
+                  <span>Impostos retidos</span>
+                  <span className="text-amber-700 font-medium group-hover:underline flex items-center">
+                    Auditar <ChevronRight className="w-3 h-3 ml-0.5" />
+                  </span>
+                </div>
+              </CardContent>
+            </Card>
+
+            {/* 4. Comissão Líquida Prevista (MAIOR DESTAQUE VISUAL) */}
+            <Card
+              onClick={onComissaoLiquidaClick}
+              className="shadow-sm cursor-pointer hover:border-emerald-500 hover:shadow-md transition-all group border-emerald-300 bg-gradient-to-br from-emerald-50/70 to-emerald-100/40 ring-1 ring-emerald-200/80"
+            >
+              <CardHeader className="flex flex-row items-center justify-between pb-1 pt-3 px-3.5">
+                <div className="flex items-center gap-1.5">
+                  <CardTitle className="text-xs font-bold text-emerald-900">
+                    Comissão Líquida Prevista
+                  </CardTitle>
+                  <Tooltip>
+                    <TooltipTrigger asChild>
+                      <HelpCircle className="w-3 h-3 text-emerald-700" />
+                    </TooltipTrigger>
+                    <TooltipContent className="text-xs">
+                      Comissão que efetivamente se espera receber (Bruta Prevista - ISS/Deduções)
+                    </TooltipContent>
+                  </Tooltip>
+                </div>
+                <span className="text-[9px] font-bold uppercase tracking-wider bg-emerald-200 text-emerald-900 px-1.5 py-0.5 rounded">
+                  Principal
+                </span>
+              </CardHeader>
+              <CardContent className="px-3.5 pb-3">
+                <div className="text-xl font-extrabold text-emerald-800">
+                  R$ {formatCurrency(comissaoLiquidaPrevista)}
+                </div>
+                <div className="flex items-center justify-between text-[11px] text-emerald-700 mt-1 font-medium">
+                  <span>Bruta - Deduções</span>
+                  <span className="group-hover:underline flex items-center font-bold">
+                    Ver propostas <ChevronRight className="w-3 h-3 ml-0.5" />
+                  </span>
+                </div>
+              </CardContent>
+            </Card>
+          </div>
+        </div>
+
+        {/* ============================================================ */}
+        {/* BLOCO 2 — RECEBIMENTOS ("RECEBIMENTO DE COMISSÕES")           */}
+        {/* ============================================================ */}
+        <div className="space-y-2">
+          <div className="flex items-center justify-between px-1">
+            <h3 className="text-xs font-bold text-slate-700 uppercase tracking-wider flex items-center gap-1.5">
+              <span className="w-2 h-2 rounded-full bg-emerald-600 inline-block" />
+              2. RECEBIMENTO DE COMISSÕES
+            </h3>
+            <span className="text-[11px] text-slate-400">
+              Movimentações e situação das comissões
+            </span>
+          </div>
+
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
+            {/* 1. Comissão Recebida no Período */}
+            <Card
+              onClick={onComissaoRecebidaClick}
+              className="shadow-xs cursor-pointer hover:border-emerald-400 hover:shadow-md transition-all group bg-white border-slate-200"
+            >
+              <CardHeader className="flex flex-row items-center justify-between pb-1 pt-3 px-3.5">
+                <CardTitle className="text-xs font-medium text-slate-600">
+                  Comissão Recebida
+                </CardTitle>
+                <CheckCircle2 className="w-4 h-4 text-emerald-600 group-hover:scale-110 transition-transform" />
+              </CardHeader>
+              <CardContent className="px-3.5 pb-3">
+                <div className="text-lg font-bold text-emerald-700">
+                  R$ {formatCurrency(receivedCommissions)}
+                </div>
+                {showBreakdown ? (
+                  <div className="space-y-0.5 mt-1.5 pt-1.5 border-t border-slate-100 text-[10px] text-slate-500">
+                    <p>Baixado no sistema: R$ {formatCurrency(sistemaVal)}</p>
+                    <p>
+                      Histórico legado importado: R$ {formatCurrency(legacyReceivedCommissions)}
+                    </p>
+                  </div>
+                ) : (
+                  <p className="text-[11px] text-slate-500 mt-1">Efetivamente liquidado</p>
+                )}
+                <div className="text-right mt-1">
+                  <span className="text-[10px] text-emerald-700 font-semibold group-hover:underline inline-flex items-center">
+                    Auditar recebimentos <ChevronRight className="w-3 h-3 ml-0.5" />
+                  </span>
+                </div>
+              </CardContent>
+            </Card>
+
+            {/* 2. Saldo de Comissões Parcialmente Recebidas */}
+            <Card
+              onClick={onSaldoParcialClick}
+              className="shadow-xs cursor-pointer hover:border-blue-400 hover:shadow-md transition-all group bg-white border-slate-200"
+            >
+              <CardHeader className="flex flex-row items-center justify-between pb-1 pt-3 px-3.5">
+                <div className="flex items-center gap-1.5">
+                  <CardTitle className="text-xs font-medium text-slate-600">
+                    Saldo Parcial
+                  </CardTitle>
+                  <span className="text-[10px] font-semibold bg-blue-100 text-blue-700 px-1.5 py-0.2 rounded border border-blue-200">
+                    Parcial
+                  </span>
+                </div>
+                <Clock className="w-4 h-4 text-blue-600 group-hover:scale-110 transition-transform" />
+              </CardHeader>
+              <CardContent className="px-3.5 pb-3">
+                <div className="text-lg font-bold text-blue-700">
+                  R$ {formatCurrency(saldoParcialRecebido)}
+                </div>
+                <p className="text-[11px] text-slate-500 mt-1">
+                  Resíduos de comissões com baixa parcial
+                </p>
+                <div className="text-right mt-1">
+                  <span className="text-[10px] text-blue-600 font-semibold group-hover:underline inline-flex items-center">
+                    Ver parciais <ChevronRight className="w-3 h-3 ml-0.5" />
+                  </span>
+                </div>
+              </CardContent>
+            </Card>
+
+            {/* 3. Comissões Ainda Não Recebidas */}
+            <Card
+              onClick={onComissoesNaoRecebidasClick}
+              className="shadow-xs cursor-pointer hover:border-amber-400 hover:shadow-md transition-all group bg-white border-slate-200"
+            >
+              <CardHeader className="flex flex-row items-center justify-between pb-1 pt-3 px-3.5">
+                <div className="flex items-center gap-1.5">
+                  <CardTitle className="text-xs font-medium text-slate-600">
+                    Não Recebidas
+                  </CardTitle>
+                  <span className="text-[10px] font-semibold bg-amber-100 text-amber-800 px-1.5 py-0.2 rounded border border-amber-200">
+                    Pendente
+                  </span>
+                </div>
+                <AlertCircle className="w-4 h-4 text-amber-600 group-hover:scale-110 transition-transform" />
+              </CardHeader>
+              <CardContent className="px-3.5 pb-3">
+                <div className="text-lg font-bold text-amber-700">
+                  R$ {formatCurrency(comissoesNaoRecebidas)}
+                </div>
+                <p className="text-[11px] text-slate-500 mt-1">
+                  Sem nenhum recebimento até o momento
+                </p>
+                <div className="text-right mt-1">
+                  <span className="text-[10px] text-amber-700 font-semibold group-hover:underline inline-flex items-center">
+                    Ver pendentes <ChevronRight className="w-3 h-3 ml-0.5" />
+                  </span>
+                </div>
+              </CardContent>
+            </Card>
+
+            {/* 4. Saldo Total a Receber */}
+            <Card
+              onClick={onSaldoTotalClick}
+              className="shadow-xs cursor-pointer hover:border-amber-500 hover:shadow-md transition-all group bg-amber-50/30 border-amber-200"
+            >
+              <CardHeader className="flex flex-row items-center justify-between pb-1 pt-3 px-3.5">
+                <CardTitle className="text-xs font-bold text-amber-900">
+                  Saldo Total a Receber
+                </CardTitle>
+                <Clock className="w-4 h-4 text-amber-700 group-hover:scale-110 transition-transform" />
+              </CardHeader>
+              <CardContent className="px-3.5 pb-3">
+                <div className="text-lg font-extrabold text-amber-800">
+                  R$ {formatCurrency(saldoTotalAReceber)}
+                </div>
+                <p className="text-[11px] text-slate-600 mt-1">Resíduos parciais + Não recebidas</p>
+                <div className="text-right mt-1">
+                  <span className="text-[10px] text-amber-800 font-bold group-hover:underline inline-flex items-center">
+                    Ver todas as pendências <ChevronRight className="w-3 h-3 ml-0.5" />
+                  </span>
+                </div>
+              </CardContent>
+            </Card>
+          </div>
+        </div>
+
+        {/* ============================================================ */}
+        {/* BLOCO 3 — PROJEÇÃO DE RECEBIMENTOS & RESULTADO PROJETADO     */}
+        {/* ============================================================ */}
+        <div className="space-y-2">
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between px-1 gap-1">
+            <h3 className="text-xs font-bold text-slate-700 uppercase tracking-wider flex items-center gap-1.5">
+              <span className="w-2 h-2 rounded-full bg-indigo-600 inline-block" />
+              3. PROJEÇÃO DE RECEBIMENTOS (QUANDO ESPERAMOS RECEBER O SALDO)
+            </h3>
+            <span className="text-[11px] text-slate-500 font-medium">
+              Modelos parcelados, recorrentes e esgotamento
+            </span>
+          </div>
+
+          <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-6 lg:grid-cols-7 gap-2.5">
+            {projecoesCompetencias.map((comp) => {
+              const isClickable = Boolean(onCompetenciaClick)
+              return (
+                <Card
+                  key={comp.competenciaRaw}
+                  onClick={
+                    isClickable ? () => onCompetenciaClick?.(comp.competenciaRaw) : undefined
+                  }
+                  className="shadow-xs cursor-pointer hover:border-indigo-400 hover:shadow-md transition-all group bg-white border-slate-200"
+                >
+                  <CardHeader className="p-2.5 pb-1 flex flex-row items-center justify-between">
+                    <span className="text-[11px] font-bold text-slate-700 uppercase group-hover:text-indigo-600 transition-colors">
+                      {comp.competencia}
+                    </span>
+                    <Calendar className="w-3.5 h-3.5 text-slate-400 group-hover:text-indigo-600" />
+                  </CardHeader>
+                  <CardContent className="p-2.5 pt-0">
+                    <div className="text-sm font-bold text-indigo-900">
+                      R$ {formatCurrency(comp.saldoPrevisto)}
+                    </div>
+                    <div className="flex items-center justify-between text-[10px] text-slate-500 mt-1">
+                      <span>{comp.count} parcela(s)</span>
+                      <span className="text-indigo-600 font-medium group-hover:underline">Ver</span>
+                    </div>
+                  </CardContent>
+                </Card>
+              )
+            })}
+
+            {/* Card de RESULTADO LÍQUIDO PROJETADO (renomeado de Lucro Previsto, mantido nesta área) */}
+            <Card className="shadow-xs bg-slate-50 border-slate-300 col-span-2 sm:col-span-1">
+              <CardHeader className="p-2.5 pb-1 flex flex-row items-center justify-between">
+                <div className="flex items-center gap-1">
+                  <span className="text-[11px] font-bold text-slate-700 uppercase">
+                    Res. Líq. Projetado
+                  </span>
+                  <Tooltip>
+                    <TooltipTrigger asChild>
+                      <HelpCircle className="w-3 h-3 text-slate-400" />
+                    </TooltipTrigger>
+                    <TooltipContent className="text-xs max-w-xs">
+                      Comissão Prevista Líquida das vendas iniciadas no mês menos repasses previstos
+                      e custos totais do período. Valor ESTIMADO, nunca apresentado como recebido.
+                    </TooltipContent>
+                  </Tooltip>
+                </div>
+                <TrendingUp className="w-3.5 h-3.5 text-slate-500" />
+              </CardHeader>
+              <CardContent className="p-2.5 pt-0">
+                <div
+                  className={`text-sm font-bold ${
+                    isLucroProjetadoNegativo ? 'text-rose-700' : 'text-slate-800'
+                  }`}
+                >
+                  R$ {formatCurrency(expectedProfit)}
+                </div>
+                <p className="text-[10px] text-slate-500 mt-1">Estimativa de fechamento</p>
+              </CardContent>
+            </Card>
+          </div>
+        </div>
+
+        {/* ============================================================ */}
+        {/* BLOCO 4 — RESULTADO REAL DO PERÍODO                          */}
+        {/* ============================================================ */}
+        <div className="space-y-2">
+          <div className="flex items-center justify-between px-1">
+            <h3 className="text-xs font-bold text-slate-700 uppercase tracking-wider flex items-center gap-1.5">
+              <span className="w-2 h-2 rounded-full bg-emerald-700 inline-block" />
+              4. RESULTADO REAL DO PERÍODO (LIQUIDADO)
+            </h3>
+            <span className="text-[11px] text-slate-400">
+              Comissões recebidas (-) Repasses pagos (-) Custos pagos
+            </span>
+          </div>
+
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
+            {/* 1. Comissões Recebidas */}
+            <Card
+              onClick={onComissaoRecebidaClick}
+              className="shadow-xs cursor-pointer hover:border-emerald-400 hover:shadow-md transition-all group bg-white border-slate-200"
+            >
+              <CardHeader className="flex flex-row items-center justify-between pb-1 pt-3 px-3.5">
+                <CardTitle className="text-xs font-medium text-slate-600">
+                  (+) Comissões Recebidas
+                </CardTitle>
+                <CheckCircle2 className="w-4 h-4 text-emerald-600 group-hover:scale-110 transition-transform" />
+              </CardHeader>
+              <CardContent className="px-3.5 pb-3">
+                <div className="text-lg font-bold text-emerald-700">
+                  R$ {formatCurrency(receivedCommissions)}
+                </div>
+                <div className="flex items-center justify-between text-[11px] text-slate-500 mt-1">
+                  <span>Receita realizada</span>
+                  <span className="text-emerald-700 font-medium group-hover:underline flex items-center">
+                    Ver recebimentos <ChevronRight className="w-3 h-3 ml-0.5" />
+                  </span>
+                </div>
+              </CardContent>
+            </Card>
+
+            {/* 2. Repasses Pagos */}
+            <Card
+              onClick={onPaidRepassesClick}
+              className="shadow-xs cursor-pointer hover:border-amber-400 hover:shadow-md transition-all group bg-white border-slate-200"
+            >
+              <CardHeader className="flex flex-row items-center justify-between pb-1 pt-3 px-3.5">
+                <CardTitle className="text-xs font-medium text-slate-600">
+                  (-) Repasses Pagos
+                </CardTitle>
+                <Handshake className="w-4 h-4 text-amber-600 group-hover:scale-110 transition-transform" />
+              </CardHeader>
+              <CardContent className="px-3.5 pb-3">
+                <div className="text-lg font-bold text-amber-800">
+                  R$ {formatCurrency(paidRepasses)}
+                </div>
+                <div className="flex items-center justify-between text-[11px] text-slate-500 mt-1">
+                  <span>Parceiros quitados</span>
+                  <span className="text-amber-800 font-medium group-hover:underline flex items-center">
+                    Ver repasses pagos <ChevronRight className="w-3 h-3 ml-0.5" />
+                  </span>
+                </div>
+              </CardContent>
+            </Card>
+
+            {/* 3. Custos Pagos */}
+            <Card
+              onClick={onPaidCostsClick}
+              className="shadow-xs cursor-pointer hover:border-red-400 hover:shadow-md transition-all group bg-white border-slate-200"
+            >
+              <CardHeader className="flex flex-row items-center justify-between pb-1 pt-3 px-3.5">
+                <CardTitle className="text-xs font-medium text-slate-600">
+                  (-) Custos Pagos
+                </CardTitle>
+                <Receipt className="w-4 h-4 text-red-600 group-hover:scale-110 transition-transform" />
+              </CardHeader>
+              <CardContent className="px-3.5 pb-3">
+                <div className="text-lg font-bold text-red-700">R$ {formatCurrency(paidCosts)}</div>
+                <div className="flex items-center justify-between text-[11px] text-slate-500 mt-1">
+                  <span>Despesas quitadas</span>
+                  <span className="text-red-700 font-medium group-hover:underline flex items-center">
+                    Ver custos pagos <ChevronRight className="w-3 h-3 ml-0.5" />
+                  </span>
+                </div>
+              </CardContent>
+            </Card>
+
+            {/* 4. LUCRO LÍQUIDO REALIZADO (GRANDE DESTAQUE) */}
+            <Card
+              onClick={onRealProfitClick}
+              className={`shadow-sm cursor-pointer hover:shadow-md transition-all group ring-2 ${
+                isLucroRealNegativo
+                  ? 'border-rose-300 bg-rose-50/70 ring-rose-200 hover:border-rose-400'
+                  : 'border-emerald-300 bg-gradient-to-br from-emerald-50/80 to-blue-50/40 ring-emerald-200 hover:border-emerald-400'
+              }`}
+            >
+              <CardHeader className="flex flex-row items-center justify-between pb-1 pt-3 px-3.5">
+                <div className="flex items-center gap-1.5">
+                  <CardTitle
+                    className={`text-xs font-bold ${
+                      isLucroRealNegativo ? 'text-rose-900' : 'text-slate-900'
                     }`}
                   >
-                    <CardHeader className="flex flex-row items-center justify-between pb-1.5 pt-3 px-4">
-                      <div className="flex items-center gap-1.5">
-                        <CardTitle className="text-xs font-medium text-slate-600">
-                          {c.label}
-                        </CardTitle>
-                        {c.badge && (
-                          <span className="text-[10px] font-medium bg-amber-100 text-amber-800 px-1.5 py-0.5 rounded group-hover:bg-amber-200 transition-colors">
-                            {c.badge}
-                          </span>
-                        )}
-                      </div>
-                      <Icon
-                        className={`w-4 h-4 ${c.color} ${
-                          isClickable ? 'group-hover:scale-110 transition-transform' : ''
-                        }`}
-                      />
-                    </CardHeader>
-                    <CardContent className="px-4 pb-3">
-                      <div className="flex items-baseline justify-between gap-2">
-                        <div className={`text-lg font-bold ${c.color}`}>
-                          R$ {formatCurrency(c.value)}
-                        </div>
-                        {c.statusBadge && (
-                          <span className="text-[10px] font-semibold bg-blue-100 text-blue-700 border border-blue-200 px-1.5 py-0.5 rounded">
-                            {c.statusBadge}
-                          </span>
-                        )}
-                      </div>
-                      {c.breakdown && c.breakdown.length > 0 && (
-                        <div className="space-y-0.5 mt-1.5 pt-1.5 border-t border-slate-100">
-                          {c.breakdown.map((line: string, idx: number) => (
-                            <p key={idx} className="text-[11px] text-slate-500 font-normal">
-                              {line}
-                            </p>
-                          ))}
-                        </div>
-                      )}
-                      {c.secondaryText && !c.breakdown && (
-                        <p className="text-[11px] text-slate-500 mt-1 font-normal">
-                          {c.secondaryText}
-                        </p>
-                      )}
-                    </CardContent>
-                  </Card>
-                )
-              })}
-            </div>
+                    (=) LUCRO LÍQUIDO REALIZADO
+                  </CardTitle>
+                  <Tooltip>
+                    <TooltipTrigger asChild>
+                      <HelpCircle className="w-3 h-3 text-slate-400" />
+                    </TooltipTrigger>
+                    <TooltipContent className="text-xs">
+                      Clique para abrir o demonstrativo com a memória de cálculo completa
+                    </TooltipContent>
+                  </Tooltip>
+                </div>
+                <Banknote
+                  className={`w-4 h-4 ${
+                    isLucroRealNegativo ? 'text-rose-700' : 'text-emerald-700'
+                  } group-hover:scale-110 transition-transform`}
+                />
+              </CardHeader>
+              <CardContent className="px-3.5 pb-3">
+                <div
+                  className={`text-xl font-extrabold ${
+                    isLucroRealNegativo ? 'text-rose-700' : 'text-emerald-700'
+                  }`}
+                >
+                  R$ {formatCurrency(realProfit)}
+                </div>
+                <div className="flex items-center justify-between text-[11px] mt-1 font-semibold">
+                  <span className={isLucroRealNegativo ? 'text-rose-600' : 'text-slate-500'}>
+                    {isLucroRealNegativo ? 'Resultado Negativo' : 'Efetivamente Realizado'}
+                  </span>
+                  <span className="text-blue-600 group-hover:underline flex items-center font-bold">
+                    Memória de cálculo <ChevronRight className="w-3 h-3 ml-0.5" />
+                  </span>
+                </div>
+              </CardContent>
+            </Card>
           </div>
-        ))}
+        </div>
+
+        {/* ============================================================ */}
+        {/* BLOCO 5 — OBRIGAÇÕES EM ABERTO ("OBRIGAÇÕES PENDENTES")     */}
+        {/* ============================================================ */}
+        <div className="space-y-2">
+          <div className="flex items-center justify-between px-1">
+            <h3 className="text-xs font-bold text-slate-700 uppercase tracking-wider flex items-center gap-1.5">
+              <span className="w-2 h-2 rounded-full bg-amber-600 inline-block" />
+              5. OBRIGAÇÕES PENDENTES (NÃO DESCONTADAS DO LUCRO REALIZADO)
+            </h3>
+            <span className="text-[11px] text-slate-400">
+              Valores a pagar separados do resultado realizado
+            </span>
+          </div>
+
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+            {/* Repasses Pendentes */}
+            <Card
+              onClick={onPendingRepassesClick}
+              className="shadow-xs cursor-pointer hover:border-blue-400 hover:shadow-md transition-all group bg-white border-slate-200"
+            >
+              <CardHeader className="flex flex-row items-center justify-between pb-1 pt-3 px-3.5">
+                <div className="flex items-center gap-1.5">
+                  <CardTitle className="text-xs font-medium text-slate-600">
+                    Repasses Pendentes
+                  </CardTitle>
+                  <span className="text-[10px] font-semibold bg-blue-100 text-blue-700 px-1.5 py-0.2 rounded border border-blue-200">
+                    A Pagar
+                  </span>
+                </div>
+                <AlertCircle className="w-4 h-4 text-blue-700 group-hover:scale-110 transition-transform" />
+              </CardHeader>
+              <CardContent className="px-3.5 pb-3">
+                <div className="text-lg font-bold text-blue-700">
+                  R$ {formatCurrency(pendingRepasses)}
+                </div>
+                <div className="flex items-center justify-between text-[11px] text-slate-500 mt-1">
+                  <span>Aguardando liquidação</span>
+                  <span className="text-blue-700 font-medium group-hover:underline flex items-center">
+                    Ver tela de repasses <ChevronRight className="w-3 h-3 ml-0.5" />
+                  </span>
+                </div>
+              </CardContent>
+            </Card>
+
+            {/* Custos Pendentes */}
+            <Card
+              onClick={onPendingCostsClick}
+              className="shadow-xs cursor-pointer hover:border-red-400 hover:shadow-md transition-all group bg-white border-slate-200"
+            >
+              <CardHeader className="flex flex-row items-center justify-between pb-1 pt-3 px-3.5">
+                <div className="flex items-center gap-1.5">
+                  <CardTitle className="text-xs font-medium text-slate-600">
+                    Custos Pendentes
+                  </CardTitle>
+                  <span className="text-[10px] font-semibold bg-red-100 text-red-700 px-1.5 py-0.2 rounded border border-red-200">
+                    A Pagar
+                  </span>
+                </div>
+                <Clock className="w-4 h-4 text-red-700 group-hover:scale-110 transition-transform" />
+              </CardHeader>
+              <CardContent className="px-3.5 pb-3">
+                <div className="text-lg font-bold text-red-700">
+                  R$ {formatCurrency(pendingCosts)}
+                </div>
+                <div className="flex items-center justify-between text-[11px] text-slate-500 mt-1">
+                  <span>Despesas não baixadas</span>
+                  <span className="text-red-700 font-medium group-hover:underline flex items-center">
+                    Ver tela de custos <ChevronRight className="w-3 h-3 ml-0.5" />
+                  </span>
+                </div>
+              </CardContent>
+            </Card>
+          </div>
+        </div>
       </div>
-    </div>
+    </TooltipProvider>
   )
 }
