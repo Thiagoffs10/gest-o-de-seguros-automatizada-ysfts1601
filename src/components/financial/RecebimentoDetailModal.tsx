@@ -20,7 +20,10 @@ import {
   ChevronLeft,
   ChevronRight,
   TrendingDown,
+  Download,
+  Loader2,
 } from 'lucide-react'
+import { exportFinancialListingPDF, slugifyFilename } from '@/lib/financial-pdf'
 
 export type RecebimentoDetailType =
   | 'recebida'
@@ -69,6 +72,7 @@ export function RecebimentoDetailModal({
 }: Props) {
   const [search, setSearch] = useState('')
   const [page, setPage] = useState(1)
+  const [isExporting, setIsExporting] = useState(false)
 
   const meta = useMemo(() => {
     switch (type) {
@@ -358,24 +362,224 @@ export function RecebimentoDetailModal({
     onOpenChange(nextOpen)
   }
 
+  // Totais das listas filtradas pela busca ativa (para refletir busca no PDF e no consolidado)
+  const filteredMovimentosTotals = useMemo(() => {
+    const totalLiquido =
+      Math.round(filteredMovimentos.reduce((sum, r) => sum + r.valorLiquido, 0) * 100) / 100
+    const totalBruto =
+      Math.round(filteredMovimentos.reduce((sum, r) => sum + r.valorBruto, 0) * 100) / 100
+    return { totalLiquido, totalBruto }
+  }, [filteredMovimentos])
+
+  const filteredPropostasTotals = useMemo(() => {
+    const totalPrevisto =
+      Math.round(filteredPropostas.reduce((sum, r) => sum + r.previsto, 0) * 100) / 100
+    const totalRecebido =
+      Math.round(filteredPropostas.reduce((sum, r) => sum + r.rec, 0) * 100) / 100
+    const totalSaldo =
+      Math.round(filteredPropostas.reduce((sum, r) => sum + r.saldo, 0) * 100) / 100
+    return { totalPrevisto, totalRecebido, totalSaldo }
+  }, [filteredPropostas])
+
+  const handleExportPDF = async () => {
+    try {
+      setIsExporting(true)
+      const isFiltered = Boolean(search.trim())
+
+      if (meta.mode === 'movimentos') {
+        const baseTotals = isFiltered ? filteredMovimentosTotals : totalMovimentos
+        const totalRecebidoMes =
+          Math.round((systemReceivedCommissions + legacyReceivedCommissions) * 100) / 100
+
+        await exportFinancialListingPDF({
+          title: meta.title,
+          subtitle: meta.subtitle,
+          periodLabel,
+          orientation: 'landscape',
+          filename: slugifyFilename('recebimentos-comissao-recebida', periodLabel),
+          filters: {
+            periodo: periodLabel,
+            busca: search.trim() || undefined,
+          },
+          summaryCards: [
+            {
+              label: 'Total Recebido no Mês',
+              value: `R$ ${formatCurrency(totalRecebidoMes)}`,
+              variant: 'green',
+              highlight: true,
+            },
+            {
+              label: 'Baixado no Sistema',
+              value: `R$ ${formatCurrency(systemReceivedCommissions)}`,
+              variant: 'default',
+            },
+            {
+              label: 'Histórico Legado Importado',
+              value: `R$ ${formatCurrency(legacyReceivedCommissions)}`,
+              variant: 'default',
+            },
+          ],
+          columns: [
+            { header: 'Proposta', dataKey: 'propostaFormatada', align: 'left' },
+            { header: 'Cliente', dataKey: 'clienteNome', align: 'left' },
+            { header: 'Seguradora', dataKey: 'seguradoraNome', align: 'left' },
+            { header: 'Produção', dataKey: 'producaoLabel', align: 'center' },
+            { header: 'Data do Recebimento', dataKey: 'dataRecebimentoFmt', align: 'center' },
+            { header: 'Valor Recebido', dataKey: 'valorLiquidoFmt', align: 'right' },
+            { header: 'Saldo da Apólice', dataKey: 'saldoApoliceFmt', align: 'right' },
+          ],
+          rows: filteredMovimentos.map((r) => ({
+            propostaFormatada:
+              r.apolice && r.apolice !== r.proposta
+                ? `${r.proposta}\n(Ap: ${r.apolice})`
+                : r.proposta,
+            clienteNome: r.clienteNome,
+            seguradoraNome: r.seguradoraNome,
+            producaoLabel: r.producaoLabel,
+            dataRecebimentoFmt: formatDateDisplay(r.dataRecebimento),
+            valorLiquidoFmt: `R$ ${formatCurrency(r.valorLiquido)}`,
+            saldoApoliceFmt: `R$ ${formatCurrency(r.saldoApolice)}`,
+          })),
+          totalRow: {
+            propostaFormatada: `Total Consolidado (${filteredMovimentos.length} lançamentos)`,
+            clienteNome: '',
+            seguradoraNome: '',
+            producaoLabel: '',
+            dataRecebimentoFmt: '',
+            valorLiquidoFmt: `R$ ${formatCurrency(baseTotals.totalLiquido)}`,
+            saldoApoliceFmt: '-',
+          },
+        })
+      } else {
+        // Modo Propostas: parcial, nao_recebida, saldo_total, sem_previsao
+        const baseTotals = isFiltered ? filteredPropostasTotals : totalPropostas
+        const filenameMap: Record<RecebimentoDetailType, string> = {
+          recebida: 'recebimentos-comissao-recebida',
+          parcial: 'recebimentos-saldo-parcial',
+          nao_recebida: 'recebimentos-comissoes-pendentes',
+          saldo_total: 'recebimentos-saldo-total',
+          sem_previsao: 'recebimentos-saldo-sem-previsao',
+        }
+        const filePrefix = type ? filenameMap[type] : 'recebimentos-detalhamento'
+
+        const saldoLabel =
+          type === 'parcial'
+            ? 'Saldo Parcial Residual'
+            : type === 'nao_recebida'
+              ? 'Total Não Recebido'
+              : 'Saldo Total a Receber'
+
+        await exportFinancialListingPDF({
+          title: meta.title,
+          subtitle: meta.subtitle,
+          periodLabel,
+          orientation: 'landscape',
+          filename: slugifyFilename(filePrefix, periodLabel),
+          filters: {
+            periodo: periodLabel,
+            busca: search.trim() || undefined,
+          },
+          summaryCards: [
+            {
+              label: 'Previsto Total das Vendas',
+              value: `R$ ${formatCurrency(baseTotals.totalPrevisto)}`,
+              variant: 'default',
+            },
+            {
+              label: 'Já Recebido',
+              value: `R$ ${formatCurrency(baseTotals.totalRecebido)}`,
+              variant: 'green',
+            },
+            {
+              label: saldoLabel,
+              value: `R$ ${formatCurrency(baseTotals.totalSaldo)}`,
+              variant: type === 'parcial' ? 'blue' : 'amber',
+              highlight: true,
+            },
+          ],
+          columns: [
+            { header: 'Proposta', dataKey: 'propostaFormatada', align: 'left' },
+            { header: 'Cliente', dataKey: 'clienteNome', align: 'left' },
+            { header: 'Seguradora', dataKey: 'seguradoraNome', align: 'left' },
+            { header: 'Comissão Prevista', dataKey: 'previstoFmt', align: 'right' },
+            { header: 'Já Recebido', dataKey: 'recFmt', align: 'right' },
+            { header: 'Saldo a Receber', dataKey: 'saldoFmt', align: 'right' },
+            { header: 'Último Recebimento', dataKey: 'ultimoRecFmt', align: 'center' },
+            { header: 'Status', dataKey: 'statusText', align: 'center' },
+          ],
+          rows: filteredPropostas.map((r) => ({
+            propostaFormatada:
+              r.apolice && r.apolice !== r.proposta
+                ? `${r.proposta}\n(Ap: ${r.apolice})`
+                : r.proposta,
+            clienteNome: r.clienteNome,
+            seguradoraNome: r.seguradoraNome,
+            previstoFmt: `R$ ${formatCurrency(r.previsto)}`,
+            recFmt: `R$ ${formatCurrency(r.rec)}`,
+            saldoFmt: `R$ ${formatCurrency(r.saldo)}`,
+            ultimoRecFmt: r.ultimoRecebimento ? formatDateDisplay(r.ultimoRecebimento) : '-',
+            statusText: r.statusText,
+          })),
+          totalRow: {
+            propostaFormatada: `Total Consolidado (${filteredPropostas.length} propostas)`,
+            clienteNome: '',
+            seguradoraNome: '',
+            previstoFmt: `R$ ${formatCurrency(baseTotals.totalPrevisto)}`,
+            recFmt: `R$ ${formatCurrency(baseTotals.totalRecebido)}`,
+            saldoFmt: `R$ ${formatCurrency(baseTotals.totalSaldo)}`,
+            ultimoRecFmt: '',
+            statusText: '',
+          },
+        })
+      }
+    } finally {
+      setIsExporting(false)
+    }
+  }
+
   return (
     <Dialog open={open} onOpenChange={handleOpenChange}>
       <DialogContent className="max-w-5xl max-h-[88vh] flex flex-col p-6">
         <DialogHeader className="pb-2 border-b">
-          <div className="flex items-center gap-2">
-            {type === 'recebida' ? (
-              <CheckCircle2 className="w-5 h-5 text-emerald-600" />
-            ) : type === 'parcial' ? (
-              <Clock className="w-5 h-5 text-blue-600" />
-            ) : type === 'nao_recebida' ? (
-              <AlertCircle className="w-5 h-5 text-amber-600" />
-            ) : (
-              <TrendingDown className="w-5 h-5 text-amber-700" />
-            )}
-            <div>
-              <DialogTitle className="text-base font-bold text-slate-900">{meta.title}</DialogTitle>
-              <p className="text-xs text-slate-500 mt-0.5">{meta.subtitle}</p>
+          <div className="flex items-center justify-between gap-3 pr-6">
+            <div className="flex items-center gap-2">
+              {type === 'recebida' ? (
+                <CheckCircle2 className="w-5 h-5 text-emerald-600" />
+              ) : type === 'parcial' ? (
+                <Clock className="w-5 h-5 text-blue-600" />
+              ) : type === 'nao_recebida' ? (
+                <AlertCircle className="w-5 h-5 text-amber-600" />
+              ) : (
+                <TrendingDown className="w-5 h-5 text-amber-700" />
+              )}
+              <div>
+                <DialogTitle className="text-base font-bold text-slate-900">
+                  {meta.title}
+                </DialogTitle>
+                <p className="text-xs text-slate-500 mt-0.5">{meta.subtitle}</p>
+              </div>
             </div>
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              onClick={handleExportPDF}
+              disabled={
+                isExporting ||
+                (meta.mode === 'movimentos'
+                  ? filteredMovimentos.length === 0
+                  : filteredPropostas.length === 0)
+              }
+              className="h-8 px-2.5 text-xs font-semibold border-slate-300 text-slate-700 hover:bg-slate-50 hover:text-blue-600 shrink-0 gap-1.5 shadow-2xs"
+              title="Exportar listagem completa em PDF para conferência e auditoria"
+            >
+              {isExporting ? (
+                <Loader2 className="w-3.5 h-3.5 animate-spin" />
+              ) : (
+                <Download className="w-3.5 h-3.5 text-blue-600" />
+              )}
+              <span>Exportar PDF</span>
+            </Button>
           </div>
         </DialogHeader>
 

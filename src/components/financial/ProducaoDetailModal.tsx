@@ -13,7 +13,11 @@ import { Policy } from '@/types'
 import { formatCurrency, formatDateDisplay } from '@/lib/utils'
 import { formatClientDocument } from '@/lib/document-validators'
 import { FileText, Search, ChevronLeft, ChevronRight, Download, Loader2 } from 'lucide-react'
-import { exportFinancialListingPDF, ActiveFiltersContext } from '@/lib/financial-pdf'
+import {
+  exportFinancialListingPDF,
+  slugifyFilename,
+  ActiveFiltersContext,
+} from '@/lib/financial-pdf'
 
 export type ProducaoDetailType =
   | 'premio_liquido'
@@ -122,33 +126,32 @@ export function ProducaoDetailModal({
   }, [rows])
 
   // Filtro de busca local
-const filteredRows = useMemo(() => {
-  if (!search.trim()) return rows
-  const q = search.trim().toLowerCase()
-  return rows.filter((r) => {
-    return (
-      r.proposta.toLowerCase().includes(q) ||
-      r.apolice.toLowerCase().includes(q) ||
-      r.clienteNome.toLowerCase().includes(q) ||
-      r.documento.toLowerCase().includes(q) ||
-      r.seguradoraNome.toLowerCase().includes(q) ||
-      r.produtoNome.toLowerCase().includes(q)
-    )
-  })
-}, [rows, search])
+  const filteredRows = useMemo(() => {
+    if (!search.trim()) return rows
+    const q = search.trim().toLowerCase()
+    return rows.filter((r) => {
+      return (
+        r.proposta.toLowerCase().includes(q) ||
+        r.apolice.toLowerCase().includes(q) ||
+        r.clienteNome.toLowerCase().includes(q) ||
+        r.documento.toLowerCase().includes(q) ||
+        r.seguradoraNome.toLowerCase().includes(q) ||
+        r.produtoNome.toLowerCase().includes(q)
+      )
+    })
+  }, [rows, search])
 
-// Totais das linhas filtradas (para refletir a busca no consolidado)
-const filteredTotals = useMemo(() => {
-  return {
-    totalPremio:
-      Math.round(filteredRows.reduce((sum, r) => sum + r.premioLiquido, 0) * 100) / 100,
-    totalBruta:
-      Math.round(filteredRows.reduce((sum, r) => sum + r.comissaoBruta, 0) * 100) / 100,
-    totalIss: Math.round(filteredRows.reduce((sum, r) => sum + r.iss, 0) * 100) / 100,
-    totalLiquida:
-      Math.round(filteredRows.reduce((sum, r) => sum + r.comissaoLiquida, 0) * 100) / 100,
-  }
-}, [filteredRows])
+  // Totais das linhas filtradas (para refletir a busca no consolidado)
+  const filteredTotals = useMemo(() => {
+    return {
+      totalPremio:
+        Math.round(filteredRows.reduce((sum, r) => sum + r.premioLiquido, 0) * 100) / 100,
+      totalBruta: Math.round(filteredRows.reduce((sum, r) => sum + r.comissaoBruta, 0) * 100) / 100,
+      totalIss: Math.round(filteredRows.reduce((sum, r) => sum + r.iss, 0) * 100) / 100,
+      totalLiquida:
+        Math.round(filteredRows.reduce((sum, r) => sum + r.comissaoLiquida, 0) * 100) / 100,
+    }
+  }, [filteredRows])
 
   const totalPages = Math.max(1, Math.ceil(filteredRows.length / PAGE_SIZE))
   const paginatedRows = useMemo(() => {
@@ -170,11 +173,20 @@ const filteredTotals = useMemo(() => {
       const isFiltered = Boolean(search.trim())
       const baseTotals = isFiltered ? filteredTotals : totals
 
+      const filenameMap: Record<ProducaoDetailType, string> = {
+        premio_liquido: 'producao-premio-liquido-vendido',
+        comissao_bruta: 'producao-comissao-bruta-prevista',
+        iss_deducoes: 'producao-iss-deducoes-previstas',
+        comissao_liquida: 'producao-comissao-liquida-prevista',
+      }
+      const filePrefix = type ? filenameMap[type] : 'producao-detalhamento'
+
       await exportFinancialListingPDF({
         title: meta.title,
         subtitle: meta.subtitle,
         periodLabel,
         orientation: 'landscape',
+        filename: slugifyFilename(filePrefix, periodLabel),
         filters: {
           periodo: periodLabel,
           ...filtersContext,

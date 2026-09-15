@@ -7,7 +7,9 @@ import {
 } from '@/components/ui/dialog'
 import { Button } from '@/components/ui/button'
 import { formatCurrency } from '@/lib/utils'
-import { Calculator, ArrowRight, CheckCircle2, TrendingDown, TrendingUp } from 'lucide-react'
+import { useState } from 'react'
+import { Calculator, ArrowRight, TrendingDown, TrendingUp, Download, Loader2 } from 'lucide-react'
+import { exportFinancialListingPDF, slugifyFilename } from '@/lib/financial-pdf'
 
 interface Props {
   open: boolean
@@ -38,22 +40,118 @@ export function LucroRealizadoModal({
   onOpenRepassesPagos,
   onOpenCustosPagos,
 }: Props) {
+  const [isExporting, setIsExporting] = useState(false)
   const isNegative = realProfit < 0
+
+  const handleExportPDF = async () => {
+    try {
+      setIsExporting(true)
+      await exportFinancialListingPDF({
+        title: 'Memória de Cálculo: Lucro Líquido Realizado',
+        subtitle: `Demonstrativo da composição real do resultado de ${periodLabel}`,
+        periodLabel,
+        orientation: 'portrait',
+        filename: slugifyFilename('memoria-lucro-liquido-realizado', periodLabel),
+        filters: {
+          periodo: periodLabel,
+        },
+        summaryCards: [
+          {
+            label: 'Comissões Recebidas',
+            value: `R$ ${formatCurrency(receivedCommissions)}`,
+            variant: 'green',
+          },
+          {
+            label: 'Repasses Pagos',
+            value: `R$ ${formatCurrency(paidRepasses)}`,
+            variant: 'amber',
+          },
+          {
+            label: 'Custos Pagos',
+            value: `R$ ${formatCurrency(paidCosts)}`,
+            variant: 'red',
+          },
+          {
+            label: 'Lucro Realizado',
+            value: `R$ ${formatCurrency(realProfit)}`,
+            variant: isNegative ? 'red' : 'green',
+            highlight: true,
+          },
+        ],
+        columns: [
+          { header: 'Operação', dataKey: 'operacao', align: 'center', width: 25 },
+          { header: 'Componente do Fluxo Efetivo', dataKey: 'descricao', align: 'left' },
+          { header: 'Detalhamento / Origem', dataKey: 'detalhe', align: 'left' },
+          { header: 'Valor (R$)', dataKey: 'valorFmt', align: 'right', width: 45 },
+        ],
+        rows: [
+          {
+            operacao: '(+)',
+            descricao: 'Comissões Efetivamente Recebidas',
+            detalhe: `Sistema: R$ ${formatCurrency(systemReceivedCommissions)} | Legado: R$ ${formatCurrency(legacyReceivedCommissions)}`,
+            valorFmt: `R$ ${formatCurrency(receivedCommissions)}`,
+          },
+          {
+            operacao: '(-)',
+            descricao: 'Repasses Efetivamente Pagos',
+            detalhe: 'Repasses liquidados dentro do período selecionado',
+            valorFmt: `R$ ${formatCurrency(paidRepasses)}`,
+          },
+          {
+            operacao: '(-)',
+            descricao: 'Custos Efetivamente Pagos',
+            detalhe: 'Despesas operacionais e fixas quitadas no período',
+            valorFmt: `R$ ${formatCurrency(paidCosts)}`,
+          },
+        ],
+        totalRow: {
+          operacao: '(=)',
+          descricao: 'Lucro Líquido Realizado no Caixa',
+          detalhe: 'Resultado Efetivo (Regime de Caixa)',
+          valorFmt: `R$ ${formatCurrency(realProfit)}`,
+        },
+        infoNotes: [
+          'Demonstrativo apurado sob Regime de Caixa com liquidações efetivas dentro do período.',
+          'Não inclui provisões futuras de recebimento ou pagamentos a realizar.',
+        ],
+      })
+    } finally {
+      setIsExporting(false)
+    }
+  }
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="max-w-xl p-6">
         <DialogHeader className="pb-3 border-b">
-          <div className="flex items-center gap-2">
-            <Calculator className="w-5 h-5 text-blue-600" />
-            <div>
-              <DialogTitle className="text-base font-bold text-slate-900">
-                Memória de Cálculo: Lucro Líquido Realizado
-              </DialogTitle>
-              <p className="text-xs text-slate-500 mt-0.5">
-                Demonstrativo da composição real do resultado de {periodLabel}
-              </p>
+          <div className="flex items-center justify-between gap-3 pr-6">
+            <div className="flex items-center gap-2">
+              <Calculator className="w-5 h-5 text-blue-600 shrink-0" />
+              <div>
+                <DialogTitle className="text-base font-bold text-slate-900">
+                  Memória de Cálculo: Lucro Líquido Realizado
+                </DialogTitle>
+                <p className="text-xs text-slate-500 mt-0.5">
+                  Demonstrativo da composição real do resultado de {periodLabel}
+                </p>
+              </div>
             </div>
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              onClick={handleExportPDF}
+              disabled={isExporting}
+              className="h-8 px-2.5 text-xs font-semibold border-slate-300 text-slate-700 hover:bg-slate-50 hover:text-blue-600 shrink-0 gap-1.5 shadow-2xs"
+              title="Exportar memória de cálculo em PDF"
+            >
+              {isExporting ? (
+                <Loader2 className="w-3.5 h-3.5 animate-spin" />
+              ) : (
+                <Download className="w-3.5 h-3.5 text-blue-600" />
+              )}
+              <span>Exportar PDF</span>
+            </Button>
           </div>
         </DialogHeader>
 

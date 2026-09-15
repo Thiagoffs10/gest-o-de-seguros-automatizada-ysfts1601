@@ -10,7 +10,8 @@ import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Badge } from '@/components/ui/badge'
 import { formatCurrency } from '@/lib/utils'
-import { Calendar, Search, ChevronLeft, ChevronRight } from 'lucide-react'
+import { Calendar, Search, ChevronLeft, ChevronRight, Download, Loader2 } from 'lucide-react'
+import { exportFinancialListingPDF, slugifyFilename } from '@/lib/financial-pdf'
 
 export interface CompetenciaProjecaoItem {
   id: string
@@ -45,6 +46,7 @@ export function ProjecaoCompetenciaModal({
 }: Props) {
   const [search, setSearch] = useState('')
   const [page, setPage] = useState(1)
+  const [isExporting, setIsExporting] = useState(false)
 
   const rows = useMemo(() => {
     if (!competencia) return []
@@ -85,21 +87,121 @@ export function ProjecaoCompetenciaModal({
     onOpenChange(nextOpen)
   }
 
+  // Totais das linhas filtradas pela busca
+  const filteredTotals = useMemo(() => {
+    const totalPrev =
+      Math.round(filteredRows.reduce((sum, r) => sum + r.valorPrevisto, 0) * 100) / 100
+    const totalRec =
+      Math.round(filteredRows.reduce((sum, r) => sum + r.valorRecebido, 0) * 100) / 100
+    const totalSaldo =
+      Math.round(filteredRows.reduce((sum, r) => sum + r.saldoPrevisto, 0) * 100) / 100
+    return { totalPrev, totalRec, totalSaldo }
+  }, [filteredRows])
+
+  const handleExportPDF = async () => {
+    if (!competencia) return
+    try {
+      setIsExporting(true)
+      const isFiltered = Boolean(search.trim())
+      const baseTotals = isFiltered ? filteredTotals : totals
+
+      await exportFinancialListingPDF({
+        title: `Projeção de Recebimentos — Competência ${competencia}`,
+        subtitle: `Previsões de comissão em aberto com vencimento/competência prevista para ${competencia}`,
+        periodLabel: competencia,
+        orientation: 'landscape',
+        filename: slugifyFilename(`projecao-competencia-${competencia}`),
+        filters: {
+          periodo: competencia,
+          busca: search.trim() || undefined,
+        },
+        summaryCards: [
+          {
+            label: 'Total Previsto na Competência',
+            value: `R$ ${formatCurrency(baseTotals.totalPrev)}`,
+            variant: 'default',
+          },
+          {
+            label: 'Já Recebido',
+            value: `R$ ${formatCurrency(baseTotals.totalRec)}`,
+            variant: 'green',
+          },
+          {
+            label: 'Saldo Previsto a Receber',
+            value: `R$ ${formatCurrency(baseTotals.totalSaldo)}`,
+            variant: 'blue',
+            highlight: true,
+          },
+        ],
+        columns: [
+          { header: 'Proposta', dataKey: 'propostaFormatada', align: 'left' },
+          { header: 'Cliente', dataKey: 'clienteNome', align: 'left' },
+          { header: 'Seguradora', dataKey: 'seguradoraNome', align: 'left' },
+          { header: 'Produto', dataKey: 'produtoNome', align: 'left' },
+          { header: 'Previsão', dataKey: 'previstoFmt', align: 'right' },
+          { header: 'Já Recebido', dataKey: 'recebidoFmt', align: 'right' },
+          { header: 'Saldo Previsto', dataKey: 'saldoFmt', align: 'right' },
+        ],
+        rows: filteredRows.map((r) => ({
+          propostaFormatada:
+            r.apoliceNumero && r.apoliceNumero !== r.propostaNumero
+              ? `${r.propostaNumero}\n(Ap: ${r.apoliceNumero})`
+              : r.propostaNumero,
+          clienteNome: r.clienteNome,
+          seguradoraNome: r.seguradoraNome,
+          produtoNome: r.produtoNome,
+          previstoFmt: `R$ ${formatCurrency(r.valorPrevisto)}`,
+          recebidoFmt: `R$ ${formatCurrency(r.valorRecebido)}`,
+          saldoFmt: `R$ ${formatCurrency(r.saldoPrevisto)}`,
+        })),
+        totalRow: {
+          propostaFormatada: `Total da Competência (${filteredRows.length} previsões)`,
+          clienteNome: '',
+          seguradoraNome: '',
+          produtoNome: '',
+          previstoFmt: `R$ ${formatCurrency(baseTotals.totalPrev)}`,
+          recebidoFmt: `R$ ${formatCurrency(baseTotals.totalRec)}`,
+          saldoFmt: `R$ ${formatCurrency(baseTotals.totalSaldo)}`,
+        },
+      })
+    } finally {
+      setIsExporting(false)
+    }
+  }
+
   return (
     <Dialog open={open} onOpenChange={handleOpenChange}>
       <DialogContent className="max-w-4xl max-h-[85vh] flex flex-col p-6">
         <DialogHeader className="pb-2 border-b">
-          <div className="flex items-center gap-2">
-            <Calendar className="w-5 h-5 text-blue-600" />
-            <div>
-              <DialogTitle className="text-base font-bold text-slate-900">
-                Projeção de Recebimentos — Competência {competencia}
-              </DialogTitle>
-              <p className="text-xs text-slate-500 mt-0.5">
-                Previsões de comissão em aberto com vencimento/competência prevista para{' '}
-                {competencia}
-              </p>
+          <div className="flex items-center justify-between gap-3 pr-6">
+            <div className="flex items-center gap-2">
+              <Calendar className="w-5 h-5 text-blue-600 shrink-0" />
+              <div>
+                <DialogTitle className="text-base font-bold text-slate-900">
+                  Projeção de Recebimentos — Competência {competencia}
+                </DialogTitle>
+                <p className="text-xs text-slate-500 mt-0.5">
+                  Previsões de comissão em aberto com vencimento/competência prevista para{' '}
+                  {competencia}
+                </p>
+              </div>
             </div>
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              onClick={handleExportPDF}
+              disabled={isExporting || filteredRows.length === 0}
+              className="h-8 px-2.5 text-xs font-semibold border-slate-300 text-slate-700 hover:bg-slate-50 hover:text-blue-600 shrink-0 gap-1.5 shadow-2xs"
+              title="Exportar projeção da competência em PDF"
+            >
+              {isExporting ? (
+                <Loader2 className="w-3.5 h-3.5 animate-spin" />
+              ) : (
+                <Download className="w-3.5 h-3.5 text-blue-600" />
+              )}
+              <span>Exportar PDF</span>
+            </Button>
           </div>
         </DialogHeader>
 
