@@ -1,5 +1,5 @@
 import pb from '@/lib/pocketbase/client'
-import { ComissaoRecebimento } from '@/types'
+import { ComissaoRecebimento, Policy } from '@/types'
 import { formatDateForInput, extractDateOnly } from '@/lib/utils'
 
 export interface ComissaoPrevistaSimples {
@@ -359,9 +359,86 @@ export const recalcularStatusApolice = async (policyId: string) => {
   }
 }
 
+/**
+ * Garante que a apólice possui ao menos uma previsão em comissoes_previstas.
+ * Se a apólice for ativa, tiver comissão > 0 e NÃO possuir nenhuma previsão,
+ * cria automaticamente a previsão faltante (produção = mês de vigência / Por saldo/esgotamento).
+ */
+export const garantirPrevisaoParaApoliceSeAusente = async (policyId: string) => {
+  if (!policyId) return
+  try {
+    const existing = await pb.collection('comissoes_previstas').getList(1, 1, {
+      filter: `policy = "${policyId}"`,
+    })
+    if (existing.totalItems > 0) return
+
+    const pol = await pb.collection('policies').getOne<Policy>(policyId)
+    if (pol.status === 'Cancelada') return
+
+    const commBruta = Number(pol.commission) || 0
+    const iss = Number(pol.iss) || 0
+    const valorLiquido = Math.round(Math.max(0, commBruta - iss) * 100) / 100
+    if (valorLiquido <= 0) return
+
+    let startDateStr = pol.start_date || pol.created || ''
+    let comp = ''
+    let dataPrevista = ''
+    if (startDateStr) {
+      const d = startDateStr.split('T')[0].split(' ')[0]
+      dataPrevista = d
+      const parts = d.split('-')
+      if (parts.length >= 2) {
+        comp = `${parts[1]}/${parts[0]}`
+      }
+    }
+    if (!comp) {
+      const now = new Date()
+      const m = String(now.getMonth() + 1).padStart(2, '0')
+      const y = String(now.getFullYear())
+      comp = `${m}/${y}`
+      dataPrevista = `${y}-${m}-01`
+    }
+
+    const compClean = comp.replace('/', '_')
+    const stableKey = `prev_${pol.id}_1_${compClean}`
+
+    // Verifica se já existe pela chave_estavel
+    try {
+      const byKey = await pb
+        .collection('comissoes_previstas')
+        .getFirstListItem(`chave_estavel = "${stableKey}"`)
+      if (byKey) return
+    } catch {
+      /* intentionally ignored */
+    }
+
+    const origemModelo = pol.modelo_comissao_snapshot?.nome || 'Por saldo/esgotamento'
+    const obs = `Previsão automática — produção ${comp} — Comissão Líquida Prevista: R$ ${valorLiquido.toFixed(2)}`
+
+    await pb.collection('comissoes_previstas').create({
+      policy: pol.id,
+      competencia: comp,
+      data_prevista: dataPrevista,
+      valor_previsto: valorLiquido,
+      parcela_numero: 1,
+      origem_modelo: origemModelo,
+      status: 'Pendente',
+      observacao: obs,
+      chave_estavel: stableKey,
+    })
+  } catch (err) {
+    console.warn('Aviso: erro ao garantir previsão ausente da apólice:', err)
+  }
+}
+
 export const createComissaoRecebimento = async (
   data: CreateComissaoRecebimentoPayload,
 ): Promise<ComissaoRecebimento> => {
+  // Prevenção de recorrência: garante que a apólice possui ao menos uma previsão antes de registrar recebimento
+  if (data.policy && !data.is_estorno) {
+    await garantirPrevisaoParaApoliceSeAusente(data.policy)
+  }
+
   // Regra crítica 6: Para novos recebimentos manuais, exigir data de recebimento válida
   if (!data.data_recebimento || String(data.data_recebimento).trim() === '') {
     throw new Error('A data de recebimento é obrigatória para registrar a comissão.')

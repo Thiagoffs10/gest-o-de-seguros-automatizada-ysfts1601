@@ -306,8 +306,70 @@ export const syncPrevisoesForPolicy = async (
   }
 
   if (!modelo) {
-    // Apólice sem modelo usa o fluxo legado (à vista direto na apólice)
-    return []
+    // Apólice sem modelo explícito: cria previsão única por saldo/esgotamento para que a venda
+    // apareça na projeção de recebimentos na competência do start_date
+    const commBruta = Number(policy.commission) || 0
+    const iss = Number(policy.iss) || 0
+    const valorLiquido = Math.round(Math.max(0, commBruta - iss) * 100) / 100
+    if (valorLiquido <= 0 || policy.status === 'Cancelada') {
+      return []
+    }
+
+    let startDateStr = policy.start_date || policy.created || ''
+    let comp = ''
+    let dataPrevista = ''
+    if (startDateStr) {
+      const d = startDateStr.split('T')[0].split(' ')[0]
+      dataPrevista = d
+      const parts = d.split('-')
+      if (parts.length >= 2) {
+        comp = `${parts[1]}/${parts[0]}`
+      }
+    }
+    if (!comp) {
+      const now = new Date()
+      const m = String(now.getMonth() + 1).padStart(2, '0')
+      const y = String(now.getFullYear())
+      comp = `${m}/${y}`
+      dataPrevista = `${y}-${m}-01`
+    }
+
+    const compClean = comp.replace('/', '_')
+    const stableKey = `prev_${policy.id}_1_${compClean}`
+
+    // Verifica se já existe
+    const existentes = await getComissoesPrevistasByPolicy(policy.id)
+    const jaExiste = existentes.find(
+      (e) => e.chave_estavel === stableKey || (e.parcela_numero === 1 && e.competencia === comp),
+    )
+    if (jaExiste) {
+      return [jaExiste]
+    }
+
+    const obs = `Previsão automática — produção ${comp} — Comissão Líquida Prevista: R$ ${valorLiquido.toFixed(2)}`
+    try {
+      const criada = await pb.collection('comissoes_previstas').create<ComissaoPrevista>({
+        policy: policy.id,
+        competencia: comp,
+        data_prevista: dataPrevista,
+        valor_previsto: valorLiquido,
+        parcela_numero: 1,
+        origem_modelo: 'Por saldo/esgotamento',
+        status: 'Pendente',
+        observacao: obs,
+        chave_estavel: stableKey,
+      })
+      return [criada]
+    } catch {
+      try {
+        const found = await pb
+          .collection('comissoes_previstas')
+          .getFirstListItem<ComissaoPrevista>(`chave_estavel = "${stableKey}"`)
+        return [found]
+      } catch {
+        return []
+      }
+    }
   }
 
   // 1. Calcular lista de previsões futuras

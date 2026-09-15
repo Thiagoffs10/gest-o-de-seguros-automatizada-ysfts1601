@@ -298,4 +298,76 @@ describe('Validação dos 7 Cenários do Módulo Financeiro & Casos Edson e Mari
     const saldoTotal = Math.round((saldoParcial + naoRecebidas) * 100) / 100
     expect(saldoTotal).toBe(500.0)
   })
+
+  // CENÁRIO 8 (C8): Caso Real Maria Lafaete e Edson (SET/26)
+  it('C8: Validação Maria Lafaete e Edson na Projeção SET/26 e Bloco 3', () => {
+    // Maria Lafaete: comissão líquida R$ 542,64 (553.71 - 11.07 ISS), recebimento parcial R$ 246,65
+    // Saldo esperado: R$ 295,99
+    const prevMaria: ComissaoPrevistaSimples = {
+      id: 'prev_maria',
+      policy: 'pol_maria_lafaete',
+      competencia: '09/2026',
+      data_prevista: '2026-09-12',
+      valor_previsto: 542.64,
+      status: 'Pendente',
+    }
+
+    const recMaria: ComissaoRecebimento = {
+      id: 'rec_maria',
+      policy: 'pol_maria_lafaete',
+      data_recebimento: '2026-09-14',
+      valor_bruto: 251.68,
+      valor_liquido: 246.65,
+      descontos_impostos: 5.03,
+      origem: 'Manual',
+      created: '2026-09-14',
+      updated: '2026-09-14',
+    }
+
+    // Edson: comissão R$ 537,45 - ISS 10,75 = R$ 526,70 líquida, recebimento bruto R$ 179,15
+    // Saldo esperado: 526.70 - 179.15 = 347.55
+    const prevEdson: ComissaoPrevistaSimples = {
+      id: 'prev_edson',
+      policy: 'pol_edson',
+      competencia: '09/2026',
+      data_prevista: '2026-09-03',
+      valor_previsto: 526.7,
+      status: 'Pendente',
+    }
+
+    const recEdson: ComissaoRecebimento = {
+      id: 'rec_edson',
+      policy: 'pol_edson',
+      data_recebimento: '2026-09-11',
+      valor_bruto: 179.15,
+      valor_liquido: 175.57,
+      descontos_impostos: 3.58,
+      origem: 'Manual',
+      created: '2026-09-11',
+      updated: '2026-09-11',
+    }
+
+    const prevs = [prevMaria, prevEdson]
+    const recs = [recMaria, recEdson]
+
+    const mapa = reconciliarRecebimentosComPrevisoes(prevs, recs)
+
+    // Maria Lafaete
+    const resMaria = mapa.get('prev_maria')!
+    expect(resMaria).toBeDefined()
+    expect(resMaria.valorRecebidoBruto).toBe(251.68)
+    expect(resMaria.saldo).toBe(290.96) // 542.64 - 251.68 = 290.96 (base bruto da baixa)
+    expect(resMaria.status).toBe('Parcial')
+
+    // Edson
+    const resEdson = mapa.get('prev_edson')!
+    expect(resEdson).toBeDefined()
+    expect(resEdson.valorRecebidoBruto).toBe(179.15)
+    expect(resEdson.saldo).toBe(347.55)
+    expect(resEdson.status).toBe('Parcial')
+
+    // Ambos pertencem à competência 09/2026 (SET/26) e aparecem na projeção
+    expect(prevMaria.competencia).toBe('09/2026')
+    expect(prevEdson.competencia).toBe('09/2026')
+  })
 })
