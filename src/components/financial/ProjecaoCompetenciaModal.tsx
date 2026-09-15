@@ -1,4 +1,5 @@
 import { useMemo, useState } from 'react'
+import { useDebounce } from '@/hooks/use-debounce'
 import {
   Dialog,
   DialogContent,
@@ -45,6 +46,7 @@ export function ProjecaoCompetenciaModal({
   totalPrevistoCompetencia,
 }: Props) {
   const [search, setSearch] = useState('')
+  const debouncedSearch = useDebounce(search, 300)
   const [page, setPage] = useState(1)
   const [isExporting, setIsExporting] = useState(false)
 
@@ -61,8 +63,8 @@ export function ProjecaoCompetenciaModal({
   }, [rows])
 
   const filteredRows = useMemo(() => {
-    if (!search.trim()) return rows
-    const q = search.trim().toLowerCase()
+    if (!debouncedSearch.trim()) return rows
+    const q = debouncedSearch.trim().toLowerCase()
     return rows.filter(
       (r) =>
         r.propostaNumero.toLowerCase().includes(q) ||
@@ -71,7 +73,7 @@ export function ProjecaoCompetenciaModal({
         r.seguradoraNome.toLowerCase().includes(q) ||
         r.produtoNome.toLowerCase().includes(q),
     )
-  }, [rows, search])
+  }, [rows, debouncedSearch])
 
   const totalPages = Math.max(1, Math.ceil(filteredRows.length / PAGE_SIZE))
   const paginatedRows = useMemo(() => {

@@ -1,5 +1,6 @@
-import { useEffect, useState, useCallback, useMemo } from 'react'
+import { useEffect, useState, useCallback, useMemo, useRef } from 'react'
 import { Plus, UserCheck, Search, UserPlus, X, Download, User, Sparkles } from 'lucide-react'
+import { useDebounce } from '@/hooks/use-debounce'
 import { getClients } from '@/services/clients'
 import { getPolicies } from '@/services/policies'
 import { Client, Policy, FilterState } from '@/types'
@@ -36,29 +37,51 @@ export default function Clients() {
   const [filters, setFilters] = useState<FilterState>({})
   const [onlyWithOpportunities, setOnlyWithOpportunities] = useState(false)
 
+  // Debounce de 300ms nas buscas de texto
+  const debouncedSearch = useDebounce(search, 300)
+  const debouncedNameSearch = useDebounce(nameSearch, 300)
+
+  // Apólices são cacheadas na tela de clientes para evitar re-fetch desnecessário de toda a coleção ao digitar
+  const policiesLoadedRef = useRef(false)
+
+  const loadPolicies = useCallback(async () => {
+    try {
+      const pols = await getPolicies()
+      setPolicies(pols)
+      policiesLoadedRef.current = true
+    } catch {
+      /* intentionally ignored */
+    }
+  }, [])
+
   const loadClients = useCallback(async () => {
     try {
-      const [data, pols] = await Promise.all([
-        getClients(search, undefined, nameSearch),
-        getPolicies(),
-      ])
-      setClients(data)
-      setPolicies(pols)
+      const fetchPromises: Promise<any>[] = [
+        getClients(debouncedSearch, undefined, debouncedNameSearch),
+      ]
+      if (!policiesLoadedRef.current) {
+        fetchPromises.push(getPolicies())
+      }
+      const results = await Promise.all(fetchPromises)
+      setClients(results[0])
+      if (results[1]) {
+        setPolicies(results[1])
+        policiesLoadedRef.current = true
+      }
     } catch {
       /* intentionally ignored */
     }
     setLoading(false)
-  }, [search, nameSearch])
+  }, [debouncedSearch, debouncedNameSearch])
 
   useEffect(() => {
     setPage(1)
     setLoading(true)
-    const timer = setTimeout(() => loadClients(), 300)
-    return () => clearTimeout(timer)
+    loadClients()
   }, [loadClients])
 
   useRealtime('clients', () => loadClients())
-  useRealtime('policies', () => loadClients())
+  useRealtime('policies', () => loadPolicies())
 
   // Mapa de oportunidades por cliente
   const clientOppsCount = useMemo(() => {
@@ -336,6 +359,7 @@ export default function Clients() {
             setIsModalOpen(false)
             setEditingClient(null)
             loadClients()
+            loadPolicies()
           } catch (err) {
             toast({
               title: 'Erro ao salvar cliente',
@@ -362,6 +386,7 @@ export default function Clients() {
             toast({ title: 'Cliente excluído com sucesso!' })
             setDeleteTarget(null)
             loadClients()
+            loadPolicies()
           } catch (err) {
             toast({
               title: 'Erro ao excluir cliente',

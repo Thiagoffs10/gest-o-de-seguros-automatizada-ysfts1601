@@ -1,4 +1,5 @@
 import { useMemo, useState } from 'react'
+import { useDebounce } from '@/hooks/use-debounce'
 import {
   Dialog,
   DialogContent,
@@ -71,6 +72,7 @@ export function RecebimentoDetailModal({
   receivedNetByPolicy = new Map(),
 }: Props) {
   const [search, setSearch] = useState('')
+  const debouncedSearch = useDebounce(search, 300)
   const [page, setPage] = useState(1)
   const [isExporting, setIsExporting] = useState(false)
 
@@ -314,10 +316,10 @@ export function RecebimentoDetailModal({
     return { totalPrevisto, totalRecebido, totalSaldo }
   }, [propostasRows])
 
-  // Filtro de busca local
+  // Filtro de busca local com debounce
   const filteredMovimentos = useMemo(() => {
-    if (!search.trim()) return movimentosRows
-    const q = search.trim().toLowerCase()
+    if (!debouncedSearch.trim()) return movimentosRows
+    const q = debouncedSearch.trim().toLowerCase()
     return movimentosRows.filter(
       (r) =>
         r.proposta.toLowerCase().includes(q) ||
@@ -326,11 +328,11 @@ export function RecebimentoDetailModal({
         r.seguradoraNome.toLowerCase().includes(q) ||
         r.origem.toLowerCase().includes(q),
     )
-  }, [movimentosRows, search])
+  }, [movimentosRows, debouncedSearch])
 
   const filteredPropostas = useMemo(() => {
-    if (!search.trim()) return propostasRows
-    const q = search.trim().toLowerCase()
+    if (!debouncedSearch.trim()) return propostasRows
+    const q = debouncedSearch.trim().toLowerCase()
     return propostasRows.filter(
       (r) =>
         r.proposta.toLowerCase().includes(q) ||
@@ -338,7 +340,7 @@ export function RecebimentoDetailModal({
         r.clienteNome.toLowerCase().includes(q) ||
         r.seguradoraNome.toLowerCase().includes(q),
     )
-  }, [propostasRows, search])
+  }, [propostasRows, debouncedSearch])
 
   const activeRowsCount =
     meta.mode === 'movimentos' ? filteredMovimentos.length : filteredPropostas.length

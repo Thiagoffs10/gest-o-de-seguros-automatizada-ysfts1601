@@ -1,4 +1,5 @@
 import { useMemo, useState } from 'react'
+import { useDebounce } from '@/hooks/use-debounce'
 import {
   Dialog,
   DialogContent,
@@ -46,6 +47,7 @@ export function ProducaoDetailModal({
   filtersContext,
 }: Props) {
   const [search, setSearch] = useState('')
+  const debouncedSearch = useDebounce(search, 300)
   const [page, setPage] = useState(1)
   const [isExporting, setIsExporting] = useState(false)
 
@@ -135,10 +137,10 @@ export function ProducaoDetailModal({
     return { totalPremio, totalPremioBruto, totalBruta, totalIss, totalLiquida }
   }, [rows])
 
-  // Filtro de busca local
+  // Filtro de busca local com debounce
   const filteredRows = useMemo(() => {
-    if (!search.trim()) return rows
-    const q = search.trim().toLowerCase()
+    if (!debouncedSearch.trim()) return rows
+    const q = debouncedSearch.trim().toLowerCase()
     return rows.filter((r) => {
       return (
         r.proposta.toLowerCase().includes(q) ||
@@ -149,7 +151,7 @@ export function ProducaoDetailModal({
         r.produtoNome.toLowerCase().includes(q)
       )
     })
-  }, [rows, search])
+  }, [rows, debouncedSearch])
 
   // Totais das linhas filtradas (para refletir a busca no consolidado)
   const filteredTotals = useMemo(() => {

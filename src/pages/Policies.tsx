@@ -1,6 +1,7 @@
-import { useEffect, useState, useCallback } from 'react'
+import { useEffect, useState, useCallback, useMemo } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { Search, Plus, Download, Car, Pencil, RefreshCw, Trash2, X, Ban, User } from 'lucide-react'
+import { useDebounce } from '@/hooks/use-debounce'
 import {
   getPolicies,
   createPolicy,
@@ -60,6 +61,11 @@ export default function Policies() {
   const [dialogMode, setDialogMode] = useState<DialogMode>(null)
   const [selectedPolicy, setSelectedPolicy] = useState<Policy | null>(null)
   const [nameSearch, setNameSearch] = useState('')
+
+  // Debounce de 300ms nos campos de busca de texto
+  const debouncedSearch = useDebounce(search, 300)
+  const debouncedNameSearch = useDebounce(nameSearch, 300)
+  const debouncedPlacaSearch = useDebounce(placaSearch, 300)
   const [fieldErrors, setFieldErrors] = useState<FieldErrors>({})
   const [deleteTarget, setDeleteTarget] = useState<Policy | null>(null)
   const [deleteLoading, setDeleteLoading] = useState(false)
@@ -68,12 +74,24 @@ export default function Policies() {
   const [page, setPage] = useState(1)
   const PAGE_SIZE = 10
 
-  const loadData = useCallback(async () => {
+  // Carrega listas estáticas auxiliares (clientes, seguradoras, parceiros) apenas na montagem ou quando necessário
+  const loadAuxData = useCallback(async () => {
     try {
       const [cls, segs, pars] = await Promise.all([getClients(), getSeguradoras(), getParceiros()])
       setClients(cls)
       setSeguradoras(segs)
       setParceiros(pars)
+    } catch {
+      /* intentionally ignored */
+    }
+  }, [])
+
+  useEffect(() => {
+    loadAuxData()
+  }, [loadAuxData])
+
+  const loadData = useCallback(async () => {
+    try {
       const activeCount = await countActivePolicies()
       setTotalActiveCount(activeCount)
       let filter = buildFilterString(filters)
@@ -95,8 +113,8 @@ export default function Policies() {
           filter = filter ? `${filter} && status = "${statusFilter}"` : `status = "${statusFilter}"`
         }
       }
-      if (search.trim()) {
-        const sanitized = search.trim().replace(/"/g, '')
+      if (debouncedSearch.trim()) {
+        const sanitized = debouncedSearch.trim().replace(/"/g, '')
         const matchingClients = await getClients(sanitized)
         const clientIds = matchingClients.map((c) => c.id)
         if (clientIds.length === 0) {
@@ -107,8 +125,8 @@ export default function Policies() {
         const clientFilter = clientIds.map((id) => `client = "${id}"`).join(' || ')
         filter = filter ? `${filter} && (${clientFilter})` : `(${clientFilter})`
       }
-      if (nameSearch.trim()) {
-        const nameSanitized = nameSearch.trim().replace(/"/g, '')
+      if (debouncedNameSearch.trim()) {
+        const nameSanitized = debouncedNameSearch.trim().replace(/"/g, '')
         const matchingClients = await getClients(undefined, undefined, nameSanitized)
         const clientIds = matchingClients.map((c) => c.id)
         if (clientIds.length === 0) {
@@ -119,8 +137,8 @@ export default function Policies() {
         const clientFilter = clientIds.map((id) => `client = "${id}"`).join(' || ')
         filter = filter ? `${filter} && (${clientFilter})` : `(${clientFilter})`
       }
-      if (placaSearch.trim()) {
-        const sanitizedPlaca = placaSearch.trim().replace(/"/g, '')
+      if (debouncedPlacaSearch.trim()) {
+        const sanitizedPlaca = debouncedPlacaSearch.trim().replace(/"/g, '')
         const q = `placa ~ "${sanitizedPlaca}"`
         filter = filter ? `${filter} && (${q})` : q
       }
@@ -130,20 +148,25 @@ export default function Policies() {
       /* intentionally ignored */
     }
     setLoading(false)
-  }, [search, nameSearch, placaSearch, statusFilter, filters, periodStart, periodEnd])
+  }, [
+    debouncedSearch,
+    debouncedNameSearch,
+    debouncedPlacaSearch,
+    statusFilter,
+    filters,
+    periodStart,
+    periodEnd,
+  ])
 
   useEffect(() => {
     setPage(1)
     setLoading(true)
-  }, [search, nameSearch, placaSearch, statusFilter, filters, periodStart, periodEnd])
-
-  useEffect(() => {
-    const timer = setTimeout(() => {
-      loadData()
-    }, 300)
-    return () => clearTimeout(timer)
+    loadData()
   }, [loadData])
-  useRealtime('policies', () => loadData())
+  useRealtime('policies', () => {
+    loadData()
+    loadAuxData()
+  })
 
   const handleSubmit = async (formData: any) => {
     setFieldErrors({})
@@ -247,7 +270,10 @@ export default function Policies() {
   }
 
   const totalPages = Math.max(1, Math.ceil(policies.length / PAGE_SIZE))
-  const paginatedPolicies = policies.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE)
+  const paginatedPolicies = useMemo(
+    () => policies.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE),
+    [policies, page],
+  )
 
   const initialData =
     dialogMode === 'edit' && selectedPolicy

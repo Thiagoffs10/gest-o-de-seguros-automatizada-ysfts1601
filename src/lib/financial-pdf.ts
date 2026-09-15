@@ -1,5 +1,4 @@
-import { jsPDF } from 'jspdf'
-import autoTable, { RowInput } from 'jspdf-autotable'
+import type { RowInput } from 'jspdf-autotable'
 import logoImg from '@/assets/cred10mixlogooficialfundobranco4k-12574.jpg'
 
 export interface SummaryCardItem {
@@ -78,6 +77,12 @@ export function slugifyFilename(name: string, period?: string): string {
 }
 
 export async function exportFinancialListingPDF(options: FinancialPDFOptions) {
+  const [{ jsPDF }, autoTableModule] = await Promise.all([
+    import('jspdf'),
+    import('jspdf-autotable'),
+  ])
+  const autoTable = autoTableModule.default || autoTableModule
+
   const orientation = options.orientation || (options.columns.length > 6 ? 'landscape' : 'portrait')
   const doc = new jsPDF({
     orientation,

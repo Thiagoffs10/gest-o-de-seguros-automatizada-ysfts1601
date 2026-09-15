@@ -1,5 +1,6 @@
 import { useEffect, useState, useCallback, useMemo, useRef } from 'react'
 import { useSearchParams, useNavigate } from 'react-router-dom'
+import { useDebounce } from '@/hooks/use-debounce'
 import {
   Edit2,
   CheckCircle2,
@@ -119,6 +120,10 @@ export default function Financial() {
   const [commFilter, setCommFilter] = useState('ALL')
   const [cpfCnpjFilter, setCpfCnpjFilter] = useState('')
   const [policySearchFilter, setPolicySearchFilter] = useState('')
+
+  // Debounce de 300ms nos campos de busca de apólice/cliente e CPF/CNPJ
+  const debouncedCpfCnpjFilter = useDebounce(cpfCnpjFilter, 300)
+  const debouncedPolicySearchFilter = useDebounce(policySearchFilter, 300)
   const [editPolicy, setEditPolicy] = useState<Policy | null>(null)
   const [recebimentoPolicy, setRecebimentoPolicy] = useState<Policy | null>(null)
   const [recebimentoInitialComp, setRecebimentoInitialComp] = useState<string | undefined>(
@@ -216,7 +221,7 @@ export default function Financial() {
   useEffect(() => {
     setCommPage(1)
     setRepassePage(1)
-  }, [filters, statusFilter, commFilter, cpfCnpjFilter, policySearchFilter])
+  }, [filters, statusFilter, commFilter, debouncedCpfCnpjFilter, debouncedPolicySearchFilter])
 
   const loadData = useCallback(async () => {
     setLoading(true)
@@ -376,11 +381,11 @@ export default function Financial() {
         p.coverage_type !== filters.tipoSeguro
       )
         return false
-      if (cpfCnpjFilter.trim()) {
-        if (!matchDocument(p.expand?.client, cpfCnpjFilter)) return false
+      if (debouncedCpfCnpjFilter.trim()) {
+        if (!matchDocument(p.expand?.client, debouncedCpfCnpjFilter)) return false
       }
-      if (policySearchFilter.trim()) {
-        const query = policySearchFilter.trim().toLowerCase()
+      if (debouncedPolicySearchFilter.trim()) {
+        const query = debouncedPolicySearchFilter.trim().toLowerCase()
         const propNum = (p.numero_proposta || '').toLowerCase()
         const polNum = (p.policy_number || '').toLowerCase()
         const clientName = (p.expand?.client?.name || '').toLowerCase()
@@ -393,8 +398,8 @@ export default function Financial() {
       statusFilter,
       commFilter,
       filters,
-      cpfCnpjFilter,
-      policySearchFilter,
+      debouncedCpfCnpjFilter,
+      debouncedPolicySearchFilter,
       period,
       isPolicyCommissionSettled,
     ],
@@ -415,7 +420,9 @@ export default function Financial() {
     () =>
       allPolicies.filter((p) => {
         // Se o usuário digitou uma busca específica de apólice/cliente ou CPF/CNPJ, priorizar exibição
-        const isTargetedSearch = Boolean(policySearchFilter.trim() || cpfCnpjFilter.trim())
+        const isTargetedSearch = Boolean(
+          debouncedPolicySearchFilter.trim() || debouncedCpfCnpjFilter.trim(),
+        )
 
         // Se filtro de comissão for 'received', incluir apólices cuja comissão foi recebida no período selecionado
         if (commFilter === 'received') {
@@ -450,8 +457,8 @@ export default function Financial() {
       commFilter,
       period,
       recsInPeriodByPolicy,
-      policySearchFilter,
-      cpfCnpjFilter,
+      debouncedPolicySearchFilter,
+      debouncedCpfCnpjFilter,
       isPolicyCommissionSettled,
     ],
   )

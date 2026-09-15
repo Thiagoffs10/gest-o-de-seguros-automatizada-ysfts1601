@@ -1,4 +1,4 @@
-import { useEffect, useState, useCallback } from 'react'
+import { useEffect, useState, useCallback, useMemo } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
 import {
   User,
@@ -160,33 +160,38 @@ export default function ClientDetail() {
     }
   }
 
-  if (!client)
-    return <div className="p-8 text-center text-slate-500">Carregando dados do segurado...</div>
-
   // Classificação de apólices e status
-  const activePolicies = policies.filter((p) => p.status === 'Ativa')
-  const historyPolicies = policies.filter((p) => p.status !== 'Ativa')
+  const activePolicies = useMemo(() => policies.filter((p) => p.status === 'Ativa'), [policies])
+  const historyPolicies = useMemo(() => policies.filter((p) => p.status !== 'Ativa'), [policies])
 
-  const now = new Date()
-  const todayStr = now.toISOString().split('T')[0]
-  const in30Days = new Date(now.getTime() + 30 * 86400000).toISOString().split('T')[0]
-
-  const upcomingRenewals = policies.filter((p) => {
-    if (p.status === 'Renovação Pendente') return true
-    if (p.status === 'Ativa' && p.end_date) {
-      const endClean = p.end_date.split('T')[0].split(' ')[0]
-      return endClean >= todayStr && endClean <= in30Days
-    }
-    return false
-  })
+  const upcomingRenewals = useMemo(() => {
+    const now = new Date()
+    const todayStr = now.toISOString().split('T')[0]
+    const in30Days = new Date(now.getTime() + 30 * 86400000).toISOString().split('T')[0]
+    return policies.filter((p) => {
+      if (p.status === 'Renovação Pendente') return true
+      if (p.status === 'Ativa' && p.end_date) {
+        const endClean = p.end_date.split('T')[0].split(' ')[0]
+        return endClean >= todayStr && endClean <= in30Days
+      }
+      return false
+    })
+  }, [policies])
 
   // Ramos que o cliente possui
-  const clientProducts = Array.from(
-    new Set(policies.map((p) => normalizeProduct(p.tipo_de_seguro || p.coverage_type || 'Outros'))),
-  )
+  const clientProducts = useMemo(() => {
+    return Array.from(
+      new Set(
+        policies.map((p) => normalizeProduct(p.tipo_de_seguro || p.coverage_type || 'Outros')),
+      ),
+    )
+  }, [policies])
 
   // Último contato realizado
-  const lastComm = comms.length > 0 ? comms[0] : null // sorted or created
+  const lastComm = useMemo(() => (comms.length > 0 ? comms[0] : null), [comms])
+
+  if (!client)
+    return <div className="p-8 text-center text-slate-500">Carregando dados do segurado...</div>
 
   const handleOpenEmail = () => {
     navigate(`/comunicacao?clientId=${encodeURIComponent(client.id)}&canal=Email`)

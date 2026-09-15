@@ -1,3 +1,4 @@
+import { memo } from 'react'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import {
   TrendingUp,
@@ -77,7 +78,7 @@ interface Props {
   periodLabel: string
 }
 
-export function FinancialSummaryCards({
+export const FinancialSummaryCards = memo(function FinancialSummaryCards({
   // BLOCO 1
   premioLiquidoVendido,
   premioBrutoVendido = 0,
@@ -842,4 +843,4 @@ export function FinancialSummaryCards({
       </div>
     </TooltipProvider>
   )
-}
+})
