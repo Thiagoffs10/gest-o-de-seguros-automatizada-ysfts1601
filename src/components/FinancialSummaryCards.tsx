@@ -160,7 +160,44 @@ export function FinancialSummaryCards({
           </div>
 
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-2.5">
-            {/* 1. Prêmio Líquido Vendido */}
+            {/* 1. Prêmio Bruto Vendido */}
+            <Card
+              onClick={onPremioBrutoClick}
+              role="button"
+              tabIndex={0}
+              className="shadow-xs cursor-pointer hover:border-blue-400 hover:shadow-md hover:-translate-y-0.5 active:translate-y-0 transition-all duration-150 group bg-white border-slate-200 select-none ring-offset-background focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-blue-400"
+            >
+              <CardHeader className="flex flex-row items-center justify-between pb-1 pt-2.5 px-3">
+                <div className="flex items-center gap-1 min-w-0">
+                  <CardTitle className="text-[11px] font-medium text-slate-600 truncate">
+                    Prêmio Bruto Vendido
+                  </CardTitle>
+                  <Tooltip>
+                    <TooltipTrigger asChild>
+                      <HelpCircle className="w-3 h-3 text-slate-400 shrink-0" />
+                    </TooltipTrigger>
+                    <TooltipContent className="text-xs">
+                      Soma do prêmio total bruto das vendas correspondentes ao período/filtros
+                      (venda bruta antes de deduções)
+                    </TooltipContent>
+                  </Tooltip>
+                </div>
+                <Banknote className="w-3.5 h-3.5 text-blue-600 group-hover:scale-110 transition-transform shrink-0" />
+              </CardHeader>
+              <CardContent className="px-3 pb-2.5 pt-0">
+                <div className="text-base sm:text-lg font-bold text-slate-900 truncate">
+                  R$ {formatCurrency(premioBrutoVendido)}
+                </div>
+                <div className="flex items-center justify-between text-[10px] sm:text-[11px] text-slate-500 mt-0.5">
+                  <span className="truncate">Venda bruta total</span>
+                  <span className="text-blue-600 font-medium group-hover:underline flex items-center shrink-0 ml-1">
+                    Auditar <ChevronRight className="w-3 h-3 ml-0.5" />
+                  </span>
+                </div>
+              </CardContent>
+            </Card>
+
+            {/* 2. Prêmio Líquido Vendido */}
             <Card
               onClick={onPremioLiquidoClick}
               role="button"
@@ -196,7 +233,7 @@ export function FinancialSummaryCards({
               </CardContent>
             </Card>
 
-            {/* 2. Comissão Bruta Prevista */}
+            {/* 3. Comissão Bruta Prevista */}
             <Card
               onClick={onComissaoBrutaClick}
               role="button"
@@ -232,7 +269,7 @@ export function FinancialSummaryCards({
               </CardContent>
             </Card>
 
-            {/* 3. ISS / Deduções Previstas */}
+            {/* 4. ISS / Deduções Previstas */}
             <Card
               onClick={onIssDeducoesClick}
               role="button"
@@ -262,43 +299,6 @@ export function FinancialSummaryCards({
                 <div className="flex items-center justify-between text-[10px] sm:text-[11px] text-slate-500 mt-0.5">
                   <span className="truncate">Impostos retidos</span>
                   <span className="text-amber-700 font-medium group-hover:underline flex items-center shrink-0 ml-1">
-                    Auditar <ChevronRight className="w-3 h-3 ml-0.5" />
-                  </span>
-                </div>
-              </CardContent>
-            </Card>
-
-            {/* 4. Prêmio Bruto Vendido (NOVO CARD INFORMATIVO — ANTES DA COMISSÃO LÍQUIDA) */}
-            <Card
-              onClick={onPremioBrutoClick}
-              role="button"
-              tabIndex={0}
-              className="shadow-xs cursor-pointer hover:border-blue-400 hover:shadow-md hover:-translate-y-0.5 active:translate-y-0 transition-all duration-150 group bg-white border-slate-200 select-none ring-offset-background focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-blue-400"
-            >
-              <CardHeader className="flex flex-row items-center justify-between pb-1 pt-2.5 px-3">
-                <div className="flex items-center gap-1 min-w-0">
-                  <CardTitle className="text-[11px] font-medium text-slate-600 truncate">
-                    Prêmio Bruto Vendido
-                  </CardTitle>
-                  <Tooltip>
-                    <TooltipTrigger asChild>
-                      <HelpCircle className="w-3 h-3 text-slate-400 shrink-0" />
-                    </TooltipTrigger>
-                    <TooltipContent className="text-xs">
-                      Soma do prêmio total bruto das vendas correspondentes ao período/filtros
-                      (venda bruta antes de deduções)
-                    </TooltipContent>
-                  </Tooltip>
-                </div>
-                <Banknote className="w-3.5 h-3.5 text-blue-600 group-hover:scale-110 transition-transform shrink-0" />
-              </CardHeader>
-              <CardContent className="px-3 pb-2.5 pt-0">
-                <div className="text-base sm:text-lg font-bold text-slate-900 truncate">
-                  R$ {formatCurrency(premioBrutoVendido)}
-                </div>
-                <div className="flex items-center justify-between text-[10px] sm:text-[11px] text-slate-500 mt-0.5">
-                  <span className="truncate">Venda bruta total</span>
-                  <span className="text-blue-600 font-medium group-hover:underline flex items-center shrink-0 ml-1">
                     Auditar <ChevronRight className="w-3 h-3 ml-0.5" />
                   </span>
                 </div>
