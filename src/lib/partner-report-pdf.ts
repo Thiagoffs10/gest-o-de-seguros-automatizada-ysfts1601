@@ -4,6 +4,7 @@ import { ParceiroDebitoItem } from '@/types'
 export interface PartnerReportEntry {
   clientName: string
   clientCpfCnpj: string
+  partnerName?: string
   seguradoraName: string
   tipoSeguro: string
   valorLiquido: number
@@ -92,6 +93,7 @@ export function generatePartnerReportPDF(data: PartnerReportData) {
       (e) => `<tr>
         <td><strong>${escapeHtml(e.clientName)}</strong></td>
         <td>${escapeHtml(e.clientCpfCnpj || '-')}</td>
+        <td><strong style="color:#2563eb;">${escapeHtml(e.partnerName || '-')}</strong></td>
         <td>${escapeHtml(e.seguradoraName)}</td>
         <td>${escapeHtml(e.tipoSeguro)}</td>
         <td class="right">R$ ${fmt(e.valorLiquido)}</td>
@@ -227,7 +229,7 @@ ${partnerHeader}
 ${foundClientSection}
 <table>
 <thead><tr>
-<th>Cliente</th><th>CPF/CNPJ</th><th>Seguradora</th><th>Tipo</th>
+<th>Cliente</th><th>CPF/CNPJ</th><th>Parceiro</th><th>Seguradora</th><th>Tipo</th>
 <th class="right">Valor Líquido</th><th class="center">% Repasse</th>
 <th class="right">Bruto Repasse</th><th class="center">Repasse Parceiro</th><th class="center">Data Repasse</th>
 <th class="center">Seguradora</th>

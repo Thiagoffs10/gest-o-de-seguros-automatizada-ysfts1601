@@ -262,10 +262,13 @@ export default function PartnerReport() {
           ? Number(p.valor_repasse)
           : (repassePercent / 100) * valorLiquido
       const client = p.expand?.client
+      const partnerName =
+        p.expand?.parceiro?.nome || parceiros.find((par) => par.id === p.parceiro)?.nome || 'N/A'
 
       return {
         clientName: client?.name || 'N/A',
         clientCpfCnpj: client ? formatClientDocument(client) : '',
+        partnerName,
         seguradoraName: p.expand?.seguradora?.nome || p.insurance_company || 'N/A',
         tipoSeguro: p.tipo_de_seguro || p.coverage_type || 'N/A',
         valorLiquido,
@@ -281,7 +284,7 @@ export default function PartnerReport() {
           : '',
       }
     })
-  }, [filteredPolicies])
+  }, [filteredPolicies, parceiros])
 
   const totalBrutoRepasse = useMemo(
     () => reportEntries.reduce((s, e) => s + e.valorRepasse, 0),
@@ -565,8 +568,16 @@ export default function PartnerReport() {
       {/* Top Header */}
       <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3">
         <div className="flex items-center gap-3">
-          <Button variant="outline" size="sm" onClick={() => navigate('/parceiros')}>
+          <Button variant="outline" size="sm" onClick={() => navigate(-1)}>
             <ArrowLeft className="w-4 h-4 mr-1" /> Voltar
+          </Button>
+          <Button
+            variant="ghost"
+            size="sm"
+            className="text-slate-600 hover:text-slate-900"
+            onClick={() => navigate('/financial')}
+          >
+            Voltar ao Financeiro
           </Button>
           <div>
             <h1 className="text-2xl font-bold text-slate-900">
@@ -895,6 +906,7 @@ export default function PartnerReport() {
                   <tr>
                     <th className="p-3.5">Nome do Cliente</th>
                     <th className="p-3.5">CPF/CNPJ</th>
+                    <th className="p-3.5">Parceiro</th>
                     <th className="p-3.5">Seguradora</th>
                     <th className="p-3.5">Tipo de Seguro</th>
                     <th className="p-3.5 text-right">Valor Líquido</th>
@@ -908,7 +920,7 @@ export default function PartnerReport() {
                 <tbody className="divide-y divide-slate-100">
                   {paginatedEntries.length === 0 ? (
                     <tr>
-                      <td colSpan={10} className="text-center p-6 text-slate-500">
+                      <td colSpan={11} className="text-center p-6 text-slate-500">
                         Nenhum registro encontrado para os filtros selecionados.
                       </td>
                     </tr>
@@ -916,7 +928,12 @@ export default function PartnerReport() {
                     paginatedEntries.map((e, i) => (
                       <tr key={i} className="hover:bg-slate-50/80">
                         <td className="p-3.5 font-semibold">{e.clientName}</td>
-                        <td className="p-3.5 text-xs">{e.clientCpfCnpj || '-'}</td>
+                        <td className="p-3.5 text-xs text-slate-600">{e.clientCpfCnpj || '-'}</td>
+                        <td className="p-3.5">
+                          <span className="font-semibold text-blue-700 bg-blue-50/80 px-2 py-0.5 rounded border border-blue-100">
+                            {e.partnerName || '-'}
+                          </span>
+                        </td>
                         <td className="p-3.5">{e.seguradoraName}</td>
                         <td className="p-3.5">{e.tipoSeguro}</td>
                         <td className="p-3.5 text-right font-bold">R$ {fmt(e.valorLiquido)}</td>
