@@ -90,6 +90,17 @@ describe('Reconciliação e Auditoria dos 5 Blocos Financeiros', () => {
     expect(cardPremio).toBe(10000)
     expect(cardPremio).toBe(listPremio)
 
+    // 1.1 Prêmio Bruto Vendido (venda bruta antes de deduções)
+    const cardPremioBruto = policies.reduce(
+      (sum, p) => sum + (p.valor_bruto != null ? p.valor_bruto : p.premium_amount || 0),
+      0,
+    )
+    const listPremioBruto = policies
+      .map((p) => (p.valor_bruto != null ? p.valor_bruto : p.premium_amount || 0))
+      .reduce((a, b) => a + b, 0)
+    expect(cardPremioBruto).toBe(10000)
+    expect(cardPremioBruto).toBe(listPremioBruto)
+
     // 2. Comissão Bruta Prevista
     const cardBruta = policies.reduce((sum, p) => sum + (p.commission || 0), 0)
     const listBruta = policies.map((p) => p.commission || 0).reduce((a, b) => a + b, 0)

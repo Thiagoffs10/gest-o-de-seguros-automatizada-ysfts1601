@@ -27,10 +27,12 @@ export interface CompetenciaProjecaoCard {
 interface Props {
   // BLOCO 1: PRODUÇÃO E COMISSÕES
   premioLiquidoVendido: number
+  premioBrutoVendido?: number
   comissaoBrutaPrevista: number
   issDeducoesPrevistas: number
   comissaoLiquidaPrevista: number
   onPremioLiquidoClick?: () => void
+  onPremioBrutoClick?: () => void
   onComissaoBrutaClick?: () => void
   onIssDeducoesClick?: () => void
   onComissaoLiquidaClick?: () => void
@@ -78,10 +80,12 @@ interface Props {
 export function FinancialSummaryCards({
   // BLOCO 1
   premioLiquidoVendido,
+  premioBrutoVendido = 0,
   comissaoBrutaPrevista,
   issDeducoesPrevistas,
   comissaoLiquidaPrevista,
   onPremioLiquidoClick,
+  onPremioBrutoClick,
   onComissaoBrutaClick,
   onIssDeducoesClick,
   onComissaoLiquidaClick,
@@ -155,7 +159,7 @@ export function FinancialSummaryCards({
             <span className="text-[11px] text-slate-400">Vendas correspondentes ao período</span>
           </div>
 
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-2.5">
             {/* 1. Prêmio Líquido Vendido */}
             <Card
               onClick={onPremioLiquidoClick}
@@ -163,29 +167,29 @@ export function FinancialSummaryCards({
               tabIndex={0}
               className="shadow-xs cursor-pointer hover:border-blue-400 hover:shadow-md hover:-translate-y-0.5 active:translate-y-0 transition-all duration-150 group bg-white border-slate-200 select-none ring-offset-background focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-blue-400"
             >
-              <CardHeader className="flex flex-row items-center justify-between pb-1 pt-3 px-3.5">
-                <div className="flex items-center gap-1">
-                  <CardTitle className="text-xs font-medium text-slate-600">
+              <CardHeader className="flex flex-row items-center justify-between pb-1 pt-2.5 px-3">
+                <div className="flex items-center gap-1 min-w-0">
+                  <CardTitle className="text-[11px] font-medium text-slate-600 truncate">
                     Prêmio Líquido Vendido
                   </CardTitle>
                   <Tooltip>
                     <TooltipTrigger asChild>
-                      <HelpCircle className="w-3 h-3 text-slate-400" />
+                      <HelpCircle className="w-3 h-3 text-slate-400 shrink-0" />
                     </TooltipTrigger>
                     <TooltipContent className="text-xs">
                       Soma do prêmio líquido das vendas correspondentes ao período/filtros
                     </TooltipContent>
                   </Tooltip>
                 </div>
-                <DollarSign className="w-4 h-4 text-blue-600 group-hover:scale-110 transition-transform" />
+                <DollarSign className="w-3.5 h-3.5 text-blue-600 group-hover:scale-110 transition-transform shrink-0" />
               </CardHeader>
-              <CardContent className="px-3.5 pb-3">
-                <div className="text-lg font-bold text-slate-900">
+              <CardContent className="px-3 pb-2.5 pt-0">
+                <div className="text-base sm:text-lg font-bold text-slate-900 truncate">
                   R$ {formatCurrency(premioLiquidoVendido)}
                 </div>
-                <div className="flex items-center justify-between text-[11px] text-slate-500 mt-1">
-                  <span>Base de cálculo</span>
-                  <span className="text-blue-600 font-medium group-hover:underline flex items-center">
+                <div className="flex items-center justify-between text-[10px] sm:text-[11px] text-slate-500 mt-0.5">
+                  <span className="truncate">Base de cálculo</span>
+                  <span className="text-blue-600 font-medium group-hover:underline flex items-center shrink-0 ml-1">
                     Auditar <ChevronRight className="w-3 h-3 ml-0.5" />
                   </span>
                 </div>
@@ -199,29 +203,29 @@ export function FinancialSummaryCards({
               tabIndex={0}
               className="shadow-xs cursor-pointer hover:border-slate-400 hover:shadow-md hover:-translate-y-0.5 active:translate-y-0 transition-all duration-150 group bg-white border-slate-200 select-none ring-offset-background focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-slate-400"
             >
-              <CardHeader className="flex flex-row items-center justify-between pb-1 pt-3 px-3.5">
-                <div className="flex items-center gap-1">
-                  <CardTitle className="text-xs font-medium text-slate-600">
+              <CardHeader className="flex flex-row items-center justify-between pb-1 pt-2.5 px-3">
+                <div className="flex items-center gap-1 min-w-0">
+                  <CardTitle className="text-[11px] font-medium text-slate-600 truncate">
                     Comissão Bruta Prevista
                   </CardTitle>
                   <Tooltip>
                     <TooltipTrigger asChild>
-                      <HelpCircle className="w-3 h-3 text-slate-400" />
+                      <HelpCircle className="w-3 h-3 text-slate-400 shrink-0" />
                     </TooltipTrigger>
                     <TooltipContent className="text-xs">
                       Soma da comissão bruta gerada pelas vendas do período antes de ISS e deduções
                     </TooltipContent>
                   </Tooltip>
                 </div>
-                <TrendingUp className="w-4 h-4 text-slate-600 group-hover:scale-110 transition-transform" />
+                <TrendingUp className="w-3.5 h-3.5 text-slate-600 group-hover:scale-110 transition-transform shrink-0" />
               </CardHeader>
-              <CardContent className="px-3.5 pb-3">
-                <div className="text-lg font-bold text-slate-800">
+              <CardContent className="px-3 pb-2.5 pt-0">
+                <div className="text-base sm:text-lg font-bold text-slate-800 truncate">
                   R$ {formatCurrency(comissaoBrutaPrevista)}
                 </div>
-                <div className="flex items-center justify-between text-[11px] text-slate-500 mt-1">
-                  <span>Antes de impostos</span>
-                  <span className="text-slate-600 font-medium group-hover:underline flex items-center">
+                <div className="flex items-center justify-between text-[10px] sm:text-[11px] text-slate-500 mt-0.5">
+                  <span className="truncate">Antes de impostos</span>
+                  <span className="text-slate-600 font-medium group-hover:underline flex items-center shrink-0 ml-1">
                     Composição <ChevronRight className="w-3 h-3 ml-0.5" />
                   </span>
                 </div>
@@ -235,67 +239,104 @@ export function FinancialSummaryCards({
               tabIndex={0}
               className="shadow-xs cursor-pointer hover:border-amber-400 hover:shadow-md hover:-translate-y-0.5 active:translate-y-0 transition-all duration-150 group bg-white border-slate-200 select-none ring-offset-background focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-amber-400"
             >
-              <CardHeader className="flex flex-row items-center justify-between pb-1 pt-3 px-3.5">
-                <div className="flex items-center gap-1">
-                  <CardTitle className="text-xs font-medium text-slate-600">
+              <CardHeader className="flex flex-row items-center justify-between pb-1 pt-2.5 px-3">
+                <div className="flex items-center gap-1 min-w-0">
+                  <CardTitle className="text-[11px] font-medium text-slate-600 truncate">
                     ISS / Deduções Previstas
                   </CardTitle>
                   <Tooltip>
                     <TooltipTrigger asChild>
-                      <HelpCircle className="w-3 h-3 text-slate-400" />
+                      <HelpCircle className="w-3 h-3 text-slate-400 shrink-0" />
                     </TooltipTrigger>
                     <TooltipContent className="text-xs">
                       Total de deduções e impostos aplicáveis sobre a comissão do período
                     </TooltipContent>
                   </Tooltip>
                 </div>
-                <Receipt className="w-4 h-4 text-amber-600 group-hover:scale-110 transition-transform" />
+                <Receipt className="w-3.5 h-3.5 text-amber-600 group-hover:scale-110 transition-transform shrink-0" />
               </CardHeader>
-              <CardContent className="px-3.5 pb-3">
-                <div className="text-lg font-bold text-amber-700">
+              <CardContent className="px-3 pb-2.5 pt-0">
+                <div className="text-base sm:text-lg font-bold text-amber-700 truncate">
                   R$ {formatCurrency(issDeducoesPrevistas)}
                 </div>
-                <div className="flex items-center justify-between text-[11px] text-slate-500 mt-1">
-                  <span>Impostos retidos</span>
-                  <span className="text-amber-700 font-medium group-hover:underline flex items-center">
+                <div className="flex items-center justify-between text-[10px] sm:text-[11px] text-slate-500 mt-0.5">
+                  <span className="truncate">Impostos retidos</span>
+                  <span className="text-amber-700 font-medium group-hover:underline flex items-center shrink-0 ml-1">
                     Auditar <ChevronRight className="w-3 h-3 ml-0.5" />
                   </span>
                 </div>
               </CardContent>
             </Card>
 
-            {/* 4. Comissão Líquida Prevista (MAIOR DESTAQUE VISUAL) */}
+            {/* 4. Prêmio Bruto Vendido (NOVO CARD INFORMATIVO — ANTES DA COMISSÃO LÍQUIDA) */}
+            <Card
+              onClick={onPremioBrutoClick}
+              role="button"
+              tabIndex={0}
+              className="shadow-xs cursor-pointer hover:border-blue-400 hover:shadow-md hover:-translate-y-0.5 active:translate-y-0 transition-all duration-150 group bg-white border-slate-200 select-none ring-offset-background focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-blue-400"
+            >
+              <CardHeader className="flex flex-row items-center justify-between pb-1 pt-2.5 px-3">
+                <div className="flex items-center gap-1 min-w-0">
+                  <CardTitle className="text-[11px] font-medium text-slate-600 truncate">
+                    Prêmio Bruto Vendido
+                  </CardTitle>
+                  <Tooltip>
+                    <TooltipTrigger asChild>
+                      <HelpCircle className="w-3 h-3 text-slate-400 shrink-0" />
+                    </TooltipTrigger>
+                    <TooltipContent className="text-xs">
+                      Soma do prêmio total bruto das vendas correspondentes ao período/filtros
+                      (venda bruta antes de deduções)
+                    </TooltipContent>
+                  </Tooltip>
+                </div>
+                <Banknote className="w-3.5 h-3.5 text-blue-600 group-hover:scale-110 transition-transform shrink-0" />
+              </CardHeader>
+              <CardContent className="px-3 pb-2.5 pt-0">
+                <div className="text-base sm:text-lg font-bold text-slate-900 truncate">
+                  R$ {formatCurrency(premioBrutoVendido)}
+                </div>
+                <div className="flex items-center justify-between text-[10px] sm:text-[11px] text-slate-500 mt-0.5">
+                  <span className="truncate">Venda bruta total</span>
+                  <span className="text-blue-600 font-medium group-hover:underline flex items-center shrink-0 ml-1">
+                    Auditar <ChevronRight className="w-3 h-3 ml-0.5" />
+                  </span>
+                </div>
+              </CardContent>
+            </Card>
+
+            {/* 5. Comissão Líquida Prevista (MAIOR DESTAQUE VISUAL — PRINCIPAL) */}
             <Card
               onClick={onComissaoLiquidaClick}
               role="button"
               tabIndex={0}
               className="shadow-sm cursor-pointer hover:border-emerald-500 hover:shadow-md hover:-translate-y-0.5 active:translate-y-0 transition-all duration-150 group border-emerald-300 bg-gradient-to-br from-emerald-50/70 to-emerald-100/40 ring-1 ring-emerald-200/80 select-none ring-offset-background focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-emerald-500"
             >
-              <CardHeader className="flex flex-row items-center justify-between pb-1 pt-3 px-3.5">
-                <div className="flex items-center gap-1.5">
-                  <CardTitle className="text-xs font-bold text-emerald-900">
+              <CardHeader className="flex flex-row items-center justify-between pb-1 pt-2.5 px-3">
+                <div className="flex items-center gap-1 min-w-0">
+                  <CardTitle className="text-[11px] font-bold text-emerald-900 truncate">
                     Comissão Líquida Prevista
                   </CardTitle>
                   <Tooltip>
                     <TooltipTrigger asChild>
-                      <HelpCircle className="w-3 h-3 text-emerald-700" />
+                      <HelpCircle className="w-3 h-3 text-emerald-700 shrink-0" />
                     </TooltipTrigger>
                     <TooltipContent className="text-xs">
                       Comissão que efetivamente se espera receber (Bruta Prevista - ISS/Deduções)
                     </TooltipContent>
                   </Tooltip>
                 </div>
-                <span className="text-[9px] font-bold uppercase tracking-wider bg-emerald-200 text-emerald-900 px-1.5 py-0.5 rounded">
+                <span className="text-[8px] sm:text-[9px] font-bold uppercase tracking-wider bg-emerald-200 text-emerald-900 px-1 py-0.5 rounded shrink-0">
                   Principal
                 </span>
               </CardHeader>
-              <CardContent className="px-3.5 pb-3">
-                <div className="text-xl font-extrabold text-emerald-800">
+              <CardContent className="px-3 pb-2.5 pt-0">
+                <div className="text-base sm:text-lg lg:text-xl font-extrabold text-emerald-800 truncate">
                   R$ {formatCurrency(comissaoLiquidaPrevista)}
                 </div>
-                <div className="flex items-center justify-between text-[11px] text-emerald-700 mt-1 font-medium">
-                  <span>Bruta - Deduções</span>
-                  <span className="group-hover:underline flex items-center font-bold">
+                <div className="flex items-center justify-between text-[10px] sm:text-[11px] text-emerald-700 mt-0.5 font-medium">
+                  <span className="truncate">Bruta - Deduções</span>
+                  <span className="group-hover:underline flex items-center font-bold shrink-0 ml-1">
                     Ver propostas <ChevronRight className="w-3 h-3 ml-0.5" />
                   </span>
                 </div>

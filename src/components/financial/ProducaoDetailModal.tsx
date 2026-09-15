@@ -21,6 +21,7 @@ import {
 
 export type ProducaoDetailType =
   | 'premio_liquido'
+  | 'premio_bruto'
   | 'comissao_bruta'
   | 'iss_deducoes'
   | 'comissao_liquida'
@@ -53,8 +54,14 @@ export function ProducaoDetailModal({
       case 'premio_liquido':
         return {
           title: 'Detalhamento: Prêmio Líquido Vendido',
-          subtitle: `Vendas correspondentes ao período (${periodLabel})`,
+          subtitle: `Vendas correspondentes ao período (${periodLabel}) — Base líquida de cálculo`,
           highlightCol: 'premio',
+        }
+      case 'premio_bruto':
+        return {
+          title: 'Detalhamento: Prêmio Bruto Vendido',
+          subtitle: `Vendas correspondentes ao período (${periodLabel}) — Valor total bruto comercializado`,
+          highlightCol: 'premio_bruto',
         }
       case 'comissao_bruta':
         return {
@@ -82,6 +89,7 @@ export function ProducaoDetailModal({
   const rows = useMemo(() => {
     return policies.map((p) => {
       const premioLiquido = Number(p.valor_liquido || p.premium_amount || 0)
+      const premioBruto = Number(p.valor_bruto != null ? p.valor_bruto : p.premium_amount || 0)
       const commissionPercent = Number(p.commission_percent || 0)
       const comissaoBruta =
         p.commission != null
@@ -108,6 +116,7 @@ export function ProducaoDetailModal({
         seguradoraNome,
         produtoNome,
         premioLiquido,
+        premioBruto,
         comissaoBruta,
         iss,
         comissaoLiquida,
@@ -119,10 +128,11 @@ export function ProducaoDetailModal({
   // Totais exatos da lista completa (sem filtro de busca)
   const totals = useMemo(() => {
     const totalPremio = Math.round(rows.reduce((sum, r) => sum + r.premioLiquido, 0) * 100) / 100
+    const totalPremioBruto = Math.round(rows.reduce((sum, r) => sum + r.premioBruto, 0) * 100) / 100
     const totalBruta = Math.round(rows.reduce((sum, r) => sum + r.comissaoBruta, 0) * 100) / 100
     const totalIss = Math.round(rows.reduce((sum, r) => sum + r.iss, 0) * 100) / 100
     const totalLiquida = Math.round(rows.reduce((sum, r) => sum + r.comissaoLiquida, 0) * 100) / 100
-    return { totalPremio, totalBruta, totalIss, totalLiquida }
+    return { totalPremio, totalPremioBruto, totalBruta, totalIss, totalLiquida }
   }, [rows])
 
   // Filtro de busca local
@@ -146,6 +156,8 @@ export function ProducaoDetailModal({
     return {
       totalPremio:
         Math.round(filteredRows.reduce((sum, r) => sum + r.premioLiquido, 0) * 100) / 100,
+      totalPremioBruto:
+        Math.round(filteredRows.reduce((sum, r) => sum + r.premioBruto, 0) * 100) / 100,
       totalBruta: Math.round(filteredRows.reduce((sum, r) => sum + r.comissaoBruta, 0) * 100) / 100,
       totalIss: Math.round(filteredRows.reduce((sum, r) => sum + r.iss, 0) * 100) / 100,
       totalLiquida:
@@ -175,6 +187,7 @@ export function ProducaoDetailModal({
 
       const filenameMap: Record<ProducaoDetailType, string> = {
         premio_liquido: 'producao-premio-liquido-vendido',
+        premio_bruto: 'producao-premio-bruto-vendido',
         comissao_bruta: 'producao-comissao-bruta-prevista',
         iss_deducoes: 'producao-iss-deducoes-previstas',
         comissao_liquida: 'producao-comissao-liquida-prevista',
@@ -212,6 +225,12 @@ export function ProducaoDetailModal({
             variant: meta.highlightCol === 'iss' ? 'amber' : 'default',
           },
           {
+            label: 'Prêmio Bruto Vendido',
+            value: `R$ ${formatCurrency(baseTotals.totalPremioBruto)}`,
+            highlight: meta.highlightCol === 'premio_bruto',
+            variant: meta.highlightCol === 'premio_bruto' ? 'blue' : 'default',
+          },
+          {
             label: 'Comissão Líquida Prevista',
             value: `R$ ${formatCurrency(baseTotals.totalLiquida)}`,
             highlight: meta.highlightCol === 'liquida',
@@ -225,6 +244,7 @@ export function ProducaoDetailModal({
           { header: 'Seguradora', dataKey: 'seguradoraNome', align: 'left' },
           { header: 'Produto', dataKey: 'produtoNome', align: 'left' },
           { header: 'Prêmio Líquido', dataKey: 'premioLiquidoFmt', align: 'right' },
+          { header: 'Prêmio Bruto', dataKey: 'premioBrutoFmt', align: 'right' },
           { header: 'Comissão Bruta', dataKey: 'comissaoBrutaFmt', align: 'right' },
           { header: 'ISS / Deduções', dataKey: 'issFmt', align: 'right' },
           { header: 'Comissão Líquida', dataKey: 'comissaoLiquidaFmt', align: 'right' },
@@ -239,6 +259,7 @@ export function ProducaoDetailModal({
           seguradoraNome: r.seguradoraNome,
           produtoNome: r.produtoNome,
           premioLiquidoFmt: `R$ ${formatCurrency(r.premioLiquido)}`,
+          premioBrutoFmt: `R$ ${formatCurrency(r.premioBruto)}`,
           comissaoBrutaFmt: `R$ ${formatCurrency(r.comissaoBruta)}`,
           issFmt: r.iss > 0 ? `R$ ${formatCurrency(r.iss)}` : '-',
           comissaoLiquidaFmt: `R$ ${formatCurrency(r.comissaoLiquida)}`,
@@ -250,6 +271,7 @@ export function ProducaoDetailModal({
           seguradoraNome: '',
           produtoNome: '',
           premioLiquidoFmt: `R$ ${formatCurrency(baseTotals.totalPremio)}`,
+          premioBrutoFmt: `R$ ${formatCurrency(baseTotals.totalPremioBruto)}`,
           comissaoBrutaFmt: `R$ ${formatCurrency(baseTotals.totalBruta)}`,
           issFmt: `R$ ${formatCurrency(baseTotals.totalIss)}`,
           comissaoLiquidaFmt: `R$ ${formatCurrency(baseTotals.totalLiquida)}`,
@@ -294,7 +316,7 @@ export function ProducaoDetailModal({
         </DialogHeader>
 
         {/* Resumo Consolidado com destaque */}
-        <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 pt-2">
+        <div className="grid grid-cols-2 sm:grid-cols-5 gap-2 pt-2">
           <div
             className={`p-2.5 rounded-lg border text-xs ${
               meta.highlightCol === 'premio'
@@ -302,7 +324,7 @@ export function ProducaoDetailModal({
                 : 'bg-slate-50 border-slate-200'
             }`}
           >
-            <span className="text-slate-500 block">Prêmio Líquido Vendido</span>
+            <span className="text-slate-500 block">Prêmio Líquido</span>
             <strong className="text-slate-900 text-sm">
               R$ {formatCurrency(totals.totalPremio)}
             </strong>
@@ -314,7 +336,7 @@ export function ProducaoDetailModal({
                 : 'bg-slate-50 border-slate-200'
             }`}
           >
-            <span className="text-slate-500 block">Comissão Bruta Prevista</span>
+            <span className="text-slate-500 block">Comissão Bruta</span>
             <strong className="text-slate-900 text-sm">
               R$ {formatCurrency(totals.totalBruta)}
             </strong>
@@ -331,13 +353,25 @@ export function ProducaoDetailModal({
           </div>
           <div
             className={`p-2.5 rounded-lg border text-xs ${
+              meta.highlightCol === 'premio_bruto'
+                ? 'bg-blue-50/80 border-blue-300 shadow-xs'
+                : 'bg-slate-50 border-slate-200'
+            }`}
+          >
+            <span className="text-slate-500 block">Prêmio Bruto</span>
+            <strong className="text-slate-900 text-sm">
+              R$ {formatCurrency(totals.totalPremioBruto)}
+            </strong>
+          </div>
+          <div
+            className={`p-2.5 rounded-lg border text-xs ${
               meta.highlightCol === 'liquida'
                 ? 'bg-emerald-50/80 border-emerald-400 shadow-xs ring-1 ring-emerald-300'
                 : 'bg-emerald-50/40 border-emerald-200'
             }`}
           >
-            <span className="text-slate-500 block font-medium">Comissão Líquida Prevista</span>
-            <strong className="text-emerald-700 text-base">
+            <span className="text-slate-500 block font-medium">Comissão Líquida</span>
+            <strong className="text-emerald-700 text-sm sm:text-base">
               R$ {formatCurrency(totals.totalLiquida)}
             </strong>
           </div>
@@ -381,6 +415,13 @@ export function ProducaoDetailModal({
                 </th>
                 <th
                   className={`p-2.5 text-right ${
+                    meta.highlightCol === 'premio_bruto' ? 'bg-blue-100/60 font-bold' : ''
+                  }`}
+                >
+                  Prêmio Bruto
+                </th>
+                <th
+                  className={`p-2.5 text-right ${
                     meta.highlightCol === 'bruta' ? 'bg-blue-100/60 font-bold' : ''
                   }`}
                 >
@@ -407,7 +448,7 @@ export function ProducaoDetailModal({
             <tbody className="divide-y divide-slate-100">
               {paginatedRows.length === 0 ? (
                 <tr>
-                  <td colSpan={9} className="text-center p-8 text-slate-500">
+                  <td colSpan={10} className="text-center p-8 text-slate-500">
                     Nenhum registro encontrado para os filtros selecionados.
                   </td>
                 </tr>
@@ -438,6 +479,15 @@ export function ProducaoDetailModal({
                       }`}
                     >
                       R$ {formatCurrency(r.premioLiquido)}
+                    </td>
+                    <td
+                      className={`p-2.5 text-right font-medium ${
+                        meta.highlightCol === 'premio_bruto'
+                          ? 'bg-blue-50/50 font-bold text-blue-900'
+                          : ''
+                      }`}
+                    >
+                      R$ {formatCurrency(r.premioBruto)}
                     </td>
                     <td
                       className={`p-2.5 text-right font-medium ${
@@ -481,6 +531,13 @@ export function ProducaoDetailModal({
                   }`}
                 >
                   R$ {formatCurrency(totals.totalPremio)}
+                </td>
+                <td
+                  className={`p-2.5 text-right ${
+                    meta.highlightCol === 'premio_bruto' ? 'bg-blue-200/60 font-extrabold' : ''
+                  }`}
+                >
+                  R$ {formatCurrency(totals.totalPremioBruto)}
                 </td>
                 <td
                   className={`p-2.5 text-right ${

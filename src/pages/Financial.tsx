@@ -512,6 +512,13 @@ export default function Financial() {
         }, 0) * 100,
       ) / 100
 
+    const premioBrutoVendido =
+      Math.round(
+        periodStartPolicies.reduce((sum, p) => {
+          return sum + Number(p.valor_bruto != null ? p.valor_bruto : p.premium_amount || 0)
+        }, 0) * 100,
+      ) / 100
+
     const comissaoBrutaPrevista =
       Math.round(
         periodStartPolicies.reduce((sum, p) => {
@@ -1000,6 +1007,7 @@ export default function Financial() {
 
     return {
       premioLiquidoVendido,
+      premioBrutoVendido,
       comissaoBrutaPrevista,
       issDeducoesPrevistas,
       comissaoLiquidaPrevista,
@@ -1147,12 +1155,14 @@ export default function Financial() {
       <FinancialSummaryCards
         // BLOCO 1: PRODUÇÃO E COMISSÕES
         premioLiquidoVendido={metrics.premioLiquidoVendido}
+        premioBrutoVendido={metrics.premioBrutoVendido}
         comissaoBrutaPrevista={metrics.comissaoBrutaPrevista}
         issDeducoesPrevistas={metrics.issDeducoesPrevistas}
         comissaoLiquidaPrevista={metrics.comissaoLiquidaPrevista}
         onPremioLiquidoClick={() => setProducaoModalType('premio_liquido')}
         onComissaoBrutaClick={() => setProducaoModalType('comissao_bruta')}
         onIssDeducoesClick={() => setProducaoModalType('iss_deducoes')}
+        onPremioBrutoClick={() => setProducaoModalType('premio_bruto')}
         onComissaoLiquidaClick={() => setProducaoModalType('comissao_liquida')}
         // BLOCO 2: RECEBIMENTO DE COMISSÕES
         receivedCommissions={metrics.receivedCommissions}
