@@ -12,7 +12,8 @@ import { Badge } from '@/components/ui/badge'
 import { Policy } from '@/types'
 import { formatCurrency, formatDateDisplay } from '@/lib/utils'
 import { formatClientDocument } from '@/lib/document-validators'
-import { FileText, Search, ChevronLeft, ChevronRight } from 'lucide-react'
+import { FileText, Search, ChevronLeft, ChevronRight, Download, Loader2 } from 'lucide-react'
+import { exportFinancialListingPDF, ActiveFiltersContext } from '@/lib/financial-pdf'
 
 export type ProducaoDetailType =
   | 'premio_liquido'
@@ -26,13 +27,22 @@ interface Props {
   type: ProducaoDetailType | null
   policies: Policy[]
   periodLabel: string
+  filtersContext?: ActiveFiltersContext
 }
 
 const PAGE_SIZE = 10
 
-export function ProducaoDetailModal({ open, onOpenChange, type, policies, periodLabel }: Props) {
+export function ProducaoDetailModal({
+  open,
+  onOpenChange,
+  type,
+  policies,
+  periodLabel,
+  filtersContext,
+}: Props) {
   const [search, setSearch] = useState('')
   const [page, setPage] = useState(1)
+  const [isExporting, setIsExporting] = useState(false)
 
   const meta = useMemo(() => {
     switch (type) {
@@ -112,20 +122,33 @@ export function ProducaoDetailModal({ open, onOpenChange, type, policies, period
   }, [rows])
 
   // Filtro de busca local
-  const filteredRows = useMemo(() => {
-    if (!search.trim()) return rows
-    const q = search.trim().toLowerCase()
-    return rows.filter((r) => {
-      return (
-        r.proposta.toLowerCase().includes(q) ||
-        r.apolice.toLowerCase().includes(q) ||
-        r.clienteNome.toLowerCase().includes(q) ||
-        r.documento.toLowerCase().includes(q) ||
-        r.seguradoraNome.toLowerCase().includes(q) ||
-        r.produtoNome.toLowerCase().includes(q)
-      )
-    })
-  }, [rows, search])
+const filteredRows = useMemo(() => {
+  if (!search.trim()) return rows
+  const q = search.trim().toLowerCase()
+  return rows.filter((r) => {
+    return (
+      r.proposta.toLowerCase().includes(q) ||
+      r.apolice.toLowerCase().includes(q) ||
+      r.clienteNome.toLowerCase().includes(q) ||
+      r.documento.toLowerCase().includes(q) ||
+      r.seguradoraNome.toLowerCase().includes(q) ||
+      r.produtoNome.toLowerCase().includes(q)
+    )
+  })
+}, [rows, search])
+
+// Totais das linhas filtradas (para refletir a busca no consolidado)
+const filteredTotals = useMemo(() => {
+  return {
+    totalPremio:
+      Math.round(filteredRows.reduce((sum, r) => sum + r.premioLiquido, 0) * 100) / 100,
+    totalBruta:
+      Math.round(filteredRows.reduce((sum, r) => sum + r.comissaoBruta, 0) * 100) / 100,
+    totalIss: Math.round(filteredRows.reduce((sum, r) => sum + r.iss, 0) * 100) / 100,
+    totalLiquida:
+      Math.round(filteredRows.reduce((sum, r) => sum + r.comissaoLiquida, 0) * 100) / 100,
+  }
+}, [filteredRows])
 
   const totalPages = Math.max(1, Math.ceil(filteredRows.length / PAGE_SIZE))
   const paginatedRows = useMemo(() => {
@@ -141,16 +164,120 @@ export function ProducaoDetailModal({ open, onOpenChange, type, policies, period
     onOpenChange(nextOpen)
   }
 
+  const handleExportPDF = async () => {
+    try {
+      setIsExporting(true)
+      const isFiltered = Boolean(search.trim())
+      const baseTotals = isFiltered ? filteredTotals : totals
+
+      await exportFinancialListingPDF({
+        title: meta.title,
+        subtitle: meta.subtitle,
+        periodLabel,
+        orientation: 'landscape',
+        filters: {
+          periodo: periodLabel,
+          ...filtersContext,
+          busca: search.trim() || undefined,
+        },
+        summaryCards: [
+          {
+            label: 'Prêmio Líquido Vendido',
+            value: `R$ ${formatCurrency(baseTotals.totalPremio)}`,
+            highlight: meta.highlightCol === 'premio',
+            variant: meta.highlightCol === 'premio' ? 'blue' : 'default',
+          },
+          {
+            label: 'Comissão Bruta Prevista',
+            value: `R$ ${formatCurrency(baseTotals.totalBruta)}`,
+            highlight: meta.highlightCol === 'bruta',
+            variant: meta.highlightCol === 'bruta' ? 'blue' : 'default',
+          },
+          {
+            label: 'ISS / Deduções',
+            value: `R$ ${formatCurrency(baseTotals.totalIss)}`,
+            highlight: meta.highlightCol === 'iss',
+            variant: meta.highlightCol === 'iss' ? 'amber' : 'default',
+          },
+          {
+            label: 'Comissão Líquida Prevista',
+            value: `R$ ${formatCurrency(baseTotals.totalLiquida)}`,
+            highlight: meta.highlightCol === 'liquida',
+            variant: 'green',
+          },
+        ],
+        columns: [
+          { header: 'Proposta', dataKey: 'propostaFormatada', align: 'left' },
+          { header: 'Cliente', dataKey: 'clienteNome', align: 'left' },
+          { header: 'CPF / CNPJ', dataKey: 'documento', align: 'left' },
+          { header: 'Seguradora', dataKey: 'seguradoraNome', align: 'left' },
+          { header: 'Produto', dataKey: 'produtoNome', align: 'left' },
+          { header: 'Prêmio Líquido', dataKey: 'premioLiquidoFmt', align: 'right' },
+          { header: 'Comissão Bruta', dataKey: 'comissaoBrutaFmt', align: 'right' },
+          { header: 'ISS / Deduções', dataKey: 'issFmt', align: 'right' },
+          { header: 'Comissão Líquida', dataKey: 'comissaoLiquidaFmt', align: 'right' },
+        ],
+        rows: filteredRows.map((r) => ({
+          propostaFormatada:
+            r.apolice && r.apolice !== r.proposta
+              ? `${r.proposta}\n(Ap: ${r.apolice})`
+              : r.proposta,
+          clienteNome: r.clienteNome,
+          documento: r.documento,
+          seguradoraNome: r.seguradoraNome,
+          produtoNome: r.produtoNome,
+          premioLiquidoFmt: `R$ ${formatCurrency(r.premioLiquido)}`,
+          comissaoBrutaFmt: `R$ ${formatCurrency(r.comissaoBruta)}`,
+          issFmt: r.iss > 0 ? `R$ ${formatCurrency(r.iss)}` : '-',
+          comissaoLiquidaFmt: `R$ ${formatCurrency(r.comissaoLiquida)}`,
+        })),
+        totalRow: {
+          propostaFormatada: `Total Consolidado (${filteredRows.length} ${filteredRows.length === 1 ? 'venda' : 'vendas'})`,
+          clienteNome: '',
+          documento: '',
+          seguradoraNome: '',
+          produtoNome: '',
+          premioLiquidoFmt: `R$ ${formatCurrency(baseTotals.totalPremio)}`,
+          comissaoBrutaFmt: `R$ ${formatCurrency(baseTotals.totalBruta)}`,
+          issFmt: `R$ ${formatCurrency(baseTotals.totalIss)}`,
+          comissaoLiquidaFmt: `R$ ${formatCurrency(baseTotals.totalLiquida)}`,
+        },
+      })
+    } finally {
+      setIsExporting(false)
+    }
+  }
+
   return (
     <Dialog open={open} onOpenChange={handleOpenChange}>
       <DialogContent className="max-w-5xl max-h-[88vh] flex flex-col p-6">
         <DialogHeader className="pb-2 border-b">
-          <div className="flex items-center gap-2">
-            <FileText className="w-5 h-5 text-blue-600" />
-            <div>
-              <DialogTitle className="text-base font-bold text-slate-900">{meta.title}</DialogTitle>
-              <p className="text-xs text-slate-500 mt-0.5">{meta.subtitle}</p>
+          <div className="flex items-center justify-between gap-3 pr-6">
+            <div className="flex items-center gap-2">
+              <FileText className="w-5 h-5 text-blue-600 shrink-0" />
+              <div>
+                <DialogTitle className="text-base font-bold text-slate-900">
+                  {meta.title}
+                </DialogTitle>
+                <p className="text-xs text-slate-500 mt-0.5">{meta.subtitle}</p>
+              </div>
             </div>
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              onClick={handleExportPDF}
+              disabled={isExporting || rows.length === 0}
+              className="h-8 px-2.5 text-xs font-semibold border-slate-300 text-slate-700 hover:bg-slate-50 hover:text-blue-600 shrink-0 gap-1.5 shadow-2xs"
+              title="Exportar listagem completa em PDF para conferência e auditoria"
+            >
+              {isExporting ? (
+                <Loader2 className="w-3.5 h-3.5 animate-spin" />
+              ) : (
+                <Download className="w-3.5 h-3.5 text-blue-600" />
+              )}
+              <span>Exportar PDF</span>
+            </Button>
           </div>
         </DialogHeader>
 
