@@ -13,6 +13,7 @@ import {
   SlidersHorizontal,
   DollarSign,
   AlertCircle,
+  CreditCard,
 } from 'lucide-react'
 import { getPolicies, updatePolicyFinancial } from '@/services/policies'
 import { getParceiros } from '@/services/parceiros'
@@ -31,6 +32,7 @@ import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Card } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
+import { Checkbox } from '@/components/ui/checkbox'
 import {
   Select,
   SelectContent,
@@ -126,6 +128,9 @@ export default function PartnerReport() {
   const [observacaoPagamento, setObservacaoPagamento] = useState<string>('')
   const [isSavingPagamento, setIsSavingPagamento] = useState(false)
 
+  // Seleção de apólices com checkbox (para atalho de fechamento pontual / seleção)
+  const [selectedPolicyIds, setSelectedPolicyIds] = useState<string[]>([])
+
   const loadData = useCallback(async () => {
     try {
       const [pols, pars] = await Promise.all([
@@ -145,6 +150,7 @@ export default function PartnerReport() {
 
   useEffect(() => {
     setPage(1)
+    setSelectedPolicyIds([])
   }, [selectedPartner, repasseStatus, seguradoraStatus, dateFrom, dateTo, cpfCnpjSearch])
 
   // Ao trocar de parceiro: limpar campos e carregar ajustes vinculados exclusivamente ao parceiro selecionado
@@ -235,13 +241,19 @@ export default function PartnerReport() {
 
     if (cleanDateFrom) {
       result = result.filter((p) => {
-        const ref = extractDateOnly(p.start_date)
+        // Se a apólice já teve o repasse pago ao parceiro, a data financeira de auditoria
+        // do repasse é data_pagamento_parceiro (caso contrário, data de vigência start_date)
+        const dateField =
+          p.pago_parceiro && p.data_pagamento_parceiro ? p.data_pagamento_parceiro : p.start_date
+        const ref = extractDateOnly(dateField)
         return ref && ref >= cleanDateFrom
       })
     }
     if (cleanDateTo) {
       result = result.filter((p) => {
-        const ref = extractDateOnly(p.start_date)
+        const dateField =
+          p.pago_parceiro && p.data_pagamento_parceiro ? p.data_pagamento_parceiro : p.start_date
+        const ref = extractDateOnly(dateField)
         return ref && ref <= cleanDateTo
       })
     }
@@ -266,9 +278,11 @@ export default function PartnerReport() {
         p.expand?.parceiro?.nome || parceiros.find((par) => par.id === p.parceiro)?.nome || 'N/A'
 
       return {
+        policyId: p.id,
         clientName: client?.name || 'N/A',
         clientCpfCnpj: client ? formatClientDocument(client) : '',
         partnerName,
+        partnerId: p.parceiro,
         seguradoraName: p.expand?.seguradora?.nome || p.insurance_company || 'N/A',
         tipoSeguro: p.tipo_de_seguro || p.coverage_type || 'N/A',
         valorLiquido,
@@ -306,17 +320,39 @@ export default function PartnerReport() {
   const totalPaid = reportEntries
     .filter((e) => e.statusRepasse === 'Pago')
     .reduce((s, e) => s + e.valorRepasse, 0)
-  const totalPending = reportEntries
+  const totalPendingAll = reportEntries
     .filter((e) => e.statusRepasse === 'Pendente')
     .reduce((s, e) => s + e.valorRepasse, 0)
 
-  // Apólices pendentes de repasse para o parceiro selecionado no fechamento
+  // Apólices pendentes de repasse na listagem filtrada
   // Proteção: estritamente itens pendentes (pago_parceiro != true)
-  const pendingPoliciesToPay = useMemo(() => {
+  const allPendingPolicies = useMemo(() => {
     return filteredPolicies.filter((p) => !p.pago_parceiro)
   }, [filteredPolicies])
 
-  // Base para cálculo da taxa PIX: apenas repasses PENDENTES após débitos (se positivo)
+  // Quando há seleção ativa por checkbox, as pendências a pagar consideram a seleção
+  const hasSelection = selectedPolicyIds.length > 0
+
+  const pendingPoliciesToPay = useMemo(() => {
+    if (hasSelection) {
+      const selectedSet = new Set(selectedPolicyIds)
+      return allPendingPolicies.filter((p) => selectedSet.has(p.id))
+    }
+    return allPendingPolicies
+  }, [hasSelection, selectedPolicyIds, allPendingPolicies])
+
+  // Total pendente efetivo considerado no fechamento (se houver seleção, soma apenas as selecionadas)
+  const totalPending = useMemo(() => {
+    if (hasSelection) {
+      const selectedSet = new Set(selectedPolicyIds)
+      return reportEntries
+        .filter((e) => e.statusRepasse === 'Pendente' && e.policyId && selectedSet.has(e.policyId))
+        .reduce((s, e) => s + e.valorRepasse, 0)
+    }
+    return totalPendingAll
+  }, [hasSelection, selectedPolicyIds, reportEntries, totalPendingAll])
+
+  // Base para cálculo da taxa PIX: apenas repasses PENDENTES a pagar após débitos (se positivo)
   // Cálculo automático da taxa PIX: 1% sobre o valor da transferência a pagar, limitado ao máximo de R$ 10,00 (mínimo R$ 0)
   const taxaPixCalculadaAuto = useMemo(() => {
     if (totalPending <= 0) return 0
@@ -335,7 +371,7 @@ export default function PartnerReport() {
     return taxaPixCalculadaAuto
   }, [totalPending, taxaPixManual, taxaPixCalculadaAuto])
 
-  // Líquido a Pagar final (destacado na tela): repasses PENDENTES menos débitos e taxa PIX
+  // Líquido a Pagar final (destacado na tela): repasses PENDENTES a pagar menos débitos e taxa PIX
   const totalLiquidoAPagar = useMemo(() => {
     if (totalPending <= 0) return 0
     const liquido = totalPending - totalDebitos - taxaPixEfetiva
@@ -435,19 +471,81 @@ export default function PartnerReport() {
     toast({ title: 'Débito removido' })
   }
 
-  // Geração de PDF do relatório
-  const handleGeneratePDF = () => {
-    if (reportEntries.length === 0) {
+  // Seleção múltipla por checkbox
+  const pendingPaginatedEntries = useMemo(() => {
+    return paginatedEntries.filter((e) => e.statusRepasse === 'Pendente' && e.policyId)
+  }, [paginatedEntries])
+
+  const isAllPaginatedPendingSelected = useMemo(() => {
+    if (pendingPaginatedEntries.length === 0) return false
+    return pendingPaginatedEntries.every(
+      (e) => e.policyId && selectedPolicyIds.includes(e.policyId),
+    )
+  }, [pendingPaginatedEntries, selectedPolicyIds])
+
+  const toggleSelectAllPaginated = () => {
+    if (isAllPaginatedPendingSelected) {
+      const pagePolicyIds = new Set(pendingPaginatedEntries.map((e) => e.policyId!))
+      setSelectedPolicyIds((prev) => prev.filter((id) => !pagePolicyIds.has(id)))
+    } else {
+      const toAdd = pendingPaginatedEntries
+        .map((e) => e.policyId!)
+        .filter((id) => !selectedPolicyIds.includes(id))
+      setSelectedPolicyIds((prev) => [...prev, ...toAdd])
+    }
+  }
+
+  const toggleSelectPolicy = (policyId: string) => {
+    setSelectedPolicyIds((prev) =>
+      prev.includes(policyId) ? prev.filter((id) => id !== policyId) : [...prev, policyId],
+    )
+  }
+
+  // Geração de PDF do relatório (opcionalmente restrito a apólices específicas, ex.: seleção)
+  const handleGeneratePDF = (entriesToPrint?: PartnerReportEntry[]) => {
+    const entries =
+      entriesToPrint ||
+      (hasSelection
+        ? reportEntries.filter((e) => e.policyId && selectedPolicyIds.includes(e.policyId))
+        : reportEntries)
+
+    if (entries.length === 0) {
       toast({ title: 'Nenhum dado para gerar relatório', variant: 'destructive' })
       return
     }
-    const selectedParceiro = parceiros.find((p) => p.id === selectedPartner)
+
+    // Se as entradas pertencem todas ao mesmo parceiro, usa os dados desse parceiro
+    const distinctPartnerIds = Array.from(new Set(entries.map((e) => e.partnerId).filter(Boolean)))
+    const targetPartnerId =
+      selectedPartner !== 'all'
+        ? selectedPartner
+        : distinctPartnerIds.length === 1
+          ? (distinctPartnerIds[0] as string)
+          : 'all'
+
+    const selectedParceiro = parceiros.find((p) => p.id === targetPartnerId)
     const partnerName =
-      selectedPartner === 'all' ? 'Todos os Parceiros' : selectedParceiro?.nome || 'Parceiro'
+      targetPartnerId === 'all' ? 'Todos os Parceiros' : selectedParceiro?.nome || 'Parceiro'
+
+    const pdfTotalBruto = entries.reduce((s, e) => s + e.valorRepasse, 0)
+    const pdfTotalPaid = entries
+      .filter((e) => e.statusRepasse === 'Pago')
+      .reduce((s, e) => s + e.valorRepasse, 0)
+    const pdfTotalPending = entries
+      .filter((e) => e.statusRepasse === 'Pendente')
+      .reduce((s, e) => s + e.valorRepasse, 0)
+
+    // Se imprimindo a seleção do fechamento atual, usa os débitos e taxa vigentes
+    const isCurrentSelection = !entriesToPrint || entriesToPrint === entries
+    const pdfDebitos = isCurrentSelection ? totalDebitos : 0
+    const pdfTaxaPix = isCurrentSelection ? taxaPixEfetiva : 0
+    const pdfLiquido = isCurrentSelection
+      ? totalLiquidoAPagar
+      : Math.max(0, pdfTotalPending - pdfDebitos - pdfTaxaPix)
 
     generatePartnerReportPDF({
       partnerName,
-      isAllPartners: selectedPartner === 'all',
+      isAllPartners: targetPartnerId === 'all',
       partnerInfo: selectedParceiro
         ? {
             nome: selectedParceiro.nome,
@@ -460,30 +558,88 @@ export default function PartnerReport() {
       foundClientName: foundClient?.name || null,
       foundClientDocument: foundClient ? formatClientDocument(foundClient) : null,
       generatedAt: new Date(),
-      entries: reportEntries,
-      totalBrutoRepasse,
-      totalDebitos,
-      debitosList: debitos,
-      taxaPixValor: taxaPixEfetiva,
-      totalLiquidoAPagar,
-      totalPaid,
-      totalPending,
+      entries,
+      totalBrutoRepasse: pdfTotalBruto,
+      totalDebitos: pdfDebitos,
+      debitosList: isCurrentSelection ? debitos : [],
+      taxaPixValor: pdfTaxaPix,
+      totalLiquidoAPagar: pdfLiquido,
+      totalPaid: pdfTotalPaid,
+      totalPending: pdfTotalPending,
     })
   }
 
-  // Marcar repasses como pagos e salvar histórico permanente de forma ATÔMICA e SEGURA
-  const handleConfirmMarkAsPaid = async () => {
-    if (!selectedPartner || selectedPartner === 'all') {
+  // Atalho do usuário: Gerar relatório e seguir direto para pagamento das selecionadas
+  const handleGerarRelatorioEPagarSelecionadas = () => {
+    if (selectedPolicyIds.length === 0) {
       toast({
-        title: 'Selecione um parceiro específico para registrar o pagamento',
+        title: 'Nenhuma apólice selecionada',
+        description: 'Selecione ao menos uma apólice pendente nas caixas de seleção.',
         variant: 'destructive',
       })
       return
     }
 
+    const selectedEntries = reportEntries.filter(
+      (e) => e.policyId && selectedPolicyIds.includes(e.policyId) && e.statusRepasse === 'Pendente',
+    )
+
+    if (selectedEntries.length === 0) {
+      toast({
+        title: 'Nenhuma apólice pendente entre as selecionadas',
+        description: 'Todas as apólices selecionadas já foram pagas.',
+        variant: 'destructive',
+      })
+      return
+    }
+
+    // Se estiver com filtro "Todos os parceiros", verificar se pertencem ao mesmo parceiro
+    const partnerIds = Array.from(new Set(selectedEntries.map((e) => e.partnerId).filter(Boolean)))
+    if (partnerIds.length > 1) {
+      toast({
+        title: 'Parceiros múltiplos na seleção',
+        description:
+          'Selecione apenas apólices de um mesmo parceiro para gerar o relatório e realizar a baixa.',
+        variant: 'destructive',
+      })
+      return
+    }
+
+    if (selectedPartner === 'all' && partnerIds.length === 1 && partnerIds[0]) {
+      // Ajusta o parceiro selecionado automaticamente para alinhar os débitos e histórico
+      setSelectedPartner(partnerIds[0])
+    }
+
+    // 1. Gera o PDF filtrado exatamente pelas selecionadas
+    handleGeneratePDF(selectedEntries)
+
+    // 2. Abre a confirmação de baixa para pagamento simultâneo
+    setDataPagamentoFinal(todayLocalDate())
+    setIsMarkPaidConfirmOpen(true)
+  }
+
+  // Marcar repasses como pagos e salvar histórico permanente de forma ATÔMICA e SEGURA
+  const handleConfirmMarkAsPaid = async () => {
+    // Determinar o ID do parceiro a baixar
+    let targetPartnerId = selectedPartner
+    if (!targetPartnerId || targetPartnerId === 'all') {
+      const distinctPartners = Array.from(
+        new Set(pendingPoliciesToPay.map((p) => p.parceiro).filter(Boolean)),
+      )
+      if (distinctPartners.length === 1 && distinctPartners[0]) {
+        targetPartnerId = distinctPartners[0]
+      } else {
+        toast({
+          title: 'Selecione um parceiro específico para registrar o pagamento',
+          variant: 'destructive',
+        })
+        return
+      }
+    }
+
     if (pendingPoliciesToPay.length === 0) {
       toast({
-        title: 'Nenhum repasse pendente para marcar como pago neste filtro',
+        title: 'Nenhum repasse pendente para marcar como pago',
         variant: 'destructive',
       })
       return
@@ -510,7 +666,7 @@ export default function PartnerReport() {
       // Se débito > repasse disponível, abate somente o disponível e mantém o saldo restante pendente.
       // Repasse R$ 0,00 continua zero e nunca é recalculado.
       const res = await executarFechamentoParceiro({
-        parceiro_id: selectedPartner,
+        parceiro_id: targetPartnerId,
         data_pagamento: dataPagamentoFinal || todayLocalDate(),
         observacoes: observacaoPagamento.trim(),
         debitos,
@@ -531,13 +687,15 @@ export default function PartnerReport() {
       setObservacaoPagamento('')
       setDebitos([])
       setTaxaPixManual(null)
+      setSelectedPolicyIds([])
 
       // Recarregar dados e débitos pendentes atualizados
       await loadData()
-      if (selectedPartner !== 'all') {
+      const partnerToReload = targetPartnerId !== 'all' ? targetPartnerId : selectedPartner
+      if (partnerToReload !== 'all') {
         const [hist, debtList] = await Promise.all([
-          getParceiroPagamentos(selectedPartner),
-          getParceiroDebitosPendentes(selectedPartner),
+          getParceiroPagamentos(partnerToReload),
+          getParceiroDebitosPendentes(partnerToReload),
         ])
         setPagamentosHistorico(hist)
         setDebitos(
@@ -851,17 +1009,34 @@ export default function PartnerReport() {
 
         {/* Ações Inferiores do Painel de Filtro */}
         <div className="flex flex-wrap items-center justify-between gap-3 pt-2">
-          <div className="text-xs text-slate-500">
-            {reportEntries.length} comissões encontradas |{' '}
-            <strong className="text-slate-700">{pendingPoliciesToPay.length} pendentes</strong>
+          <div className="text-xs text-slate-500 flex items-center gap-2 flex-wrap">
+            <span>
+              {reportEntries.length} comissões encontradas |{' '}
+              <strong className="text-slate-700">{allPendingPolicies.length} pendentes</strong>
+            </span>
+            {hasSelection && (
+              <Badge variant="secondary" className="bg-blue-100 text-blue-800 border-blue-200">
+                {selectedPolicyIds.length} apólice(s) selecionada(s) para fechamento
+              </Badge>
+            )}
           </div>
-          <div className="flex items-center gap-2">
+          <div className="flex items-center gap-2 flex-wrap">
+            {hasSelection && (
+              <Button
+                className="bg-blue-600 hover:bg-blue-700 text-white font-semibold shadow-sm"
+                onClick={handleGerarRelatorioEPagarSelecionadas}
+              >
+                <CreditCard className="w-4 h-4 mr-2" /> Gerar relatório e pagar selecionadas (
+                {selectedPolicyIds.length})
+              </Button>
+            )}
             <Button
               variant="outline"
               className="border-slate-300 hover:bg-slate-100"
-              onClick={handleGeneratePDF}
+              onClick={() => handleGeneratePDF()}
             >
-              <FileDown className="w-4 h-4 mr-2 text-slate-700" /> Gerar PDF do Relatório
+              <FileDown className="w-4 h-4 mr-2 text-slate-700" />{' '}
+              {hasSelection ? 'Gerar PDF (Selecionadas)' : 'Gerar PDF do Relatório'}
             </Button>
             {selectedPartner !== 'all' && (
               <Button
@@ -900,10 +1075,45 @@ export default function PartnerReport() {
         <>
           {/* Tabela de Comissões */}
           <Card className="shadow-sm overflow-hidden border">
+            {hasSelection && (
+              <div className="bg-blue-50/90 border-b border-blue-200 px-4 py-2.5 flex flex-wrap items-center justify-between gap-2 text-xs">
+                <div className="text-blue-900 font-medium">
+                  <strong>{selectedPolicyIds.length}</strong> apólice(s) selecionada(s) para
+                  pagamento. O resumo de fechamento e a geração do relatório refletem apenas os
+                  itens marcados.
+                </div>
+                <div className="flex items-center gap-2">
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    className="h-7 text-xs bg-white text-slate-700 hover:bg-slate-50"
+                    onClick={() => setSelectedPolicyIds([])}
+                  >
+                    Limpar seleção
+                  </Button>
+                  <Button
+                    size="sm"
+                    className="h-7 text-xs bg-blue-600 hover:bg-blue-700 text-white font-semibold"
+                    onClick={handleGerarRelatorioEPagarSelecionadas}
+                  >
+                    <CreditCard className="w-3.5 h-3.5 mr-1" /> Gerar relatório e pagar selecionadas
+                  </Button>
+                </div>
+              </div>
+            )}
             <div className="overflow-x-auto">
               <table className="w-full text-left text-sm text-slate-700">
                 <thead className="bg-slate-100 text-slate-600 font-semibold border-b">
                   <tr>
+                    <th className="p-3.5 w-10 text-center">
+                      <Checkbox
+                        checked={isAllPaginatedPendingSelected}
+                        disabled={pendingPaginatedEntries.length === 0}
+                        onCheckedChange={toggleSelectAllPaginated}
+                        aria-label="Selecionar todas as pendentes da página"
+                        title="Selecionar todas as pendentes da página"
+                      />
+                    </th>
                     <th className="p-3.5">Nome do Cliente</th>
                     <th className="p-3.5">CPF/CNPJ</th>
                     <th className="p-3.5">Parceiro</th>
@@ -920,50 +1130,74 @@ export default function PartnerReport() {
                 <tbody className="divide-y divide-slate-100">
                   {paginatedEntries.length === 0 ? (
                     <tr>
-                      <td colSpan={11} className="text-center p-6 text-slate-500">
+                      <td colSpan={12} className="text-center p-6 text-slate-500">
                         Nenhum registro encontrado para os filtros selecionados.
                       </td>
                     </tr>
                   ) : (
-                    paginatedEntries.map((e, i) => (
-                      <tr key={i} className="hover:bg-slate-50/80">
-                        <td className="p-3.5 font-semibold">{e.clientName}</td>
-                        <td className="p-3.5 text-xs text-slate-600">{e.clientCpfCnpj || '-'}</td>
-                        <td className="p-3.5">
-                          <span className="font-semibold text-blue-700 bg-blue-50/80 px-2 py-0.5 rounded border border-blue-100">
-                            {e.partnerName || '-'}
-                          </span>
-                        </td>
-                        <td className="p-3.5">{e.seguradoraName}</td>
-                        <td className="p-3.5">{e.tipoSeguro}</td>
-                        <td className="p-3.5 text-right font-bold">R$ {fmt(e.valorLiquido)}</td>
-                        <td className="p-3.5 text-center">{e.repassePercent}%</td>
-                        <td className="p-3.5 text-right font-bold text-blue-600">
-                          R$ {fmt(e.valorRepasse)}
-                        </td>
-                        <td className="p-3.5 text-center">
-                          <Badge
-                            className={
-                              e.statusRepasse === 'Pago' ? 'bg-emerald-500' : 'bg-amber-500'
-                            }
-                          >
-                            {e.statusRepasse === 'Pago' ? 'Pago' : 'Pendente'}
-                          </Badge>
-                        </td>
-                        <td className="p-3.5 text-center text-xs">
-                          {e.dataPagamentoRepasse || '-'}
-                        </td>
-                        <td className="p-3.5 text-center">
-                          <Badge
-                            className={
-                              e.statusSeguradora === 'Recebida' ? 'bg-emerald-500' : 'bg-amber-500'
-                            }
-                          >
-                            {e.statusSeguradora}
-                          </Badge>
-                        </td>
-                      </tr>
-                    ))
+                    paginatedEntries.map((e, i) => {
+                      const isPending = e.statusRepasse === 'Pendente'
+                      const isSelected = !!e.policyId && selectedPolicyIds.includes(e.policyId)
+
+                      return (
+                        <tr
+                          key={e.policyId || i}
+                          className={`hover:bg-slate-50/80 transition-colors ${
+                            isSelected ? 'bg-blue-50/50' : ''
+                          }`}
+                        >
+                          <td className="p-3.5 text-center">
+                            {isPending && e.policyId ? (
+                              <Checkbox
+                                checked={isSelected}
+                                onCheckedChange={() => toggleSelectPolicy(e.policyId!)}
+                                aria-label={`Selecionar apólice ${e.clientName}`}
+                                title="Marcar apólice para pagamento"
+                              />
+                            ) : (
+                              <span className="text-slate-300 text-xs">-</span>
+                            )}
+                          </td>
+                          <td className="p-3.5 font-semibold">{e.clientName}</td>
+                          <td className="p-3.5 text-xs text-slate-600">{e.clientCpfCnpj || '-'}</td>
+                          <td className="p-3.5">
+                            <span className="font-semibold text-blue-700 bg-blue-50/80 px-2 py-0.5 rounded border border-blue-100">
+                              {e.partnerName || '-'}
+                            </span>
+                          </td>
+                          <td className="p-3.5">{e.seguradoraName}</td>
+                          <td className="p-3.5">{e.tipoSeguro}</td>
+                          <td className="p-3.5 text-right font-bold">R$ {fmt(e.valorLiquido)}</td>
+                          <td className="p-3.5 text-center">{e.repassePercent}%</td>
+                          <td className="p-3.5 text-right font-bold text-blue-600">
+                            R$ {fmt(e.valorRepasse)}
+                          </td>
+                          <td className="p-3.5 text-center">
+                            <Badge
+                              className={
+                                e.statusRepasse === 'Pago' ? 'bg-emerald-500' : 'bg-amber-500'
+                              }
+                            >
+                              {e.statusRepasse === 'Pago' ? 'Pago' : 'Pendente'}
+                            </Badge>
+                          </td>
+                          <td className="p-3.5 text-center text-xs">
+                            {e.dataPagamentoRepasse || '-'}
+                          </td>
+                          <td className="p-3.5 text-center">
+                            <Badge
+                              className={
+                                e.statusSeguradora === 'Recebida'
+                                  ? 'bg-emerald-500'
+                                  : 'bg-amber-500'
+                              }
+                            >
+                              {e.statusSeguradora}
+                            </Badge>
+                          </td>
+                        </tr>
+                      )
+                    })
                   )}
                 </tbody>
               </table>
@@ -1014,9 +1248,14 @@ export default function PartnerReport() {
                 </div>
                 <div className="bg-amber-50 border border-amber-200 rounded-lg p-3.5">
                   <span className="text-amber-700 font-semibold text-xs block">
-                    Repasses Pendentes:
+                    {hasSelection ? 'Repasses Selecionados:' : 'Repasses Pendentes:'}
                   </span>
                   <span className="font-bold text-lg text-amber-900">R$ {fmt(totalPending)}</span>
+                  {hasSelection && (
+                    <span className="text-[11px] text-amber-800 block mt-0.5">
+                      (Total geral pendente: R$ {fmt(totalPendingAll)})
+                    </span>
+                  )}
                 </div>
               </div>
 
@@ -1053,7 +1292,11 @@ export default function PartnerReport() {
                   <span className="font-semibold text-emerald-700">R$ {fmt(totalPaid)}</span>
                 </div>
                 <div className="flex justify-between text-slate-700">
-                  <span>Repasses Pendentes a Pagar (Base):</span>
+                  <span>
+                    {hasSelection
+                      ? `Repasses Selecionados a Pagar (${pendingPoliciesToPay.length} itens):`
+                      : 'Repasses Pendentes a Pagar (Base):'}
+                  </span>
                   <span className="font-bold text-amber-700">R$ {fmt(totalPending)}</span>
                 </div>
 
@@ -1158,14 +1401,24 @@ export default function PartnerReport() {
                 <p>
                   Você está finalizando o fechamento e registrando o pagamento para{' '}
                   <strong className="text-slate-900">
-                    {parceiros.find((p) => p.id === selectedPartner)?.nome}
+                    {parceiros.find(
+                      (p) =>
+                        p.id ===
+                        (selectedPartner !== 'all'
+                          ? selectedPartner
+                          : pendingPoliciesToPay[0]?.parceiro),
+                    )?.nome || 'Parceiro'}
                   </strong>
                   .
                 </p>
 
                 <div className="p-3 bg-slate-50 border rounded-md space-y-1 text-xs">
                   <div className="flex justify-between">
-                    <span>Repasses Pendentes ({pendingPoliciesToPay.length}):</span>
+                    <span>
+                      {hasSelection
+                        ? `Repasses Selecionados (${pendingPoliciesToPay.length}):`
+                        : `Repasses Pendentes (${pendingPoliciesToPay.length}):`}
+                    </span>
                     <strong className="text-slate-800">R$ {fmt(totalPending)}</strong>
                   </div>
                   <div className="flex justify-between text-red-600">

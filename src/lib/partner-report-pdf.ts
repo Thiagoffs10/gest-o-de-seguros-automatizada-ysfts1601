@@ -2,9 +2,11 @@ import logoImg from '@/assets/cred10mixlogooficialfundobranco4k-12574.jpg'
 import { ParceiroDebitoItem } from '@/types'
 
 export interface PartnerReportEntry {
+  policyId?: string
   clientName: string
   clientCpfCnpj: string
   partnerName?: string
+  partnerId?: string
   seguradoraName: string
   tipoSeguro: string
   valorLiquido: number
