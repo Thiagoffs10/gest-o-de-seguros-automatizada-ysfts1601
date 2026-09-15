@@ -370,4 +370,191 @@ describe('Validação dos 7 Cenários do Módulo Financeiro & Casos Edson e Mari
     expect(prevMaria.competencia).toBe('09/2026')
     expect(prevEdson.competencia).toBe('09/2026')
   })
+
+  // =========================================================================
+  // CENÁRIO 9: Reconciliação líquida dos Blocos 2 e 3 sem resíduo de ISS fantasma
+  // Quando todas as apólices do período têm previsão com competência confiável,
+  // saldoSemPrevisao === 0 e countSemPrevisao === 0, e a soma dos ISS (53,22)
+  // não vaza como resíduo nos Blocos 2 e 3.
+  // =========================================================================
+  it('Cenário 9: Quando todas as apólices do período têm previsão com competência, saldoSemPrevisao === 0 e count === 0 sem resíduo de ISS', () => {
+    // 4 apólices de setembro/2026:
+    // 1. Maria Lafaete: Bruto 553,71, ISS 11,07, Líquido 542,64. Baixa bruta 246,65 -> Saldo Líquido 295,99 (Parcial)
+    // 2. Edson: Bruto 537,45, ISS 10,75, Líquido 526,70. Baixa bruta 179,15 -> Saldo Líquido 347,55 (Parcial)
+    // 3. Tiago de Melo: Bruto 183,26, ISS 3,67, Líquido 179,59. Sem baixa -> Saldo Líquido 179,59 (Pendente)
+    // 4. Chery Tiggo 7 Sport: Bruto 1.386,47, ISS 27,73, Líquido 1.358,74. Sem baixa -> Saldo Líquido 1.358,74 (Pendente)
+    // Soma de ISS = 11,07 + 10,75 + 3,67 + 27,73 = 53,22
+
+    const polMaria = {
+      id: 'pol_maria',
+      commission: 553.71,
+      iss: 11.07,
+      status: 'Ativa',
+      comissao_recebida: false,
+    }
+    const polEdson = {
+      id: 'pol_edson',
+      commission: 537.45,
+      iss: 10.75,
+      status: 'Ativa',
+      comissao_recebida: false,
+    }
+    const polTiago = {
+      id: 'pol_tiago',
+      commission: 183.26,
+      iss: 3.67,
+      status: 'Ativa',
+      comissao_recebida: false,
+    }
+    const polChery = {
+      id: 'pol_chery',
+      commission: 1386.47,
+      iss: 27.73,
+      status: 'Ativa',
+      comissao_recebida: false,
+    }
+
+    const periodStartPolicies = [polMaria, polEdson, polTiago, polChery]
+
+    const allComissoesPrevistasList: ComissaoPrevistaSimples[] = [
+      {
+        id: 'prev_maria',
+        policy: 'pol_maria',
+        competencia: '09/2026',
+        valor_previsto: 542.64,
+        status: 'Pendente',
+      },
+      {
+        id: 'prev_edson',
+        policy: 'pol_edson',
+        competencia: '09/2026',
+        valor_previsto: 526.7,
+        status: 'Pendente',
+      },
+      {
+        id: 'prev_tiago',
+        policy: 'pol_tiago',
+        competencia: '09/2026',
+        valor_previsto: 179.59,
+        status: 'Pendente',
+      },
+      {
+        id: 'prev_chery',
+        policy: 'pol_chery',
+        competencia: '09/2026',
+        valor_previsto: 1358.74,
+        status: 'Pendente',
+      },
+    ]
+
+    const recebimentos: ComissaoRecebimento[] = [
+      {
+        id: 'rec_maria',
+        policy: 'pol_maria',
+        data_recebimento: '2026-09-14',
+        valor_bruto: 246.65,
+        valor_liquido: 241.62,
+        descontos_impostos: 5.03,
+        origem: 'Manual',
+        created: '2026-09-14',
+        updated: '2026-09-14',
+      },
+      {
+        id: 'rec_edson',
+        policy: 'pol_edson',
+        data_recebimento: '2026-09-11',
+        valor_bruto: 179.15,
+        valor_liquido: 175.57,
+        descontos_impostos: 3.58,
+        origem: 'Manual',
+        created: '2026-09-11',
+        updated: '2026-09-11',
+      },
+    ]
+
+    // 1. Reconciliação
+    const reconciliacaoMap = reconciliarRecebimentosComPrevisoes(
+      allComissoesPrevistasList,
+      recebimentos,
+    )
+
+    // Agrupamento de previsões por apólice
+    const prevsByPolicyMap = new Map<string, ComissaoPrevistaSimples[]>()
+    for (const prev of allComissoesPrevistasList) {
+      if (prev.status === 'Cancelada') continue
+      if (!prevsByPolicyMap.has(prev.policy)) {
+        prevsByPolicyMap.set(prev.policy, [])
+      }
+      prevsByPolicyMap.get(prev.policy)!.push(prev)
+    }
+
+    // 2. Cálculo Bloco 2 (base líquida/reconciliada)
+    let saldoParcialRecebido = 0
+    let comissoesNaoRecebidas = 0
+
+    periodStartPolicies.forEach((p) => {
+      const polPrevs = prevsByPolicyMap.get(p.id) || []
+      if (polPrevs.length > 0) {
+        let polSaldo = 0
+        let polRecebidoBruto = 0
+        polPrevs.forEach((prev) => {
+          const recResult = reconciliacaoMap.get(prev.id)
+          const s = recResult ? recResult.saldo : Number(prev.valor_previsto) || 0
+          const rBruto = recResult ? recResult.valorRecebidoBruto : 0
+          polSaldo = Math.round((polSaldo + s) * 100) / 100
+          polRecebidoBruto = Math.round((polRecebidoBruto + rBruto) * 100) / 100
+        })
+
+        if (polSaldo > 0.009) {
+          if (polRecebidoBruto > 0.009) {
+            saldoParcialRecebido = Math.round((saldoParcialRecebido + polSaldo) * 100) / 100
+          } else {
+            comissoesNaoRecebidas = Math.round((comissoesNaoRecebidas + polSaldo) * 100) / 100
+          }
+        }
+      }
+    })
+
+    const saldoTotalAReceber =
+      Math.round((saldoParcialRecebido + comissoesNaoRecebidas) * 100) / 100
+
+    // Verificação Bloco 2
+    // Maria Lafaete saldo = 542.64 - 246.65 = 295.99
+    // Edson saldo = 526.70 - 179.15 = 347.55
+    // Saldo Parcial = 295.99 + 347.55 = 643.54
+    // Tiago saldo = 179.59
+    // Chery saldo = 1358.74
+    // Não Recebidas = 179.59 + 1358.74 = 1538.33
+    // Saldo Total = 643.54 + 1538.33 = 2381.87
+    expect(saldoParcialRecebido).toBe(643.54)
+    expect(comissoesNaoRecebidas).toBe(1538.33)
+    expect(saldoTotalAReceber).toBe(2381.87)
+
+    // 3. Cálculo Bloco 3
+    const policiesWithPrevisoes = new Set(allComissoesPrevistasList.map((cp) => cp.policy))
+
+    const itensSemPrevisaoReais = periodStartPolicies.filter((p) => {
+      if (p.status === 'Cancelada' || p.comissao_recebida) return false
+      return !policiesWithPrevisoes.has(p.id)
+    })
+
+    let saldoSemPrevisao = 0
+    itensSemPrevisaoReais.forEach((p) => {
+      const commBruta = Number(p.commission || 0)
+      const iss = Number(p.iss || 0)
+      const previsto = Math.max(0, Math.round((commBruta - iss) * 100) / 100)
+      saldoSemPrevisao = Math.round((saldoSemPrevisao + previsto) * 100) / 100
+    })
+
+    const countSemPrevisao = itensSemPrevisaoReais.length
+
+    // Verificação Bloco 3: Nenhum item sem previsão, saldo zero e contador zero
+    expect(saldoSemPrevisao).toBe(0)
+    expect(countSemPrevisao).toBe(0)
+
+    // A soma dos ISS (53,22) NÃO vaza nos saldos
+    const somaIss = 11.07 + 10.75 + 3.67 + 27.73
+    expect(somaIss).toBeCloseTo(53.22, 2)
+    expect(saldoTotalAReceber).not.toBe(Math.round((2381.87 + somaIss) * 100) / 100)
+  })
 })

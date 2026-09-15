@@ -9,8 +9,9 @@ import {
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Badge } from '@/components/ui/badge'
-import { Policy, ComissaoRecebimento } from '@/types'
+import { Policy, ComissaoRecebimento, ComissaoPrevista } from '@/types'
 import { formatCurrency, formatDateDisplay } from '@/lib/utils'
+import { reconciliarRecebimentosComPrevisoes } from '@/services/comissao-recebimentos'
 import {
   CheckCircle2,
   Clock,
@@ -43,6 +44,9 @@ interface Props {
   // Breakdown oficial do card recebida
   systemReceivedCommissions: number
   legacyReceivedCommissions: number
+  allComissoesPrevistasList?: ComissaoPrevista[]
+  recebimentos?: ComissaoRecebimento[]
+  receivedNetByPolicy?: Map<string, number>
 }
 
 const PAGE_SIZE = 10
@@ -59,6 +63,9 @@ export function RecebimentoDetailModal({
   lastReceiptDateByPolicy,
   systemReceivedCommissions,
   legacyReceivedCommissions,
+  allComissoesPrevistasList = [],
+  recebimentos = [],
+  receivedNetByPolicy = new Map(),
 }: Props) {
   const [search, setSearch] = useState('')
   const [page, setPage] = useState(1)
@@ -177,21 +184,67 @@ export function RecebimentoDetailModal({
     })
   }, [type, recsInPeriod, allPolicies, receivedGrossByPolicy])
 
-  // Normalização para o modo PROPOSTAS (Parciais, Não Recebidas, Saldo Total)
+  // Reconciliação e mapas para cálculo líquido nas propostas
+  const reconciliacaoMap = useMemo(() => {
+    if (!allComissoesPrevistasList || allComissoesPrevistasList.length === 0) {
+      return new Map()
+    }
+    return reconciliarRecebimentosComPrevisoes(allComissoesPrevistasList, recebimentos)
+  }, [allComissoesPrevistasList, recebimentos])
+
+  const prevsByPolicyMap = useMemo(() => {
+    const map = new Map<string, ComissaoPrevista[]>()
+    for (const prev of allComissoesPrevistasList) {
+      if (prev.status === 'Cancelada') continue
+      if (!map.has(prev.policy)) {
+        map.set(prev.policy, [])
+      }
+      map.get(prev.policy)!.push(prev)
+    }
+    return map
+  }, [allComissoesPrevistasList])
+
+  // Normalização para o modo PROPOSTAS (Parciais, Não Recebidas, Saldo Total, Sem Previsão)
   const propostasRows = useMemo(() => {
     if (type === 'recebida') return []
 
     return periodStartPolicies
+      .filter((p) => p.status !== 'Cancelada')
       .map((p) => {
-        const previsto =
-          p.commission != null
-            ? Number(p.commission)
-            : Math.round(
-                (((p.valor_liquido || p.premium_amount || 0) * (p.commission_percent || 0)) / 100) *
-                  100,
-              ) / 100
-        const rec = receivedGrossByPolicy.get(p.id) ?? (p.comissao_recebida ? previsto : 0)
-        const saldo = Math.max(0, Math.round((previsto - rec) * 100) / 100)
+        const polPrevs = prevsByPolicyMap.get(p.id) || []
+        const hasPrevisao = polPrevs.length > 0
+
+        let previsto = 0
+        let rec = 0
+        let saldo = 0
+
+        if (hasPrevisao) {
+          polPrevs.forEach((prev) => {
+            const recRes = reconciliacaoMap.get(prev.id)
+            const pPrev = Number(prev.valor_previsto) || 0
+            const pRec = recRes ? recRes.valorRecebidoBruto : 0
+            const pSaldo = recRes
+              ? recRes.saldo
+              : Math.max(0, Math.round((pPrev - pRec) * 100) / 100)
+            previsto = Math.round((previsto + pPrev) * 100) / 100
+            rec = Math.round((rec + pRec) * 100) / 100
+            saldo = Math.round((saldo + pSaldo) * 100) / 100
+          })
+        } else {
+          const commBruta =
+            p.commission != null
+              ? Number(p.commission)
+              : Math.round(
+                  (((p.valor_liquido || p.premium_amount || 0) * (p.commission_percent || 0)) /
+                    100) *
+                    100,
+                ) / 100
+          const iss = Number(p.iss || 0)
+          previsto = Math.max(0, Math.round((commBruta - iss) * 100) / 100)
+          rec = receivedNetByPolicy.get(p.id) ?? (p.comissao_recebida ? previsto : 0)
+          saldo = Math.max(0, Math.round((previsto - rec) * 100) / 100)
+        }
+
         const isSettled = saldo <= 0.009
         const isPartial = !isSettled && rec > 0.009
         const isPending = !isSettled && rec <= 0.009
@@ -219,6 +272,7 @@ export function RecebimentoDetailModal({
           isSettled,
           isPartial,
           isPending,
+          hasPrevisao,
           ultimoRecebimento,
         }
       })
@@ -226,10 +280,17 @@ export function RecebimentoDetailModal({
         if (type === 'parcial') return row.isPartial
         if (type === 'nao_recebida') return row.isPending
         if (type === 'saldo_total') return row.saldo > 0
-        if (type === 'sem_previsao') return row.saldo > 0
+        if (type === 'sem_previsao') return row.saldo > 0 && !row.hasPrevisao
         return true
       })
-  }, [type, periodStartPolicies, receivedGrossByPolicy, lastReceiptDateByPolicy])
+  }, [
+    type,
+    periodStartPolicies,
+    prevsByPolicyMap,
+    reconciliacaoMap,
+    receivedNetByPolicy,
+    lastReceiptDateByPolicy,
+  ])
 
   // Totais do modo Movimentos
   const totalMovimentos = useMemo(() => {

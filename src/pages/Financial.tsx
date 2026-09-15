@@ -533,28 +533,72 @@ export default function Financial() {
       Math.round((comissaoBrutaPrevista - issDeducoesPrevistas) * 100) / 100,
     )
 
-    // BLOCO 2 — RECEBIMENTOS: decomposição entre saldo parcial e comissões ainda não recebidas
+    // Reconciliação unificada recebimento ↔ previsão com inferência de data e FIFO por esgotamento
+    const reconciliacaoMap = reconciliarRecebimentosComPrevisoes(
+      allComissoesPrevistasList,
+      recebimentos,
+    )
+
+    // Agrupamento de previsões por apólice para cálculos de saldo reconciliado líquido
+    const prevsByPolicyMap = new Map<string, ComissaoPrevista[]>()
+    for (const prev of allComissoesPrevistasList) {
+      if (prev.status === 'Cancelada') continue
+      if (!prevsByPolicyMap.has(prev.policy)) {
+        prevsByPolicyMap.set(prev.policy, [])
+      }
+      prevsByPolicyMap.get(prev.policy)!.push(prev)
+    }
+
+    // BLOCO 2 — RECEBIMENTOS: decomposição entre saldo parcial e comissões ainda não recebidas (base líquida/reconciliada)
     let hasPartialReceipts = false
     let saldoParcialRecebido = 0
     let comissoesNaoRecebidas = 0
 
     periodStartPolicies.forEach((p) => {
-      const previsto =
-        p.commission != null
-          ? Number(p.commission)
-          : Math.round(
-              (((p.valor_liquido || p.premium_amount || 0) * (p.commission_percent || 0)) / 100) *
-                100,
-            ) / 100
-      const rec = receivedGrossByPolicy.get(p.id) ?? (p.comissao_recebida ? previsto : 0)
-      const saldo = Math.max(0, Math.round((previsto - rec) * 100) / 100)
+      if (p.status === 'Cancelada') return
 
-      if (saldo > 0.009) {
-        if (rec > 0.009) {
-          hasPartialReceipts = true
-          saldoParcialRecebido = Math.round((saldoParcialRecebido + saldo) * 100) / 100
-        } else {
-          comissoesNaoRecebidas = Math.round((comissoesNaoRecebidas + saldo) * 100) / 100
+      const polPrevs = prevsByPolicyMap.get(p.id) || []
+      if (polPrevs.length > 0) {
+        // Apólices com previsões cadastradas: saldo a receber = soma dos recResult.saldo das parcelas ativas
+        let polSaldo = 0
+        let polRecebidoBruto = 0
+        polPrevs.forEach((prev) => {
+          const recResult = reconciliacaoMap.get(prev.id)
+          const s = recResult ? recResult.saldo : Number(prev.valor_previsto) || 0
+          const rBruto = recResult ? recResult.valorRecebidoBruto : 0
+          polSaldo = Math.round((polSaldo + s) * 100) / 100
+          polRecebidoBruto = Math.round((polRecebidoBruto + rBruto) * 100) / 100
+        })
+
+        if (polSaldo > 0.009) {
+          if (polRecebidoBruto > 0.009) {
+            hasPartialReceipts = true
+            saldoParcialRecebido = Math.round((saldoParcialRecebido + polSaldo) * 100) / 100
+          } else {
+            comissoesNaoRecebidas = Math.round((comissoesNaoRecebidas + polSaldo) * 100) / 100
+          }
+        }
+      } else {
+        // Apólices do período SEM previsão: previsto = comissão LÍQUIDA (bruto − iss), recebido = receivedNetByPolicy.get(p.id)
+        const commBruta =
+          p.commission != null
+            ? Number(p.commission)
+            : Math.round(
+                (((p.valor_liquido || p.premium_amount || 0) * (p.commission_percent || 0)) / 100) *
+                  100,
+              ) / 100
+        const iss = Number(p.iss || 0)
+        const previsto = Math.max(0, Math.round((commBruta - iss) * 100) / 100)
+        const rec = receivedNetByPolicy.get(p.id) ?? (p.comissao_recebida ? previsto : 0)
+        const saldo = Math.max(0, Math.round((previsto - rec) * 100) / 100)
+
+        if (saldo > 0.009) {
+          if (rec > 0.009) {
+            hasPartialReceipts = true
+            saldoParcialRecebido = Math.round((saldoParcialRecebido + saldo) * 100) / 100
+          } else {
+            comissoesNaoRecebidas = Math.round((comissoesNaoRecebidas + saldo) * 100) / 100
+          }
         }
       }
     })
@@ -593,24 +637,39 @@ export default function Financial() {
     // Apólices pendentes com saldo individual calculado com precisão de arredondamento em centavos
     const pendingPoliciesList = periodStartPolicies
       .map((p) => {
-        const previsto =
+        const polPrevs = prevsByPolicyMap.get(p.id) || []
+        if (polPrevs.length > 0) {
+          let vPrev = 0
+          let vRec = 0
+          let vSaldo = 0
+          polPrevs.forEach((prev) => {
+            const recRes = reconciliacaoMap.get(prev.id)
+            const pPrev = Number(prev.valor_previsto) || 0
+            const pRec = recRes ? recRes.valorRecebidoBruto : 0
+            const pSaldo = recRes
+              ? recRes.saldo
+              : Math.max(0, Math.round((pPrev - pRec) * 100) / 100)
+            vPrev = Math.round((vPrev + pPrev) * 100) / 100
+            vRec = Math.round((vRec + pRec) * 100) / 100
+            vSaldo = Math.round((vSaldo + pSaldo) * 100) / 100
+          })
+          return { policy: p, previsto: vPrev, rec: vRec, saldo: vSaldo }
+        }
+
+        const commBruta =
           p.commission != null
             ? Number(p.commission)
             : Math.round(
                 (((p.valor_liquido || p.premium_amount || 0) * (p.commission_percent || 0)) / 100) *
                   100,
               ) / 100
-        const rec = receivedGrossByPolicy.get(p.id) ?? (p.comissao_recebida ? previsto : 0)
+        const iss = Number(p.iss || 0)
+        const previsto = Math.max(0, Math.round((commBruta - iss) * 100) / 100)
+        const rec = receivedNetByPolicy.get(p.id) ?? (p.comissao_recebida ? previsto : 0)
         const saldo = Math.max(0, Math.round((previsto - rec) * 100) / 100)
         return { policy: p, previsto, rec, saldo }
       })
       .filter((item) => item.saldo > 0)
-
-    // Reconciliação unificada recebimento ↔ previsão com inferência de data e FIFO por esgotamento
-    const reconciliacaoMap = reconciliarRecebimentosComPrevisoes(
-      allComissoesPrevistasList,
-      recebimentos,
-    )
 
     // Agrupamento por seguradora (Nível 1 e Nível 2)
     // Coleta saldo a receber vigente por seguradora considerando:
@@ -898,24 +957,46 @@ export default function Financial() {
       }))
 
     // CÁLCULO DO CARD "SEM PREVISÃO DEFINIDA" (Bloco 3):
-    // Apólices ativas de produção sem comissões previstas cadastradas OU comissões com saldo pendente sem competência futura.
-    // Conciliação: Projeções com competência + Sem previsão = Saldo Total a Receber do período.
-    const saldoProjetadoComCompetencia =
-      Math.round(sortedCompCards.reduce((acc, c) => acc + c.saldoPrevisto, 0) * 100) / 100
-
-    let saldoSemPrevisao = Math.max(
-      0,
-      Math.round((saldoTotalAReceber - saldoProjetadoComCompetencia) * 100) / 100,
-    )
-    let countSemPrevisao = periodStartPolicies.filter((p) => {
+    // REMOVIDO o cálculo residual por diferença.
+    // saldoSemPrevisao passa a ser a SOMA dos saldos de itens REAIS do período sem previsão com competência confiável.
+    // REMOVIDO o fallback que forçava countSemPrevisao = 1.
+    const itensSemPrevisaoReais = periodStartPolicies.filter((p) => {
       if (p.status === 'Cancelada' || isPolicyCommissionSettled(p)) return false
       return !policiesWithPrevisoes.has(p.id)
-    }).length
+    })
 
-    // Se o contador for 0 mas houver saldo residual sem previsão, garante contagem representativa
-    if (saldoSemPrevisao > 0.009 && countSemPrevisao === 0) {
-      countSemPrevisao = 1
-    }
+    let saldoSemPrevisao = 0
+    itensSemPrevisaoReais.forEach((p) => {
+      const commBruta =
+        p.commission != null
+          ? Number(p.commission)
+          : Math.round(
+              (((p.valor_liquido || p.premium_amount || 0) * (p.commission_percent || 0)) / 100) *
+                100,
+            ) / 100
+      const iss = Number(p.iss || 0)
+      const previsto = Math.max(0, Math.round((commBruta - iss) * 100) / 100)
+      const rec = receivedNetByPolicy.get(p.id) ?? (p.comissao_recebida ? previsto : 0)
+      const saldo = Math.max(0, Math.round((previsto - rec) * 100) / 100)
+      if (saldo > 0.009) {
+        saldoSemPrevisao = Math.round((saldoSemPrevisao + saldo) * 100) / 100
+      }
+    })
+
+    const countSemPrevisao = itensSemPrevisaoReais.filter((p) => {
+      const commBruta =
+        p.commission != null
+          ? Number(p.commission)
+          : Math.round(
+              (((p.valor_liquido || p.premium_amount || 0) * (p.commission_percent || 0)) / 100) *
+                100,
+            ) / 100
+      const iss = Number(p.iss || 0)
+      const previsto = Math.max(0, Math.round((commBruta - iss) * 100) / 100)
+      const rec = receivedNetByPolicy.get(p.id) ?? (p.comissao_recebida ? previsto : 0)
+      const saldo = Math.max(0, Math.round((previsto - rec) * 100) / 100)
+      return saldo > 0.009
+    }).length
 
     return {
       premioLiquidoVendido,
@@ -2418,6 +2499,9 @@ export default function Financial() {
         lastReceiptDateByPolicy={lastReceiptDateByPolicy}
         systemReceivedCommissions={metrics.systemReceivedCommissions}
         legacyReceivedCommissions={metrics.legacyReceivedCommissions}
+        allComissoesPrevistasList={allComissoesPrevistasList}
+        recebimentos={recebimentos}
+        receivedNetByPolicy={receivedNetByPolicy}
       />
 
       {/* MODAL BLOCO 3: PROJEÇÃO POR COMPETÊNCIA */}
