@@ -1,5 +1,5 @@
 {
-  "generatedAt": "2026-09-15T01:40:15.406Z",
+  "generatedAt": "2026-09-15T19:11:03.545Z",
   "collections": [
     {
       "name": "users",
@@ -507,7 +507,13 @@
         "CREATE INDEX idx_policies_client ON policies (client)",
         "CREATE INDEX idx_policies_status ON policies (status)",
         "CREATE UNIQUE INDEX `idx_policies_number` ON `policies` (policy_number) WHERE policy_number IS NOT NULL AND policy_number != ''",
-        "CREATE INDEX `idx_policies_proposta` ON `policies` (numero_proposta) WHERE numero_proposta IS NOT NULL AND numero_proposta != ''"
+        "CREATE INDEX `idx_policies_proposta` ON `policies` (numero_proposta) WHERE numero_proposta IS NOT NULL AND numero_proposta != ''",
+        "CREATE INDEX `idx_policies_start_date` ON `policies` (start_date)",
+        "CREATE INDEX `idx_policies_end_date` ON `policies` (end_date)",
+        "CREATE INDEX `idx_policies_created` ON `policies` (created)",
+        "CREATE INDEX `idx_policies_seguradora` ON `policies` (seguradora)",
+        "CREATE INDEX `idx_policies_parceiro` ON `policies` (parceiro)",
+        "CREATE INDEX `idx_policies_placa` ON `policies` (placa)"
       ]
     },
     {
@@ -953,7 +959,9 @@
       ],
       "indexes": [
         "CREATE INDEX idx_custos_fixos_data ON custos_fixos (data)",
-        "CREATE INDEX idx_custos_fixos_categoria ON custos_fixos (categoria)"
+        "CREATE INDEX idx_custos_fixos_categoria ON custos_fixos (categoria)",
+        "CREATE INDEX `idx_custos_fixos_pago` ON `custos_fixos` (pago)",
+        "CREATE INDEX `idx_custos_fixos_data_pagamento` ON `custos_fixos` (data_pagamento)"
       ]
     },
     {
@@ -1776,7 +1784,8 @@
         "CREATE INDEX idx_com_prev_data ON comissoes_previstas (data_prevista)",
         "CREATE INDEX idx_com_prev_comp ON comissoes_previstas (competencia)",
         "CREATE UNIQUE INDEX `idx_com_prev_chave_estavel` ON `comissoes_previstas` (chave_estavel) WHERE chave_estavel != \"\"",
-        "CREATE INDEX `idx_com_prev_endorsement` ON `comissoes_previstas` (endorsement)"
+        "CREATE INDEX `idx_com_prev_endorsement` ON `comissoes_previstas` (endorsement)",
+        "CREATE INDEX `idx_com_prev_status` ON `comissoes_previstas` (status)"
       ]
     },
     {

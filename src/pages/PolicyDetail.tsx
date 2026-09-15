@@ -78,6 +78,7 @@ import { useRealtime } from '@/hooks/use-realtime'
 import { usePermissions } from '@/hooks/use-permissions'
 import { extractFieldErrors, getErrorMessage, type FieldErrors } from '@/lib/pocketbase/errors'
 import { formatDateDisplay, todayLocalDate } from '@/lib/utils'
+import { formatClientDocument } from '@/lib/document-validators'
 
 type DialogMode = 'edit' | 'renew' | null
 
@@ -888,6 +889,22 @@ export default function PolicyDetail() {
             <p className="text-xs text-slate-500">Cliente Segurado</p>
             <p className="font-bold text-slate-900">
               {policy.expand?.client?.name || 'Não informado'}
+            </p>
+          </div>
+          <div>
+            <p className="text-xs text-slate-500">
+              {policy.expand?.client?.tipo_pessoa === 'PJ'
+                ? 'CNPJ do Cliente'
+                : 'CPF / CNPJ do Cliente'}
+            </p>
+            <p className="font-semibold text-slate-900">
+              {policy.expand?.client ? (
+                formatClientDocument(policy.expand.client) || (
+                  <span className="text-slate-400 font-normal">Não informado</span>
+                )
+              ) : (
+                <span className="text-slate-400 font-normal">Não informado</span>
+              )}
             </p>
           </div>
           <div>

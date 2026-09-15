@@ -22,6 +22,8 @@ import { BRAZILIAN_STATES } from '@/lib/constants'
 import { lookupCep } from '@/lib/cep'
 import { isValidCpf, isValidCnpj, maskCpf, maskCnpj } from '@/lib/document-validators'
 import { maskPhone } from '@/lib/phone-utils'
+import { lookupCnpj } from '@/lib/cnpj'
+import { Loader2, Check } from 'lucide-react'
 import { Client } from '@/types'
 import { getClients } from '@/services/clients'
 
@@ -60,6 +62,8 @@ export function ClientFormDialog({
   const [form, setForm] = useState(EMPTY_FORM)
   const [errors, setErrors] = useState<Record<string, string>>({})
   const [loading, setLoading] = useState(false)
+  const [isSearchingCnpj, setIsSearchingCnpj] = useState(false)
+  const [cnpjFeedback, setCnpjFeedback] = useState<string | null>(null)
 
   useEffect(() => {
     if (initialData) {
@@ -83,7 +87,52 @@ export function ClientFormDialog({
       setForm(EMPTY_FORM)
     }
     setErrors({})
+    setCnpjFeedback(null)
   }, [initialData, open])
+
+  // Busca automática por CNPJ quando completar 14 dígitos válidos
+  const handleCnpjChange = async (rawValue: string) => {
+    const formatted = maskCnpj(rawValue)
+    set('cnpj', formatted)
+    const digits = formatted.replace(/\D/g, '')
+
+    if (digits.length === 14) {
+      if (!isValidCnpj(digits)) {
+        setCnpjFeedback('CNPJ inválido')
+        return
+      }
+      setIsSearchingCnpj(true)
+      setCnpjFeedback(null)
+      try {
+        const data = await lookupCnpj(digits)
+        if (data && data.razao_social) {
+          setForm((prev) => ({
+            ...prev,
+            name: prev.name.trim() ? prev.name : data.razao_social,
+            rua: data.logradouro || prev.rua,
+            numero: data.numero || prev.numero,
+            bairro: data.bairro || prev.bairro,
+            cidade: data.municipio || prev.cidade,
+            estado: data.uf || prev.estado,
+            cep: data.cep
+              ? data.cep.replace(/\D/g, '').replace(/(\d{5})(\d{3})/, '$1-$2')
+              : prev.cep,
+            phone: data.ddd_telefone_1 ? maskPhone(data.ddd_telefone_1) : prev.phone,
+            email: data.email ? data.email.toLowerCase() : prev.email,
+          }))
+          setCnpjFeedback('Dados encontrados com sucesso!')
+        } else {
+          setCnpjFeedback('CNPJ não localizado na base pública.')
+        }
+      } catch {
+        setCnpjFeedback('Não foi possível consultar os dados.')
+      } finally {
+        setIsSearchingCnpj(false)
+      }
+    } else {
+      setCnpjFeedback(null)
+    }
+  }
 
   const handleCepBlur = async () => {
     if (!form.cep) return
@@ -224,12 +273,36 @@ export function ClientFormDialog({
               </div>
             ) : (
               <div>
-                <Label className="text-xs font-semibold">CNPJ *</Label>
-                <Input
-                  value={form.cnpj}
-                  onChange={(e) => set('cnpj', maskCnpj(e.target.value))}
-                  placeholder="00.000.000/0000-00"
-                />
+                <div className="flex items-center justify-between">
+                  <Label className="text-xs font-semibold">CNPJ *</Label>
+                  {isSearchingCnpj && (
+                    <span className="text-[11px] text-blue-600 flex items-center gap-1">
+                      <Loader2 className="w-3 h-3 animate-spin" />
+                      Consultando...
+                    </span>
+                  )}
+                </div>
+                <div className="relative">
+                  <Input
+                    value={form.cnpj}
+                    onChange={(e) => handleCnpjChange(e.target.value)}
+                    placeholder="00.000.000/0000-00"
+                  />
+                </div>
+                {cnpjFeedback && !isSearchingCnpj && (
+                  <p
+                    className={`text-[11px] mt-0.5 flex items-center gap-1 ${
+                      cnpjFeedback.includes('sucesso')
+                        ? 'text-emerald-600 font-medium'
+                        : 'text-slate-500'
+                    }`}
+                  >
+                    {cnpjFeedback.includes('sucesso') && (
+                      <Check className="w-3 h-3 text-emerald-600" />
+                    )}
+                    {cnpjFeedback}
+                  </p>
+                )}
                 {errors.cnpj && <p className="text-xs text-red-500 mt-0.5">{errors.cnpj}</p>}
               </div>
             )}
