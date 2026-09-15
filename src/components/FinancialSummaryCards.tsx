@@ -159,7 +159,9 @@ export function FinancialSummaryCards({
             {/* 1. Prêmio Líquido Vendido */}
             <Card
               onClick={onPremioLiquidoClick}
-              className="shadow-xs cursor-pointer hover:border-blue-400 hover:shadow-md transition-all group bg-white border-slate-200"
+              role="button"
+              tabIndex={0}
+              className="shadow-xs cursor-pointer hover:border-blue-400 hover:shadow-md hover:-translate-y-0.5 active:translate-y-0 transition-all duration-150 group bg-white border-slate-200 select-none ring-offset-background focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-blue-400"
             >
               <CardHeader className="flex flex-row items-center justify-between pb-1 pt-3 px-3.5">
                 <div className="flex items-center gap-1">
@@ -193,7 +195,9 @@ export function FinancialSummaryCards({
             {/* 2. Comissão Bruta Prevista */}
             <Card
               onClick={onComissaoBrutaClick}
-              className="shadow-xs cursor-pointer hover:border-slate-400 hover:shadow-md transition-all group bg-white border-slate-200"
+              role="button"
+              tabIndex={0}
+              className="shadow-xs cursor-pointer hover:border-slate-400 hover:shadow-md hover:-translate-y-0.5 active:translate-y-0 transition-all duration-150 group bg-white border-slate-200 select-none ring-offset-background focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-slate-400"
             >
               <CardHeader className="flex flex-row items-center justify-between pb-1 pt-3 px-3.5">
                 <div className="flex items-center gap-1">
@@ -227,7 +231,9 @@ export function FinancialSummaryCards({
             {/* 3. ISS / Deduções Previstas */}
             <Card
               onClick={onIssDeducoesClick}
-              className="shadow-xs cursor-pointer hover:border-amber-400 hover:shadow-md transition-all group bg-white border-slate-200"
+              role="button"
+              tabIndex={0}
+              className="shadow-xs cursor-pointer hover:border-amber-400 hover:shadow-md hover:-translate-y-0.5 active:translate-y-0 transition-all duration-150 group bg-white border-slate-200 select-none ring-offset-background focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-amber-400"
             >
               <CardHeader className="flex flex-row items-center justify-between pb-1 pt-3 px-3.5">
                 <div className="flex items-center gap-1">
@@ -261,7 +267,9 @@ export function FinancialSummaryCards({
             {/* 4. Comissão Líquida Prevista (MAIOR DESTAQUE VISUAL) */}
             <Card
               onClick={onComissaoLiquidaClick}
-              className="shadow-sm cursor-pointer hover:border-emerald-500 hover:shadow-md transition-all group border-emerald-300 bg-gradient-to-br from-emerald-50/70 to-emerald-100/40 ring-1 ring-emerald-200/80"
+              role="button"
+              tabIndex={0}
+              className="shadow-sm cursor-pointer hover:border-emerald-500 hover:shadow-md hover:-translate-y-0.5 active:translate-y-0 transition-all duration-150 group border-emerald-300 bg-gradient-to-br from-emerald-50/70 to-emerald-100/40 ring-1 ring-emerald-200/80 select-none ring-offset-background focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-emerald-500"
             >
               <CardHeader className="flex flex-row items-center justify-between pb-1 pt-3 px-3.5">
                 <div className="flex items-center gap-1.5">
@@ -314,7 +322,9 @@ export function FinancialSummaryCards({
             {/* 1. Comissão Recebida no Período */}
             <Card
               onClick={onComissaoRecebidaClick}
-              className="shadow-xs cursor-pointer hover:border-emerald-400 hover:shadow-md transition-all group bg-white border-slate-200"
+              role="button"
+              tabIndex={0}
+              className="shadow-xs cursor-pointer hover:border-emerald-400 hover:shadow-md hover:-translate-y-0.5 active:translate-y-0 transition-all duration-150 group bg-white border-slate-200 select-none ring-offset-background focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-emerald-400"
             >
               <CardHeader className="flex flex-row items-center justify-between pb-1 pt-3 px-3.5">
                 <CardTitle className="text-xs font-medium text-slate-600">
@@ -347,7 +357,9 @@ export function FinancialSummaryCards({
             {/* 2. Saldo de Comissões Parcialmente Recebidas */}
             <Card
               onClick={onSaldoParcialClick}
-              className="shadow-xs cursor-pointer hover:border-blue-400 hover:shadow-md transition-all group bg-white border-slate-200"
+              role="button"
+              tabIndex={0}
+              className="shadow-xs cursor-pointer hover:border-blue-400 hover:shadow-md hover:-translate-y-0.5 active:translate-y-0 transition-all duration-150 group bg-white border-slate-200 select-none ring-offset-background focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-blue-400"
             >
               <CardHeader className="flex flex-row items-center justify-between pb-1 pt-3 px-3.5">
                 <div className="flex items-center gap-1.5">
@@ -378,7 +390,9 @@ export function FinancialSummaryCards({
             {/* 3. Comissões Ainda Não Recebidas */}
             <Card
               onClick={onComissoesNaoRecebidasClick}
-              className="shadow-xs cursor-pointer hover:border-amber-400 hover:shadow-md transition-all group bg-white border-slate-200"
+              role="button"
+              tabIndex={0}
+              className="shadow-xs cursor-pointer hover:border-amber-400 hover:shadow-md hover:-translate-y-0.5 active:translate-y-0 transition-all duration-150 group bg-white border-slate-200 select-none ring-offset-background focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-amber-400"
             >
               <CardHeader className="flex flex-row items-center justify-between pb-1 pt-3 px-3.5">
                 <div className="flex items-center gap-1.5">
@@ -409,7 +423,9 @@ export function FinancialSummaryCards({
             {/* 4. Saldo Total a Receber */}
             <Card
               onClick={onSaldoTotalClick}
-              className="shadow-xs cursor-pointer hover:border-amber-500 hover:shadow-md transition-all group bg-amber-50/30 border-amber-200"
+              role="button"
+              tabIndex={0}
+              className="shadow-xs cursor-pointer hover:border-amber-500 hover:shadow-md hover:-translate-y-0.5 active:translate-y-0 transition-all duration-150 group bg-amber-50/30 border-amber-200 select-none ring-offset-background focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-amber-500"
             >
               <CardHeader className="flex flex-row items-center justify-between pb-1 pt-3 px-3.5">
                 <CardTitle className="text-xs font-bold text-amber-900">
@@ -455,7 +471,9 @@ export function FinancialSummaryCards({
                   onClick={
                     isClickable ? () => onCompetenciaClick?.(comp.competenciaRaw) : undefined
                   }
-                  className="shadow-xs cursor-pointer hover:border-indigo-400 hover:shadow-md transition-all group bg-white border-slate-200"
+                  role="button"
+                  tabIndex={0}
+                  className="shadow-xs cursor-pointer hover:border-indigo-400 hover:shadow-md hover:-translate-y-0.5 active:translate-y-0 transition-all duration-150 group bg-white border-slate-200 select-none ring-offset-background focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-indigo-400"
                 >
                   <CardHeader className="p-2.5 pb-1 flex flex-row items-center justify-between">
                     <span className="text-[11px] font-bold text-slate-700 uppercase group-hover:text-indigo-600 transition-colors">
@@ -479,7 +497,9 @@ export function FinancialSummaryCards({
             {/* Card de SEM PREVISÃO DEFINIDA (quando não há competência futura confiável) */}
             <Card
               onClick={onSemPrevisaoClick}
-              className={`shadow-xs cursor-pointer hover:border-slate-400 hover:shadow-md transition-all group border-slate-200 ${
+              role="button"
+              tabIndex={0}
+              className={`shadow-xs cursor-pointer hover:border-amber-400 hover:shadow-md hover:-translate-y-0.5 active:translate-y-0 transition-all duration-150 group border-slate-200 select-none ring-offset-background focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-amber-400 ${
                 saldoSemPrevisao > 0 ? 'bg-amber-50/40 border-amber-200' : 'bg-slate-50/50'
               }`}
             >
@@ -514,7 +534,9 @@ export function FinancialSummaryCards({
             {/* Card de RESULTADO LÍQUIDO PROJETADO (clicável com memória simples) */}
             <Card
               onClick={onExpectedProfitClick}
-              className="shadow-xs cursor-pointer hover:border-slate-400 hover:shadow-md transition-all group bg-slate-50 border-slate-300 col-span-2 sm:col-span-1"
+              role="button"
+              tabIndex={0}
+              className="shadow-xs cursor-pointer hover:border-indigo-400 hover:shadow-md hover:-translate-y-0.5 active:translate-y-0 transition-all duration-150 group bg-slate-50 border-slate-300 col-span-2 sm:col-span-1 select-none ring-offset-background focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-indigo-400"
             >
               <CardHeader className="p-2.5 pb-1 flex flex-row items-center justify-between">
                 <div className="flex items-center gap-1">
@@ -569,7 +591,9 @@ export function FinancialSummaryCards({
             {/* 1. Comissões Recebidas */}
             <Card
               onClick={onComissaoRecebidaClick}
-              className="shadow-xs cursor-pointer hover:border-emerald-400 hover:shadow-md transition-all group bg-white border-slate-200"
+              role="button"
+              tabIndex={0}
+              className="shadow-xs cursor-pointer hover:border-emerald-400 hover:shadow-md hover:-translate-y-0.5 active:translate-y-0 transition-all duration-150 group bg-white border-slate-200 select-none ring-offset-background focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-emerald-400"
             >
               <CardHeader className="flex flex-row items-center justify-between pb-1 pt-3 px-3.5">
                 <CardTitle className="text-xs font-medium text-slate-600">
@@ -593,7 +617,9 @@ export function FinancialSummaryCards({
             {/* 2. Repasses Pagos */}
             <Card
               onClick={onPaidRepassesClick}
-              className="shadow-xs cursor-pointer hover:border-amber-400 hover:shadow-md transition-all group bg-white border-slate-200"
+              role="button"
+              tabIndex={0}
+              className="shadow-xs cursor-pointer hover:border-amber-400 hover:shadow-md hover:-translate-y-0.5 active:translate-y-0 transition-all duration-150 group bg-white border-slate-200 select-none ring-offset-background focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-amber-400"
             >
               <CardHeader className="flex flex-row items-center justify-between pb-1 pt-3 px-3.5">
                 <CardTitle className="text-xs font-medium text-slate-600">
@@ -617,7 +643,9 @@ export function FinancialSummaryCards({
             {/* 3. Custos Pagos */}
             <Card
               onClick={onPaidCostsClick}
-              className="shadow-xs cursor-pointer hover:border-red-400 hover:shadow-md transition-all group bg-white border-slate-200"
+              role="button"
+              tabIndex={0}
+              className="shadow-xs cursor-pointer hover:border-red-400 hover:shadow-md hover:-translate-y-0.5 active:translate-y-0 transition-all duration-150 group bg-white border-slate-200 select-none ring-offset-background focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-red-400"
             >
               <CardHeader className="flex flex-row items-center justify-between pb-1 pt-3 px-3.5">
                 <CardTitle className="text-xs font-medium text-slate-600">
@@ -639,10 +667,12 @@ export function FinancialSummaryCards({
             {/* 4. LUCRO LÍQUIDO REALIZADO (GRANDE DESTAQUE) */}
             <Card
               onClick={onRealProfitClick}
-              className={`shadow-sm cursor-pointer hover:shadow-md transition-all group ring-2 ${
+              role="button"
+              tabIndex={0}
+              className={`shadow-sm cursor-pointer hover:shadow-md hover:-translate-y-0.5 active:translate-y-0 transition-all duration-150 group ring-2 select-none ring-offset-background focus-visible:outline-hidden focus-visible:ring-2 ${
                 isLucroRealNegativo
-                  ? 'border-rose-300 bg-rose-50/70 ring-rose-200 hover:border-rose-400'
-                  : 'border-emerald-300 bg-gradient-to-br from-emerald-50/80 to-blue-50/40 ring-emerald-200 hover:border-emerald-400'
+                  ? 'border-rose-300 bg-rose-50/70 ring-rose-200 hover:border-rose-400 focus-visible:ring-rose-400'
+                  : 'border-emerald-300 bg-gradient-to-br from-emerald-50/80 to-blue-50/40 ring-emerald-200 hover:border-emerald-400 focus-visible:ring-emerald-400'
               }`}
             >
               <CardHeader className="flex flex-row items-center justify-between pb-1 pt-3 px-3.5">
@@ -708,7 +738,9 @@ export function FinancialSummaryCards({
             {/* Repasses Pendentes */}
             <Card
               onClick={onPendingRepassesClick}
-              className="shadow-xs cursor-pointer hover:border-blue-400 hover:shadow-md transition-all group bg-white border-slate-200"
+              role="button"
+              tabIndex={0}
+              className="shadow-xs cursor-pointer hover:border-blue-400 hover:shadow-md hover:-translate-y-0.5 active:translate-y-0 transition-all duration-150 group bg-white border-slate-200 select-none ring-offset-background focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-blue-400"
             >
               <CardHeader className="flex flex-row items-center justify-between pb-1 pt-3 px-3.5">
                 <div className="flex items-center gap-1.5">
@@ -737,7 +769,9 @@ export function FinancialSummaryCards({
             {/* Custos Pendentes */}
             <Card
               onClick={onPendingCostsClick}
-              className="shadow-xs cursor-pointer hover:border-red-400 hover:shadow-md transition-all group bg-white border-slate-200"
+              role="button"
+              tabIndex={0}
+              className="shadow-xs cursor-pointer hover:border-red-400 hover:shadow-md hover:-translate-y-0.5 active:translate-y-0 transition-all duration-150 group bg-white border-slate-200 select-none ring-offset-background focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-red-400"
             >
               <CardHeader className="flex flex-row items-center justify-between pb-1 pt-3 px-3.5">
                 <div className="flex items-center gap-1.5">

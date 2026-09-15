@@ -17,7 +17,11 @@ import { getPolicies, updatePolicyFinancial } from '@/services/policies'
 import { getParceiros } from '@/services/parceiros'
 import { getSeguradoras } from '@/services/seguradoras'
 import { getCustosFixos } from '@/services/custos-fixos'
-import { getComissaoRecebimentos } from '@/services/comissao-recebimentos'
+import {
+  getComissaoRecebimentos,
+  reconciliarRecebimentosComPrevisoes,
+  inferirCompetenciaRecebimento,
+} from '@/services/comissao-recebimentos'
 import {
   getComissoesPrevistasPaginated,
   ComissoesPrevistasPaginatedResult,
@@ -49,6 +53,7 @@ import {
   ProjecaoCompetenciaModal,
   CompetenciaProjecaoItem,
 } from '@/components/financial/ProjecaoCompetenciaModal'
+import { ResultadoProjetadoModal } from '@/components/financial/ResultadoProjetadoModal'
 import { LucroRealizadoModal } from '@/components/financial/LucroRealizadoModal'
 import { CommissionEditDialog, FinancialEditData } from '@/components/CommissionEditDialog'
 import { RegistrarRecebimentoModal } from '@/components/RegistrarRecebimentoModal'
@@ -155,6 +160,7 @@ export default function Financial() {
   )
   const [selectedProjecaoComp, setSelectedProjecaoComp] = useState<string | null>(null)
   const [isLucroRealModalOpen, setIsLucroRealModalOpen] = useState(false)
+  const [isResultadoProjetadoOpen, setIsResultadoProjetadoOpen] = useState(false)
 
   const isOperationInProgressRef = useRef(false)
   const [saving, setSaving] = useState(false)
@@ -600,6 +606,12 @@ export default function Financial() {
       })
       .filter((item) => item.saldo > 0)
 
+    // Reconciliação unificada recebimento ↔ previsão com inferência de data e FIFO por esgotamento
+    const reconciliacaoMap = reconciliarRecebimentosComPrevisoes(
+      allComissoesPrevistasList,
+      recebimentos,
+    )
+
     // Agrupamento por seguradora (Nível 1 e Nível 2)
     // Coleta saldo a receber vigente por seguradora considerando:
     // a) Previsões de comissão vigentes não canceladas (comissoes_previstas), incluindo parcelas de apólices e de endossos
@@ -643,20 +655,13 @@ export default function Financial() {
 
     // 1. Processar comissoes_previstas ativas
     for (const prev of allComissoesPrevistasList) {
-      if (prev.status === 'Cancelada' || prev.status === 'Recebida') continue
-
-      const recsDesta = recebimentos.filter(
-        (r) =>
-          r.comissao_prevista === prev.id ||
-          (r.policy === prev.policy &&
-            r.competencia &&
-            prev.competencia &&
-            r.competencia === prev.competencia),
-      )
-      const recBrutoDesta =
-        Math.round(recsDesta.reduce((acc, r) => acc + (Number(r.valor_bruto) || 0), 0) * 100) / 100
+      if (prev.status === 'Cancelada') continue
+      const recResult = reconciliacaoMap.get(prev.id)
+      const recBrutoDesta = recResult ? recResult.valorRecebidoBruto : 0
       const vPrev = Number(prev.valor_previsto) || 0
-      const saldoDesta = Math.max(0, Math.round((vPrev - recBrutoDesta) * 100) / 100)
+      const saldoDesta = recResult
+        ? recResult.saldo
+        : Math.max(0, Math.round((vPrev - recBrutoDesta) * 100) / 100)
 
       if (saldoDesta <= 0) continue
 
@@ -734,7 +739,7 @@ export default function Financial() {
         p.insurance_company ||
         'Seguradora Não Identificada'
 
-      const clienteNome = p.expand?.client?.name || 'Cliente Não Identificado'
+      const clienteNome = p.expand?.client?.name || 'Cliente Não Informado'
       const propostaNumero = p.numero_proposta || p.policy_number || '-'
 
       const entry = getOrCreateSegEntry(segId, segNome)
@@ -779,20 +784,13 @@ export default function Financial() {
     const projecaoItemsList: CompetenciaProjecaoItem[] = []
 
     for (const prev of allComissoesPrevistasList) {
-      if (prev.status === 'Cancelada' || prev.status === 'Recebida') continue
-
-      const recsDesta = recebimentos.filter(
-        (r) =>
-          r.comissao_prevista === prev.id ||
-          (r.policy === prev.policy &&
-            r.competencia &&
-            prev.competencia &&
-            r.competencia === prev.competencia),
-      )
-      const recBrutoDesta =
-        Math.round(recsDesta.reduce((acc, r) => acc + (Number(r.valor_bruto) || 0), 0) * 100) / 100
+      if (prev.status === 'Cancelada') continue
+      const recResult = reconciliacaoMap.get(prev.id)
+      const recBrutoDesta = recResult ? recResult.valorRecebidoBruto : 0
       const vPrev = Number(prev.valor_previsto) || 0
-      const saldoDesta = Math.max(0, Math.round((vPrev - recBrutoDesta) * 100) / 100)
+      const saldoDesta = recResult
+        ? recResult.saldo
+        : Math.max(0, Math.round((vPrev - recBrutoDesta) * 100) / 100)
 
       if (saldoDesta <= 0) continue
 
@@ -899,6 +897,26 @@ export default function Financial() {
         count: c.count,
       }))
 
+    // CÁLCULO DO CARD "SEM PREVISÃO DEFINIDA" (Bloco 3):
+    // Apólices ativas de produção sem comissões previstas cadastradas OU comissões com saldo pendente sem competência futura.
+    // Conciliação: Projeções com competência + Sem previsão = Saldo Total a Receber do período.
+    const saldoProjetadoComCompetencia =
+      Math.round(sortedCompCards.reduce((acc, c) => acc + c.saldoPrevisto, 0) * 100) / 100
+
+    let saldoSemPrevisao = Math.max(
+      0,
+      Math.round((saldoTotalAReceber - saldoProjetadoComCompetencia) * 100) / 100,
+    )
+    let countSemPrevisao = periodStartPolicies.filter((p) => {
+      if (p.status === 'Cancelada' || isPolicyCommissionSettled(p)) return false
+      return !policiesWithPrevisoes.has(p.id)
+    }).length
+
+    // Se o contador for 0 mas houver saldo residual sem previsão, garante contagem representativa
+    if (saldoSemPrevisao > 0.009 && countSemPrevisao === 0) {
+      countSemPrevisao = 1
+    }
+
     return {
       premioLiquidoVendido,
       comissaoBrutaPrevista,
@@ -918,6 +936,8 @@ export default function Financial() {
       paidCosts,
       pendingCosts,
       expectedProfit,
+      expectedRepasses,
+      totalCustos,
       realProfit,
       partnerPols,
       pendingPoliciesList,
@@ -927,6 +947,8 @@ export default function Financial() {
       totalSeguradorasSaldo,
       sortedCompCards,
       projecaoItemsList,
+      saldoSemPrevisao,
+      countSemPrevisao,
     }
   }, [
     matchingPolicies,
@@ -937,6 +959,7 @@ export default function Financial() {
     seguradoras,
     allComissoesPrevistasList,
     allPolicies,
+    isPolicyCommissionSettled,
   ])
 
   const totalCommPages = Math.ceil(tablePolicies.length / ITEMS_PER_PAGE) || 1
@@ -1064,6 +1087,10 @@ export default function Financial() {
         // BLOCO 3: PROJEÇÃO DE RECEBIMENTOS
         projecoesCompetencias={metrics.sortedCompCards}
         onCompetenciaClick={(compRaw) => setSelectedProjecaoComp(compRaw)}
+        saldoSemPrevisao={metrics.saldoSemPrevisao}
+        countSemPrevisao={metrics.countSemPrevisao}
+        onSemPrevisaoClick={() => setRecebimentoModalType('sem_previsao')}
+        onExpectedProfitClick={() => setIsResultadoProjetadoOpen(true)}
         // RESULTADO PROJETADO (renomeado de Lucro Previsto, isolado na projeção)
         expectedProfit={metrics.expectedProfit}
         // BLOCO 4: RESULTADO REAL DO PERÍODO
@@ -1316,14 +1343,18 @@ export default function Financial() {
                     </tr>
                   ) : (
                     prevPaginatedData.items.map((prev) => {
-                      const recsDesta = recebimentos.filter(
-                        (r) =>
-                          r.comissao_prevista === prev.id ||
-                          (r.policy === prev.policy &&
-                            r.competencia &&
-                            prev.competencia &&
-                            r.competencia === prev.competencia),
-                      )
+                      // Usar o resultado da reconciliação unificada ou calcular diretamente
+                      const recsDesta = recebimentos.filter((r) => {
+                        if (r.comissao_prevista === prev.id) return true
+                        if (r.policy === prev.policy) {
+                          const cRec =
+                            r.competencia?.trim() ||
+                            inferirCompetenciaRecebimento(r.data_recebimento)
+                          const cPrev = prev.competencia?.trim()
+                          return Boolean(cRec && cPrev && cRec === cPrev)
+                        }
+                        return false
+                      })
                       const recBrutoDesta =
                         Math.round(
                           recsDesta.reduce((acc, r) => acc + (Number(r.valor_bruto) || 0), 0) * 100,
@@ -2399,6 +2430,17 @@ export default function Financial() {
           metrics.sortedCompCards?.find((c) => c.competenciaRaw === selectedProjecaoComp)
             ?.saldoPrevisto || 0
         }
+      />
+
+      {/* MODAL RESULTADO PROJETADO (MEMÓRIA SIMPLES) */}
+      <ResultadoProjetadoModal
+        isOpen={isResultadoProjetadoOpen}
+        onClose={() => setIsResultadoProjetadoOpen(false)}
+        periodLabel={period.label}
+        expectedCommission={metrics.expectedCommissions || 0}
+        expectedRepasses={metrics.expectedRepasses || 0}
+        expectedCosts={metrics.totalCustos || 0}
+        expectedProfit={metrics.expectedProfit || 0}
       />
 
       {/* MODAL BLOCO 4: MEMÓRIA DE CÁLCULO DO LUCRO LÍQUIDO REALIZADO */}

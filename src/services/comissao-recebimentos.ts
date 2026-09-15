@@ -1,6 +1,220 @@
 import pb from '@/lib/pocketbase/client'
 import { ComissaoRecebimento } from '@/types'
-import { formatDateForInput } from '@/lib/utils'
+import { formatDateForInput, extractDateOnly } from '@/lib/utils'
+
+export interface ComissaoPrevistaSimples {
+  id: string
+  policy: string
+  competencia?: string | null
+  valor_previsto?: number
+  parcela_numero?: number
+  data_prevista?: string
+  origem_modelo?: string
+  status?: string
+  endorsement?: string | null
+}
+
+export interface ReconciliacaoPrevisaoResult {
+  previsaoId: string
+  valorPrevisto: number
+  valorRecebidoBruto: number
+  valorRecebidoLiquido: number
+  saldo: number
+  status: 'Pendente' | 'Parcial' | 'Recebida' | 'Cancelada'
+  recebimentosVinculados: ComissaoRecebimento[]
+}
+
+/**
+ * Infere a competência (MM/YYYY) a partir da data de recebimento quando competencia não estiver gravada.
+ * Ex: '2026-09-11' -> '09/2026'
+ */
+export function inferirCompetenciaRecebimento(dataRecebimento?: string | null): string {
+  if (!dataRecebimento) return ''
+  const dateOnly = extractDateOnly(dataRecebimento)
+  if (!dateOnly || !dateOnly.includes('-')) return ''
+  const parts = dateOnly.split('-')
+  if (parts.length >= 2) {
+    const y = parts[0]
+    const m = parts[1].padStart(2, '0')
+    return `${m}/${y}`
+  }
+  return ''
+}
+
+/**
+ * Helper centralizado de reconciliação de recebimentos com previsões de comissão.
+ *
+ * REGRAS CRÍTICAS DE NEGÓCIO:
+ * 1. Vínculo Direto: Se o recebimento tiver `comissao_prevista` preenchido com o ID da previsão, vincula diretamente.
+ * 2. Inferência de Competência por Data: Quando `comissao_prevista` e `competencia` estiverem vazios no recebimento,
+ *    infere a competência pela data do recebimento (ex: 2026-09-11 -> 09/2026) e vincula à previsão da mesma policy
+ *    e mesma competência.
+ * 3. Fallback FIFO (Por Saldo/Esgotamento ou competências em aberto): Caso o recebimento não tenha previsão vinculada
+ *    e não encontre previsão de mesma competência exata, aloca em ordem FIFO sobre as previsões abertas da apólice
+ *    (mais antiga primeiro, ordenadas por data_prevista ou parcela_numero).
+ * 4. Não altera registros históricos nem duplica previsões.
+ *
+ * Retorna um Map<string, ReconciliacaoPrevisaoResult> indexado pelo ID da previsão.
+ */
+export function reconciliarRecebimentosComPrevisoes(
+  prevs: ComissaoPrevistaSimples[],
+  allRecs: ComissaoRecebimento[],
+): Map<string, ReconciliacaoPrevisaoResult> {
+  const result = new Map<string, ReconciliacaoPrevisaoResult>()
+
+  // Inicializa mapa de resultados
+  for (const p of prevs) {
+    const vPrevisto = Number(p.valor_previsto) || 0
+    result.set(p.id, {
+      previsaoId: p.id,
+      valorPrevisto: vPrevisto,
+      valorRecebidoBruto: 0,
+      valorRecebidoLiquido: 0,
+      saldo: vPrevisto,
+      status: p.status === 'Cancelada' ? 'Cancelada' : 'Pendente',
+      recebimentosVinculados: [],
+    })
+  }
+
+  // Agrupar previsões por apólice para alocação restrita à mesma apólice
+  const prevsByPolicy = new Map<string, ComissaoPrevistaSimples[]>()
+  for (const p of prevs) {
+    if (!prevsByPolicy.has(p.policy)) {
+      prevsByPolicy.set(p.policy, [])
+    }
+    prevsByPolicy.get(p.policy)!.push(p)
+  }
+
+  // Ordenar previsões de cada apólice cronologicamente para uso seguro no FIFO
+  for (const polPrevs of prevsByPolicy.values()) {
+    polPrevs.sort((a, b) => {
+      const dA = a.data_prevista || ''
+      const dB = b.data_prevista || ''
+      if (dA && dB && dA !== dB) return dA.localeCompare(dB)
+      const pA = a.parcela_numero || 0
+      const pB = b.parcela_numero || 0
+      return pA - pB
+    })
+  }
+
+  // Rastrear saldo restante de cada previsão durante a alocação
+  const saldoRestantePrevisao = new Map<string, number>()
+  for (const p of prevs) {
+    saldoRestantePrevisao.set(p.id, Number(p.valor_previsto) || 0)
+  }
+
+  // Conjunto de recebimentos alocados
+  const allocatedRecIds = new Set<string>()
+
+  // PASSO 1: Vínculo DIRETO por ID (comissao_prevista)
+  for (const r of allRecs) {
+    if (r.comissao_prevista && result.has(r.comissao_prevista)) {
+      const entry = result.get(r.comissao_prevista)!
+      const bruto = Number(r.valor_bruto) || 0
+      const liquido = r.valor_liquido != null ? Number(r.valor_liquido) : bruto
+      entry.valorRecebidoBruto = Math.round((entry.valorRecebidoBruto + bruto) * 100) / 100
+      entry.valorRecebidoLiquido = Math.round((entry.valorRecebidoLiquido + liquido) * 100) / 100
+      entry.recebimentosVinculados.push(r)
+      allocatedRecIds.add(r.id)
+
+      const sAtual = saldoRestantePrevisao.get(r.comissao_prevista) || 0
+      saldoRestantePrevisao.set(
+        r.comissao_prevista,
+        Math.max(0, Math.round((sAtual - bruto) * 100) / 100),
+      )
+    }
+  }
+
+  // PASSO 2: Vínculo por Competência Exata ou Inferida pela Data do Recebimento
+  // Para recebimentos que ainda não foram alocados
+  for (const r of allRecs) {
+    if (allocatedRecIds.has(r.id)) continue
+
+    const polPrevs = prevsByPolicy.get(r.policy) || []
+    if (polPrevs.length === 0) continue
+
+    // Competência original ou inferida pela data_recebimento
+    const compRec =
+      r.competencia && r.competencia.trim() !== ''
+        ? r.competencia.trim()
+        : inferirCompetenciaRecebimento(r.data_recebimento)
+
+    if (compRec) {
+      // Buscar primeira previsão com a mesma competência que ainda tenha saldo ou que corresponda
+      const matchedPrev =
+        polPrevs.find((p) => {
+          if (!p.competencia) return false
+          return p.competencia.trim() === compRec && (saldoRestantePrevisao.get(p.id) || 0) > 0.009
+        }) || polPrevs.find((p) => p.competencia && p.competencia.trim() === compRec)
+
+      if (matchedPrev) {
+        const entry = result.get(matchedPrev.id)!
+        const bruto = Number(r.valor_bruto) || 0
+        const liquido = r.valor_liquido != null ? Number(r.valor_liquido) : bruto
+        entry.valorRecebidoBruto = Math.round((entry.valorRecebidoBruto + bruto) * 100) / 100
+        entry.valorRecebidoLiquido = Math.round((entry.valorRecebidoLiquido + liquido) * 100) / 100
+        entry.recebimentosVinculados.push(r)
+        allocatedRecIds.add(r.id)
+
+        const sAtual = saldoRestantePrevisao.get(matchedPrev.id) || 0
+        saldoRestantePrevisao.set(
+          matchedPrev.id,
+          Math.max(0, Math.round((sAtual - bruto) * 100) / 100),
+        )
+      }
+    }
+  }
+
+  // PASSO 3: Fallback FIFO para recebimentos restantes da apólice
+  // (Aplicável para modelo "Por saldo/esgotamento" ou quando não houver correspondência exata de competência)
+  for (const r of allRecs) {
+    if (allocatedRecIds.has(r.id)) continue
+
+    const polPrevs = prevsByPolicy.get(r.policy) || []
+    if (polPrevs.length === 0) continue
+
+    // Encontrar primeira previsão aberta com saldo restante > 0
+    const targetPrev =
+      polPrevs.find((p) => (saldoRestantePrevisao.get(p.id) || 0) > 0.009) || polPrevs[0]
+
+    if (targetPrev) {
+      const entry = result.get(targetPrev.id)!
+      const bruto = Number(r.valor_bruto) || 0
+      const liquido = r.valor_liquido != null ? Number(r.valor_liquido) : bruto
+      entry.valorRecebidoBruto = Math.round((entry.valorRecebidoBruto + bruto) * 100) / 100
+      entry.valorRecebidoLiquido = Math.round((entry.valorRecebidoLiquido + liquido) * 100) / 100
+      entry.recebimentosVinculados.push(r)
+      allocatedRecIds.add(r.id)
+
+      const sAtual = saldoRestantePrevisao.get(targetPrev.id) || 0
+      saldoRestantePrevisao.set(
+        targetPrev.id,
+        Math.max(0, Math.round((sAtual - bruto) * 100) / 100),
+      )
+    }
+  }
+
+  // Atualizar saldos finais e status de cada previsão
+  for (const p of prevs) {
+    const entry = result.get(p.id)!
+    const vPrev = entry.valorPrevisto
+    const recBruto = entry.valorRecebidoBruto
+    const saldo = Math.max(0, Math.round((vPrev - recBruto) * 100) / 100)
+    entry.saldo = saldo
+
+    if (p.status === 'Cancelada') {
+      entry.status = 'Cancelada'
+    } else if (recBruto >= vPrev - 0.009 && vPrev > 0) {
+      entry.status = 'Recebida'
+    } else if (recBruto > 0) {
+      entry.status = 'Parcial'
+    } else {
+      entry.status = 'Pendente'
+    }
+  }
+
+  return result
+}
 
 export const getComissaoRecebimentos = async (
   filter?: string,
@@ -115,74 +329,19 @@ export const recalcularStatusApolice = async (policyId: string) => {
     })
 
     // Sincronizar status das comissões previstas vinculadas (Pendente, Parcial, Recebida)
-    // ITEM A.2: Regra estrita de vínculo por ID:
-    // 1. O ID da previsão (comissao_prevista) é soberano e exclusivo.
-    // 2. O fallback por competência só pode rodar quando NÃO existe NENHUM vínculo direto por comissao_prevista
-    //    em todos os recebimentos da apólice (legado).
-    // 3. Mesmo no fallback legado, NUNCA distribuir um recebimento entre múltiplas previsões da mesma competência:
-    //    um recebimento legado afeta no máximo UMA previsão (alocação 1:1, a primeira com competência compatível).
-    // 4. Novos fluxos com ID: sem fallback por competência.
+    // Usando helper centralizado de reconciliação (com suporte a vínculo direto, inferência por data e FIFO de esgotamento)
     try {
-      const prevs = await pb.collection('comissoes_previstas').getFullList({
-        filter: `policy = "${policyId}"`,
-      })
+      const prevs = await pb
+        .collection('comissoes_previstas')
+        .getFullList<ComissaoPrevistaSimples>({
+          filter: `policy = "${policyId}"`,
+        })
       if (prevs.length > 0) {
-        const hasDirectLinks = allRecs.some((r) => Boolean(r.comissao_prevista))
-
-        // Mapear alocação de recebimentos para garantir que nenhum recebimento legado
-        // seja somado/distribuído em mais de uma previsão da mesma competência
-        const recsAlocadosPorPrevisao = new Map<string, ComissaoRecebimento[]>()
+        const reconciliacao = reconciliarRecebimentosComPrevisoes(prevs, allRecs)
         for (const p of prevs) {
-          recsAlocadosPorPrevisao.set(p.id, [])
-        }
-
-        // 1. Alocar recebimentos vinculados diretamente por ID
-        for (const r of allRecs) {
-          if (r.comissao_prevista && recsAlocadosPorPrevisao.has(r.comissao_prevista)) {
-            recsAlocadosPorPrevisao.get(r.comissao_prevista)!.push(r)
-          }
-        }
-
-        // 2. Fallback legado: SOMENTE se não houver NENHUM recebimento com comissao_prevista direta
-        if (!hasDirectLinks) {
-          const usedLegacyRecIds = new Set<string>()
-          for (const p of prevs) {
-            for (const r of allRecs) {
-              if (
-                !r.comissao_prevista &&
-                !usedLegacyRecIds.has(r.id) &&
-                r.competencia &&
-                p.competencia &&
-                r.competencia.trim() === p.competencia.trim()
-              ) {
-                // Aloca no máximo a UMA previsão e marca como usado
-                recsAlocadosPorPrevisao.get(p.id)!.push(r)
-                usedLegacyRecIds.add(r.id)
-                break // apenas 1 recebimento legado para esta previsão
-              }
-            }
-          }
-        }
-
-        for (const p of prevs) {
-          const recsDaPrevisao = recsAlocadosPorPrevisao.get(p.id) || []
-
-          const brutoPrevisao =
-            Math.round(
-              recsDaPrevisao.reduce((acc, r) => acc + (Number(r.valor_bruto) || 0), 0) * 100,
-            ) / 100
-          const vPrevisto = Number(p.valor_previsto) || 0
-
-          let novoStatus: 'Pendente' | 'Parcial' | 'Recebida' | 'Cancelada' = 'Pendente'
-          if (p.status === 'Cancelada') {
-            novoStatus = 'Cancelada'
-          } else if (brutoPrevisao >= vPrevisto - 0.009 && vPrevisto > 0) {
-            novoStatus = 'Recebida'
-          } else if (brutoPrevisao > 0) {
-            novoStatus = 'Parcial'
-          } else {
-            novoStatus = 'Pendente'
-          }
+          const recItem = reconciliacao.get(p.id)
+          const novoStatus =
+            recItem?.status || (p.status === 'Cancelada' ? 'Cancelada' : 'Pendente')
 
           if (p.status !== novoStatus) {
             await pb.collection('comissoes_previstas').update(p.id, { status: novoStatus })
