@@ -10,6 +10,13 @@ routerAdd(
       return e.json(401, { success: false, error: 'Requer autenticação.' })
     }
 
+    var role = auth.getString('role')
+    if (role === 'Visualizador') {
+      return e.json(403, {
+        success: false,
+        error: 'Visualizadores não possuem permissão para realizar estornos financeiros.',
+      })
+    }
     var body = e.requestInfo().body
     if (!body) {
       return e.json(400, { success: false, error: 'Corpo da requisição vazio.' })
@@ -321,6 +328,60 @@ onRecordCreate((e) => {
     } else {
       if (valorBruto <= 0) {
         throw new BadRequestError('O valor de recebimento deve ser maior que zero.')
+      }
+
+      // CORREÇÃO 1: Baixa acima do saldo restante da previsão (comissao_prevista)
+      // Se houver comissao_prevista vinculada, somar todos os recebimentos já confirmados (considerando estornos existentes)
+      // e REJEITAR com BadRequestError se valor_novo > (valor_previsto - já_recebido).
+      // Se não tiver ID de previsão (legado), mantém sem bloquear para preservar compatibilidade legada.
+      if (comissaoPrevistaId && comissaoPrevistaId.trim() !== '') {
+        try {
+          var prevRecordForSaldo = $app.findRecordById('comissoes_previstas', comissaoPrevistaId)
+          var valorPrevistoParcela = prevRecordForSaldo.getFloat('valor_previsto') || 0
+
+          if (valorPrevistoParcela > 0) {
+            var recsExistentes = $app.findRecordsByFilter(
+              'comissao_recebimentos',
+              'comissao_prevista = {:prevId}',
+              '-created',
+              500,
+              0,
+              { prevId: comissaoPrevistaId },
+            )
+
+            var jaRecebidoLiquido = 0
+            if (recsExistentes && recsExistentes.length > 0) {
+              for (var rIdx = 0; rIdx < recsExistentes.length; rIdx++) {
+                var recItem = recsExistentes[rIdx]
+                // Se for estorno, valor_bruto é negativo, então a soma líquida considera estornos naturalmente
+                jaRecebidoLiquido += recItem.getFloat('valor_bruto')
+              }
+            }
+
+            var saldoRestante = Math.max(
+              0,
+              Math.round((valorPrevistoParcela - jaRecebidoLiquido) * 100) / 100,
+            )
+
+            // Rejeitar se valorBruto novo for maior que o saldo restante da previsão (tolerância centésimos 0.009)
+            if (valorBruto > saldoRestante + 0.009) {
+              throw new BadRequestError(
+                'Valor de recebimento (R$ ' +
+                  valorBruto.toFixed(2) +
+                  ') excede o saldo restante da previsão vinculada (R$ ' +
+                  saldoRestante.toFixed(2) +
+                  ').',
+              )
+            }
+          }
+        } catch (errPrev) {
+          if (
+            errPrev instanceof BadRequestError ||
+            (errPrev.message && errPrev.message.includes('excede o saldo'))
+          ) {
+            throw errPrev
+          }
+        }
       }
     }
   }

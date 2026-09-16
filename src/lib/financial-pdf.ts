@@ -81,7 +81,7 @@ export async function exportFinancialListingPDF(options: FinancialPDFOptions) {
     import('jspdf'),
     import('jspdf-autotable'),
   ])
-  const autoTable = autoTableModule.default || autoTableModule
+  const autoTable = (autoTableModule as any).default || autoTableModule
 
   const orientation = options.orientation || (options.columns.length > 6 ? 'landscape' : 'portrait')
   const doc = new jsPDF({
@@ -285,7 +285,7 @@ export async function exportFinancialListingPDF(options: FinancialPDFOptions) {
     }
   })
 
-  autoTable(doc, {
+  ;(autoTable as any)(doc, {
     startY: currentY,
     head: [tableHeaders],
     body: tableData,

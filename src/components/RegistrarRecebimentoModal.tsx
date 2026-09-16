@@ -140,7 +140,9 @@ export function RegistrarRecebimentoModal({
 
   const numBruto = valorBruto === '' ? 0 : Number(valorBruto)
   const totalRecebidoApos = Math.round((alreadyReceived + numBruto) * 100) / 100
-  const isAcimaDoPrevisto = comissaoPrevista > 0 && totalRecebidoApos > comissaoPrevista
+  const isAcimaDoPrevisto = comissaoPrevista > 0 && totalRecebidoApos > comissaoPrevista + 0.009
+  // Bloqueio de valor acima do saldo disponível (com margem de centavos)
+  const isAcimaDoSaldo = saldoAtual > 0 && numBruto > saldoAtual + 0.009
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
@@ -159,6 +161,16 @@ export function RegistrarRecebimentoModal({
       toast({
         title: 'Data obrigatória',
         description: 'Informe a data do recebimento.',
+        variant: 'destructive',
+      })
+      return
+    }
+
+    // CORREÇÃO 1: Bloquear tentativa de salvar baixa com valor superior ao saldo a receber
+    if (isAcimaDoSaldo) {
+      toast({
+        title: 'Valor acima do saldo',
+        description: `O valor informado (R$ ${numBruto.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}) excede o saldo a receber (R$ ${saldoAtual.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}).`,
         variant: 'destructive',
       })
       return
@@ -253,8 +265,24 @@ export function RegistrarRecebimentoModal({
             </div>
           </div>
 
-          {/* Alerta caso o valor exceda a comissão prevista */}
-          {isAcimaDoPrevisto && (
+          {/* Bloqueio/Alerta caso o valor exceda o saldo ou a comissão prevista */}
+          {isAcimaDoSaldo && (
+            <div className="p-3 bg-rose-50 border border-rose-300 rounded-md flex items-start gap-2 text-xs text-rose-800">
+              <AlertTriangle className="w-4 h-4 text-rose-600 shrink-0 mt-0.5" />
+              <div>
+                <p className="font-bold">Recebimento bloqueado — Valor acima do saldo disponível</p>
+                <p>
+                  O valor de R$ {numBruto.toLocaleString('pt-BR', { minimumFractionDigits: 2 })} é
+                  maior que o saldo a receber de R${' '}
+                  {saldoAtual.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}. Ajuste o valor
+                  da baixa para o saldo ou cadastre uma previsão adicional via endosso antes de
+                  baixar.
+                </p>
+              </div>
+            </div>
+          )}
+
+          {!isAcimaDoSaldo && isAcimaDoPrevisto && (
             <div className="p-3 bg-amber-50 border border-amber-200 rounded-md flex items-start gap-2 text-xs text-amber-800">
               <AlertTriangle className="w-4 h-4 text-amber-600 shrink-0 mt-0.5" />
               <div>
@@ -266,7 +294,7 @@ export function RegistrarRecebimentoModal({
                   {(totalRecebidoApos - comissaoPrevista).toLocaleString('pt-BR', {
                     minimumFractionDigits: 2,
                   })}
-                  . O registro será gravado normalmente para refletir a realidade financeira.
+                  .
                 </p>
               </div>
             </div>
@@ -399,8 +427,8 @@ export function RegistrarRecebimentoModal({
             </Button>
             <Button
               type="submit"
-              className="bg-emerald-600 hover:bg-emerald-700 text-white"
-              disabled={isSubmitting}
+              className="bg-emerald-600 hover:bg-emerald-700 text-white disabled:opacity-50 disabled:cursor-not-allowed"
+              disabled={isSubmitting || isAcimaDoSaldo}
             >
               {isSubmitting ? 'Salvando...' : 'Salvar Recebimento'}
             </Button>

@@ -637,66 +637,58 @@ export const registrarEstornoComissao = async (
     throw new Error('A data do estorno é obrigatória.')
   }
 
-  // 1. Carregar recebimento original
-  const original = await pb
-    .collection('comissao_recebimentos')
-    .getOne<ComissaoRecebimento>(payload.recebimento_original_id)
+  const idempotencyKey = `est_${payload.recebimento_original_id}_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`
 
-  const originalBruto = Number(original.valor_bruto) || 0
-
-  // 2. Buscar outros estornos já feitos para este recebimento
-  const outrosEstornos = await pb
-    .collection('comissao_recebimentos')
-    .getFullList<ComissaoRecebimento>({
-      filter: `recebimento_original = "${original.id}"`,
+  // CORREÇÃO 2: Chamar a rota transacional segura do servidor (/backend/v1/finance/estorno)
+  // Ela valida acumulado contra corridas de forma atômica, protege saldo restante e rejeita se Visualizador
+  try {
+    const res = await pb.send<{
+      success: boolean
+      id: string
+      policy: string
+      recebimento_original: string
+      valor_estorno: number
+      saldo_restante: number
+      error?: string
+    }>('/backend/v1/finance/estorno', {
+      method: 'POST',
+      body: {
+        recebimento_original_id: payload.recebimento_original_id,
+        valor_estorno: valorPositivo,
+        data_estorno: payload.data_estorno,
+        motivo: payload.motivo.trim(),
+        idempotency_key: idempotencyKey,
+      },
     })
-  const jaEstornado = Math.abs(
-    outrosEstornos.reduce((acc, est) => acc + (Number(est.valor_bruto) || 0), 0),
-  )
 
-  const saldoDisponivelParaEstorno = Math.max(
-    0,
-    Math.round((originalBruto - jaEstornado) * 100) / 100,
-  )
-  if (valorPositivo > saldoDisponivelParaEstorno + 0.009) {
-    throw new Error(
-      `O valor de estorno (R$ ${valorPositivo.toFixed(2)}) não pode exceder o saldo restante deste recebimento (R$ ${saldoDisponivelParaEstorno.toFixed(2)}).`,
-    )
+    if (!res || !res.success) {
+      throw new Error(res?.error || 'Falha ao processar estorno transacional.')
+    }
+
+    // Retorna o registro recém-criado para manter compatibilidade com quem consome
+    try {
+      return await pb.collection('comissao_recebimentos').getOne<ComissaoRecebimento>(res.id)
+    } catch (_) {
+      // Se não conseguir carregar o registro completo imediatamente, devolve payload mock
+      return {
+        id: res.id,
+        policy: res.policy,
+        data_recebimento: payload.data_estorno,
+        valor_bruto: -valorPositivo,
+        is_estorno: true,
+        recebimento_original: payload.recebimento_original_id,
+        motivo_estorno: payload.motivo.trim(),
+      } as ComissaoRecebimento
+    }
+  } catch (err: any) {
+    // Se o backend retornou erro HTTP ou formato estruturado, extrair mensagem legível
+    const msg =
+      err?.data?.error ||
+      err?.response?.error ||
+      err?.message ||
+      'Erro desconhecido ao processar estorno.'
+    throw new Error(msg)
   }
-
-  // 3. Proporcional de imposto se houver
-  const aliq = Number(original.aliquota_imposto || 0)
-  const descImpostoEstorno = aliq > 0 ? Math.round(((valorPositivo * aliq) / 100) * 100) / 100 : 0
-
-  const valorBrutoNegativo = -Math.abs(valorPositivo)
-  const valorLiquidoNegativo = -Math.abs(
-    Math.round((valorPositivo - descImpostoEstorno) * 100) / 100,
-  )
-
-  const currentUser = pb.authStore.record
-  const userAuditoria = currentUser
-    ? `${currentUser.name || currentUser.email || currentUser.id}`
-    : 'Sistema'
-
-  const idempotencyKey = `est_${original.id}_${Date.now()}_${Math.random().toString(36).substring(2, 6)}`
-
-  return createComissaoRecebimento({
-    policy: original.policy,
-    data_recebimento: payload.data_estorno,
-    valor_bruto: valorBrutoNegativo,
-    descontos_impostos: -descImpostoEstorno,
-    valor_liquido: valorLiquidoNegativo,
-    aliquota_imposto: aliq,
-    origem: 'Estorno',
-    observacao: `[Estorno ref. recebimento ${original.id}]: ${payload.motivo.trim()} [Responsável: ${userAuditoria}]`,
-    parcela: original.parcela,
-    competencia: original.competencia,
-    idempotency_key: idempotencyKey,
-    is_estorno: true,
-    recebimento_original: original.id,
-    motivo_estorno: payload.motivo.trim(),
-    comissao_prevista: original.comissao_prevista || null,
-  })
 }
 
 export const deleteComissaoRecebimento = async (id: string, policyId?: string) => {

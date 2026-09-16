@@ -7,7 +7,8 @@ import {
   deleteCustoFixo,
 } from '@/services/custos-fixos'
 import { getPolicies } from '@/services/policies'
-import { CustoFixo, Policy, FilterState } from '@/types'
+import { getComissaoRecebimentos } from '@/services/comissao-recebimentos'
+import { CustoFixo, Policy, FilterState, ComissaoRecebimento } from '@/types'
 import { formatDateDisplay } from '@/lib/utils'
 import { Button } from '@/components/ui/button'
 import { Card } from '@/components/ui/card'
@@ -70,6 +71,7 @@ export default function CustosFixos() {
   const { can } = usePermissions()
   const [costs, setCosts] = useState<CustoFixo[]>([])
   const [policies, setPolicies] = useState<Policy[]>([])
+  const [recebimentos, setRecebimentos] = useState<ComissaoRecebimento[]>([])
 
   const initialYear = searchParams.get('year') || String(new Date().getFullYear())
   const initialMonth = searchParams.get('month') || String(new Date().getMonth() + 1)
@@ -93,9 +95,14 @@ export default function CustosFixos() {
   const loadData = useCallback(async () => {
     setLoading(true)
     try {
-      const [costsData, pols] = await Promise.all([getCustosFixos(''), getPolicies('')])
+      const [costsData, pols, recs] = await Promise.all([
+        getCustosFixos(''),
+        getPolicies(''),
+        getComissaoRecebimentos().catch(() => []),
+      ])
       setCosts(costsData)
       setPolicies(pols)
+      setRecebimentos(recs)
     } catch {
       /* ignored */
     }
@@ -107,10 +114,14 @@ export default function CustosFixos() {
   }, [loadData])
   useRealtime('custos_fixos', () => loadData())
   useRealtime('policies', () => loadData())
+  useRealtime('comissao_recebimentos', () => loadData())
 
   const { totalReceitas, totalRepasses, totalCustos, lucroLiquido, custosPagos, custosPendentes } =
     useMemo(() => {
-      const totalReceitas = computeReceivedCommissions(policies, effectivePeriod)
+      // CORREÇÃO 3: Apuração de receita realizada usando a MESMA função centralizada e os movimentos
+      // reais de recebimento (comissao_recebimentos), idêntico ao Dashboard e Financeiro, eliminando
+      // a divergência histórica de fallback antigo da apólice
+      const totalReceitas = computeReceivedCommissions(policies, effectivePeriod, recebimentos)
       const totalRepasses = computePaidRepasses(policies, effectivePeriod)
       const totalCustos = computeCosts(costs, effectivePeriod)
       const custosPagos = computePaidCosts(costs, effectivePeriod)
@@ -124,7 +135,7 @@ export default function CustosFixos() {
         custosPagos,
         custosPendentes,
       }
-    }, [policies, costs, effectivePeriod])
+    }, [policies, costs, effectivePeriod, recebimentos])
 
   const periodCosts = useMemo(() => {
     return costs.filter((c) => {
