@@ -26,6 +26,13 @@ export interface PartnerReportInfo {
   dadosBancarios?: string
 }
 
+export interface PartnerReportDebitoItem {
+  descricao: string
+  valor: number
+  data?: string
+  parceiroNome?: string
+}
+
 export interface PartnerReportData {
   partnerName: string
   partnerInfo?: PartnerReportInfo | null
@@ -36,11 +43,12 @@ export interface PartnerReportData {
   entries: PartnerReportEntry[]
   totalBrutoRepasse: number
   totalDebitos: number
-  debitosList: Array<{ descricao: string; valor: number; data?: string }>
+  debitosList: PartnerReportDebitoItem[]
   taxaPixValor: number
   totalLiquidoAPagar: number
   totalPaid: number
   totalPending: number
+  saldoCredorRemanescente?: number
 }
 
 function escapeHtml(val: unknown): string {
@@ -111,12 +119,14 @@ export function generatePartnerReportPDF(data: PartnerReportData) {
   const debitosDetailRows =
     data.debitosList && data.debitosList.length > 0
       ? data.debitosList
-          .map(
-            (d) => `<tr>
-              <td class="sum-label" style="padding-left:12px; font-size:11px; color:#64748b">• ${escapeHtml(d.descricao || 'Débito')}:</td>
+          .map((d) => {
+            const partnerBadge = d.parceiroNome ? ` [${escapeHtml(d.parceiroNome)}]` : ''
+            const dateStr = d.data ? ` (${escapeHtml(d.data)})` : ''
+            return `<tr>
+              <td class="sum-label" style="padding-left:12px; font-size:11px; color:#64748b">• ${escapeHtml(d.descricao || 'Débito')}${partnerBadge}${dateStr}:</td>
               <td class="sum-val right text-danger" style="font-size:11px">- R$ ${fmt(d.valor)}</td>
-            </tr>`,
-          )
+            </tr>`
+          })
           .join('')
       : ''
 
@@ -161,6 +171,14 @@ export function generatePartnerReportPDF(data: PartnerReportData) {
             <td class="sum-label font-bold" style="font-size:15px; color:#1e293b;">LÍQUIDO A PAGAR (Transferência):</td>
             <td class="sum-val right font-bold text-primary" style="font-size:17px;">R$ ${fmt(data.totalLiquidoAPagar)}</td>
           </tr>
+          ${
+            (data.saldoCredorRemanescente || 0) > 0
+              ? `<tr>
+            <td class="sum-label font-semibold" style="color:#b45309; font-size:12px; padding-top:6px;">⚠️ Débito pendente retido / saldo da corretora a compensar:</td>
+            <td class="sum-val right font-bold" style="color:#b45309; font-size:12px; padding-top:6px;">R$ ${fmt(data.saldoCredorRemanescente || 0)}</td>
+          </tr>`
+              : ''
+          }
         </tbody>
       </table>
     </div>

@@ -28,12 +28,30 @@ export const createParceiroPagamento = async (data: {
 }
 
 export const getParceiroDebitosPendentes = async (
-  parceiroId: string,
+  parceiroId?: string,
 ): Promise<ParceiroDebito[]> => {
-  if (!parceiroId || parceiroId === 'all') return []
+  const filter =
+    parceiroId && parceiroId !== 'all'
+      ? `parceiro = "${parceiroId}" && (status = "Pendente" || status = "" || status = null)`
+      : `status = "Pendente" || status = "" || status = null`
   return pb.collection('parceiro_debitos').getFullList<ParceiroDebito>({
-    filter: `parceiro = "${parceiroId}" && (status = "Pendente" || status = "" || status = null)`,
+    filter,
     sort: '-created',
+    expand: 'parceiro',
+  })
+}
+
+export const getDebitosPendentesPorParceiros = async (
+  parceiroIds: string[],
+): Promise<ParceiroDebito[]> => {
+  if (!parceiroIds || parceiroIds.length === 0) return []
+  const uniqueIds = Array.from(new Set(parceiroIds.filter(Boolean)))
+  if (uniqueIds.length === 0) return []
+  const filter = uniqueIds.map((id) => `parceiro = "${id}"`).join(' || ')
+  return pb.collection('parceiro_debitos').getFullList<ParceiroDebito>({
+    filter: `(${filter}) && (status = "Pendente" || status = "" || status = null)`,
+    sort: '-created',
+    expand: 'parceiro',
   })
 }
 

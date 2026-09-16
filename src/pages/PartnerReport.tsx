@@ -21,6 +21,7 @@ import { findClientByDocument } from '@/services/clients'
 import {
   getParceiroPagamentos,
   getParceiroDebitosPendentes,
+  getDebitosPendentesPorParceiros,
   createParceiroDebito,
   updateParceiroDebito,
   deleteParceiroDebito,
@@ -107,12 +108,13 @@ export default function PartnerReport() {
   const [page, setPage] = useState(1)
   const PAGE_SIZE = 10
 
-  // Débitos do parceiro selecionado para este fechamento/pagamento
+  // Débitos manuais ou adicionados em tela
   const [debitos, setDebitos] = useState<ParceiroDebitoItem[]>([])
   const [isDebitoDialogOpen, setIsDebitoDialogOpen] = useState(false)
   const [editingDebitoIndex, setEditingDebitoIndex] = useState<number | null>(null)
   const [debitoDescricao, setDebitoDescricao] = useState('')
   const [debitoValor, setDebitoValor] = useState<string>('')
+  const [debitoTargetPartnerId, setDebitoTargetPartnerId] = useState<string>('')
 
   // Taxa de Transferência PIX (R$): cálculo automático de 1% limitado a R$ 10,00, editável manualmente
   const [taxaPixManual, setTaxaPixManual] = useState<number | null>(null)
@@ -130,6 +132,11 @@ export default function PartnerReport() {
 
   // Seleção de apólices com checkbox (para atalho de fechamento pontual / seleção)
   const [selectedPolicyIds, setSelectedPolicyIds] = useState<string[]>([])
+
+  // Débitos cadastrados do(s) parceiro(s) detectados pela seleção quando o filtro é "all"
+  const [selectionDebitos, setSelectionDebitos] = useState<
+    (ParceiroDebitoItem & { partnerId?: string; partnerNome?: string })[]
+  >([])
 
   const loadData = useCallback(async () => {
     try {
@@ -311,10 +318,84 @@ export default function PartnerReport() {
     return reportEntries.slice(start, start + PAGE_SIZE)
   }, [reportEntries, page])
 
-  // Somatório dos débitos do parceiro
+  // Quando há seleção ativa por checkbox, as pendências a pagar consideram a seleção
+  const hasSelection = selectedPolicyIds.length > 0
+
+  // Identificação dos parceiros das apólices selecionadas
+  const selectedEntries = useMemo(() => {
+    if (!hasSelection) return []
+    const selectedSet = new Set(selectedPolicyIds)
+    return reportEntries.filter((e) => e.policyId && selectedSet.has(e.policyId))
+  }, [hasSelection, selectedPolicyIds, reportEntries])
+
+  const selectedDistinctPartnerIds = useMemo(() => {
+    if (selectedPartner !== 'all') return [selectedPartner]
+    return Array.from(new Set(selectedEntries.map((e) => e.partnerId).filter(Boolean))) as string[]
+  }, [selectedPartner, selectedEntries])
+
+  // Se o filtro for "Todos os parceiros", carregar os débitos dos parceiros presentes na seleção
+  useEffect(() => {
+    if (selectedPartner !== 'all') {
+      setSelectionDebitos([])
+      return
+    }
+
+    if (selectedDistinctPartnerIds.length === 0) {
+      setSelectionDebitos([])
+      return
+    }
+
+    let isMounted = true
+    getDebitosPendentesPorParceiros(selectedDistinctPartnerIds)
+      .then((items) => {
+        if (!isMounted) return
+        setSelectionDebitos(
+          items.map((d) => {
+            const parName =
+              (d as any).expand?.parceiro?.nome ||
+              parceiros.find((p) => p.id === d.parceiro)?.nome ||
+              'Parceiro'
+            return {
+              id: d.id,
+              descricao: d.descricao,
+              valor: d.valor,
+              data: d.data,
+              partnerId: d.parceiro,
+              partnerNome: parName,
+            }
+          }),
+        )
+      })
+      .catch(() => {
+        if (isMounted) setSelectionDebitos([])
+      })
+
+    return () => {
+      isMounted = false
+    }
+  }, [selectedPartner, selectedDistinctPartnerIds, parceiros])
+
+  // Lista efetiva de débitos a considerar para o fechamento/resumo:
+  // - Se parceiro específico filtrado: usa `debitos`
+  // - Se "all" e há seleção: usa `selectionDebitos` agrupados por parceiro da seleção
+  // - Caso contrário: vazia
+  const activeDebitosList = useMemo(() => {
+    if (selectedPartner !== 'all') {
+      return debitos.map((d) => ({
+        ...d,
+        parceiroNome: parceiros.find((p) => p.id === selectedPartner)?.nome || 'Parceiro',
+      }))
+    }
+    if (hasSelection) {
+      return selectionDebitos
+    }
+    return []
+  }, [selectedPartner, debitos, hasSelection, selectionDebitos, parceiros])
+
+  // Somatório dos débitos ativos
   const totalDebitos = useMemo(
-    () => debitos.reduce((s, d) => s + (Number(d.valor) || 0), 0),
-    [debitos],
+    () => activeDebitosList.reduce((s, d) => s + (Number(d.valor) || 0), 0),
+    [activeDebitosList],
   )
 
   const totalPaid = reportEntries
@@ -329,9 +410,6 @@ export default function PartnerReport() {
   const allPendingPolicies = useMemo(() => {
     return filteredPolicies.filter((p) => !p.pago_parceiro)
   }, [filteredPolicies])
-
-  // Quando há seleção ativa por checkbox, as pendências a pagar consideram a seleção
-  const hasSelection = selectedPolicyIds.length > 0
 
   const pendingPoliciesToPay = useMemo(() => {
     if (hasSelection) {
@@ -352,11 +430,21 @@ export default function PartnerReport() {
     return totalPendingAll
   }, [hasSelection, selectedPolicyIds, reportEntries, totalPendingAll])
 
+  // Saldo credor remanescente (quando débitos > total a pagar):
+  // débito pendente retido / saldo a compensar futuramente com a corretora
+  const saldoCredorRemanescente = useMemo(() => {
+    if (totalDebitos > totalPending) {
+      return Math.round((totalDebitos - totalPending) * 100) / 100
+    }
+    return 0
+  }, [totalDebitos, totalPending])
+
   // Base para cálculo da taxa PIX: apenas repasses PENDENTES a pagar após débitos (se positivo)
   // Cálculo automático da taxa PIX: 1% sobre o valor da transferência a pagar, limitado ao máximo de R$ 10,00 (mínimo R$ 0)
   const taxaPixCalculadaAuto = useMemo(() => {
     if (totalPending <= 0) return 0
     const baseTransferencia = Math.max(0, totalPending - totalDebitos)
+    if (baseTransferencia <= 0) return 0
     const taxa = (baseTransferencia * 1) / 100
     const taxaLimitada = Math.min(10, taxa)
     return Math.round(taxaLimitada * 100) / 100
@@ -364,12 +452,12 @@ export default function PartnerReport() {
 
   // Taxa PIX efetiva (se foi editada manualmente, usa o valor manual; caso contrário a calculada automaticamente)
   const taxaPixEfetiva = useMemo(() => {
-    if (totalPending <= 0) return 0
+    if (totalPending <= 0 || totalPending - totalDebitos <= 0) return 0
     if (taxaPixManual !== null && !isNaN(taxaPixManual) && taxaPixManual >= 0) {
       return taxaPixManual
     }
     return taxaPixCalculadaAuto
-  }, [totalPending, taxaPixManual, taxaPixCalculadaAuto])
+  }, [totalPending, totalDebitos, taxaPixManual, taxaPixCalculadaAuto])
 
   // Líquido a Pagar final (destacado na tela): repasses PENDENTES a pagar menos débitos e taxa PIX
   const totalLiquidoAPagar = useMemo(() => {
@@ -383,15 +471,24 @@ export default function PartnerReport() {
     setEditingDebitoIndex(null)
     setDebitoDescricao('')
     setDebitoValor('')
+    // Se filtro parceiro específico, usa ele. Se há seleção com parceiro único, pré-seleciona ele.
+    const defaultPartner =
+      selectedPartner !== 'all'
+        ? selectedPartner
+        : selectedDistinctPartnerIds.length === 1
+          ? selectedDistinctPartnerIds[0]
+          : ''
+    setDebitoTargetPartnerId(defaultPartner || '')
     setIsDebitoDialogOpen(true)
   }
 
   const handleOpenEditDebito = (index: number) => {
-    const item = debitos[index]
+    const item = activeDebitosList[index]
     if (!item) return
     setEditingDebitoIndex(index)
     setDebitoDescricao(item.descricao)
     setDebitoValor(String(item.valor))
+    setDebitoTargetPartnerId((item as any).partnerId || selectedPartner || '')
     setIsDebitoDialogOpen(true)
   }
 
@@ -406,16 +503,14 @@ export default function PartnerReport() {
       return
     }
 
-    if (editingDebitoIndex !== null) {
-      const existing = debitos[editingDebitoIndex]
-      const updatedList = [...debitos]
-      updatedList[editingDebitoIndex] = {
-        ...existing,
-        descricao: debitoDescricao.trim(),
-        valor: val,
-      }
-      setDebitos(updatedList)
+    const partnerIdForDebit =
+      selectedPartner !== 'all'
+        ? selectedPartner
+        : debitoTargetPartnerId ||
+          (selectedDistinctPartnerIds.length === 1 ? selectedDistinctPartnerIds[0] : '')
 
+    if (editingDebitoIndex !== null) {
+      const existing = activeDebitosList[editingDebitoIndex]
       if (existing?.id) {
         try {
           await updateParceiroDebito(existing.id, {
@@ -426,13 +521,33 @@ export default function PartnerReport() {
           /* ignored */
         }
       }
+
+      // Atualiza lista local
+      if (selectedPartner !== 'all') {
+        const updatedList = [...debitos]
+        const dIdx = debitos.findIndex((d) => d.id === existing?.id || d === existing)
+        if (dIdx !== -1) {
+          updatedList[dIdx] = {
+            ...updatedList[dIdx],
+            descricao: debitoDescricao.trim(),
+            valor: val,
+          }
+          setDebitos(updatedList)
+        }
+      } else {
+        setSelectionDebitos((prev) =>
+          prev.map((d, i) =>
+            i === editingDebitoIndex ? { ...d, descricao: debitoDescricao.trim(), valor: val } : d,
+          ),
+        )
+      }
       toast({ title: 'Débito atualizado' })
     } else {
       let newId: string | undefined = undefined
-      if (selectedPartner && selectedPartner !== 'all') {
+      if (partnerIdForDebit) {
         try {
           const created = await createParceiroDebito({
-            parceiro: selectedPartner,
+            parceiro: partnerIdForDebit,
             descricao: debitoDescricao.trim(),
             valor: val,
             data: todayLocalDate(),
@@ -443,15 +558,32 @@ export default function PartnerReport() {
           /* fallback local */
         }
       }
-      setDebitos((prev) => [
-        ...prev,
-        {
-          id: newId,
-          descricao: debitoDescricao.trim(),
-          valor: val,
-          data: todayLocalDate(),
-        },
-      ])
+
+      const pName = parceiros.find((p) => p.id === partnerIdForDebit)?.nome || 'Parceiro'
+
+      if (selectedPartner !== 'all') {
+        setDebitos((prev) => [
+          ...prev,
+          {
+            id: newId,
+            descricao: debitoDescricao.trim(),
+            valor: val,
+            data: todayLocalDate(),
+          },
+        ])
+      } else {
+        setSelectionDebitos((prev) => [
+          ...prev,
+          {
+            id: newId,
+            descricao: debitoDescricao.trim(),
+            valor: val,
+            data: todayLocalDate(),
+            partnerId: partnerIdForDebit,
+            partnerNome: pName,
+          },
+        ])
+      }
       toast({ title: 'Débito adicionado' })
     }
 
@@ -459,7 +591,7 @@ export default function PartnerReport() {
   }
 
   const handleDeleteDebito = async (index: number) => {
-    const item = debitos[index]
+    const item = activeDebitosList[index]
     if (item?.id) {
       try {
         await deleteParceiroDebito(item.id)
@@ -467,7 +599,11 @@ export default function PartnerReport() {
         /* ignored */
       }
     }
-    setDebitos((prev) => prev.filter((_, i) => i !== index))
+    if (selectedPartner !== 'all') {
+      setDebitos((prev) => prev.filter((_, i) => i !== index))
+    } else {
+      setSelectionDebitos((prev) => prev.filter((_, i) => i !== index))
+    }
     toast({ title: 'Débito removido' })
   }
 
@@ -542,6 +678,9 @@ export default function PartnerReport() {
     const pdfLiquido = isCurrentSelection
       ? totalLiquidoAPagar
       : Math.max(0, pdfTotalPending - pdfDebitos - pdfTaxaPix)
+    const pdfSaldoCredorRemanescente = isCurrentSelection
+      ? saldoCredorRemanescente
+      : Math.max(0, pdfDebitos - pdfTotalPending)
 
     generatePartnerReportPDF({
       partnerName,
@@ -561,11 +700,19 @@ export default function PartnerReport() {
       entries,
       totalBrutoRepasse: pdfTotalBruto,
       totalDebitos: pdfDebitos,
-      debitosList: isCurrentSelection ? debitos : [],
+      debitosList: isCurrentSelection
+        ? activeDebitosList.map((d) => ({
+            descricao: d.descricao,
+            valor: d.valor,
+            data: d.data ? formatDateDisplay(d.data) : undefined,
+            parceiroNome: d.parceiroNome,
+          }))
+        : [],
       taxaPixValor: pdfTaxaPix,
       totalLiquidoAPagar: pdfLiquido,
       totalPaid: pdfTotalPaid,
       totalPending: pdfTotalPending,
+      saldoCredorRemanescente: pdfSaldoCredorRemanescente,
     })
   }
 
@@ -661,6 +808,19 @@ export default function PartnerReport() {
         return
       }
 
+      // Débitos efetivos a serem liquidados no fechamento transacional
+      const debitosToClose =
+        selectedPartner !== 'all'
+          ? debitos
+          : activeDebitosList
+              .filter((d) => (d as any).partnerId === targetPartnerId || !(d as any).partnerId)
+              .map((d) => ({
+                id: d.id,
+                descricao: d.descricao,
+                valor: d.valor,
+                data: d.data,
+              }))
+
       // Chamada transacional ao endpoint seguro no servidor
       // Garante atomicidade: se falhar, nada é gravado.
       // Se débito > repasse disponível, abate somente o disponível e mantém o saldo restante pendente.
@@ -669,7 +829,7 @@ export default function PartnerReport() {
         parceiro_id: targetPartnerId,
         data_pagamento: dataPagamentoFinal || todayLocalDate(),
         observacoes: observacaoPagamento.trim(),
-        debitos,
+        debitos: debitosToClose,
         taxa_pix_manual: taxaPixManual,
         policy_ids: policyIdsToPay,
       })
@@ -686,13 +846,14 @@ export default function PartnerReport() {
       setIsMarkPaidConfirmOpen(false)
       setObservacaoPagamento('')
       setDebitos([])
+      setSelectionDebitos([])
       setTaxaPixManual(null)
       setSelectedPolicyIds([])
 
       // Recarregar dados e débitos pendentes atualizados
       await loadData()
       const partnerToReload = targetPartnerId !== 'all' ? targetPartnerId : selectedPartner
-      if (partnerToReload !== 'all') {
+      if (partnerToReload && partnerToReload !== 'all') {
         const [hist, debtList] = await Promise.all([
           getParceiroPagamentos(partnerToReload),
           getParceiroDebitosPendentes(partnerToReload),
@@ -860,17 +1021,31 @@ export default function PartnerReport() {
         {/* NOVA SEÇÃO: Ajustes deste pagamento (substitui Deduções Financeiras antigas) */}
         <div className="p-4 bg-slate-50 border border-slate-200 rounded-lg space-y-4">
           <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 border-b border-slate-200 pb-2">
-            <div className="flex items-center gap-2 font-semibold text-xs text-slate-800 uppercase tracking-wider">
+            <div className="flex items-center gap-2 font-semibold text-xs text-slate-800 uppercase tracking-wider flex-wrap">
               <SlidersHorizontal className="w-4 h-4 text-blue-600" />
               Ajustes deste pagamento
               {selectedPartner !== 'all' ? (
                 <span className="text-blue-600 font-normal lowercase">
-                  (vinculado ao parceiro selecionado)
+                  (vinculado a{' '}
+                  {parceiros.find((p) => p.id === selectedPartner)?.nome || 'parceiro selecionado'})
+                </span>
+              ) : hasSelection && selectedDistinctPartnerIds.length === 1 ? (
+                <span className="text-emerald-700 font-normal lowercase flex items-center gap-1 bg-emerald-50 px-2 py-0.5 rounded border border-emerald-200">
+                  <CheckCircle className="w-3.5 h-3.5" /> parceiro detectado na seleção:{' '}
+                  <strong>
+                    {parceiros.find((p) => p.id === selectedDistinctPartnerIds[0])?.nome ||
+                      'Parceiro'}
+                  </strong>
+                </span>
+              ) : hasSelection && selectedDistinctPartnerIds.length > 1 ? (
+                <span className="text-amber-700 font-normal lowercase flex items-center gap-1 bg-amber-50 px-2 py-0.5 rounded border border-amber-200">
+                  <AlertCircle className="w-3.5 h-3.5" /> múltiplos parceiros selecionados (
+                  {selectedDistinctPartnerIds.length}) — débitos agrupados por parceiro
                 </span>
               ) : (
                 <span className="text-amber-600 font-normal lowercase flex items-center gap-1">
-                  <AlertCircle className="w-3.5 h-3.5" /> selecione um parceiro específico para
-                  ajustes precisos
+                  <AlertCircle className="w-3.5 h-3.5" /> selecione um parceiro no filtro ou marque
+                  apólices para carregar débitos
                 </span>
               )}
             </div>
@@ -894,9 +1069,11 @@ export default function PartnerReport() {
                 <span className="text-red-600 font-bold">Total: - R$ {fmt(totalDebitos)}</span>
               </div>
 
-              {debitos.length === 0 ? (
+              {activeDebitosList.length === 0 ? (
                 <div className="bg-white border border-dashed border-slate-300 rounded-md p-3 text-center text-xs text-slate-500">
-                  Nenhum débito adicionado para este pagamento.{' '}
+                  {selectedPartner === 'all' && !hasSelection
+                    ? 'Nenhum débito carregado. Selecione um parceiro ou marque apólices pendentes.'
+                    : 'Nenhum débito adicionado para este pagamento.'}{' '}
                   <button
                     type="button"
                     onClick={handleOpenAddDebito}
@@ -907,13 +1084,18 @@ export default function PartnerReport() {
                 </div>
               ) : (
                 <div className="space-y-1.5 max-h-48 overflow-y-auto pr-1">
-                  {debitos.map((deb, idx) => (
+                  {activeDebitosList.map((deb, idx) => (
                     <div
-                      key={idx}
+                      key={deb.id || idx}
                       className="bg-white border border-slate-200 rounded-md p-2 flex items-center justify-between text-xs hover:border-slate-300 transition-colors"
                     >
                       <div className="flex-1 pr-2 truncate">
                         <span className="font-semibold text-slate-800">{deb.descricao}</span>
+                        {deb.parceiroNome && selectedPartner === 'all' && (
+                          <span className="text-blue-700 bg-blue-50 border border-blue-100 rounded px-1.5 py-0.2 text-[10px] ml-2 font-medium">
+                            {deb.parceiroNome}
+                          </span>
+                        )}
                         {deb.data && (
                           <span className="text-slate-600 text-[11px] ml-2">
                             ({formatDateDisplay(deb.data)})
@@ -1303,10 +1485,26 @@ export default function PartnerReport() {
                 {totalDebitos > 0 && (
                   <div className="flex justify-between text-red-600">
                     <span>
-                      (-) Débitos do Parceiro ({debitos.length}{' '}
-                      {debitos.length === 1 ? 'item' : 'itens'}):
+                      (-) Débitos do Parceiro ({activeDebitosList.length}{' '}
+                      {activeDebitosList.length === 1 ? 'item' : 'itens'}):
                     </span>
                     <span className="font-semibold">- R$ {fmt(totalDebitos)}</span>
+                  </div>
+                )}
+
+                {saldoCredorRemanescente > 0 && (
+                  <div className="p-2.5 bg-amber-50 border border-amber-200 rounded-md text-xs text-amber-900 space-y-0.5">
+                    <div className="font-semibold flex items-center gap-1">
+                      <AlertCircle className="w-3.5 h-3.5 text-amber-700" /> Débito pendente retido
+                      / saldo com a corretora
+                    </div>
+                    <div>
+                      O valor do débito cadastrado (R$ {fmt(totalDebitos)}) é maior ou igual ao
+                      repasse liberado neste fechamento (R$ {fmt(totalPending)}). O valor a
+                      transferir fica R$ 0,00 e o saldo de{' '}
+                      <strong>R$ {fmt(saldoCredorRemanescente)}</strong> permanece pendente para
+                      compensação nos próximos repasses.
+                    </div>
                   </div>
                 )}
 
@@ -1350,6 +1548,23 @@ export default function PartnerReport() {
           </DialogHeader>
 
           <div className="space-y-3 py-2">
+            {selectedPartner === 'all' && (
+              <div>
+                <Label className="text-xs font-semibold">Parceiro Vinculado *</Label>
+                <Select value={debitoTargetPartnerId} onValueChange={setDebitoTargetPartnerId}>
+                  <SelectTrigger className="mt-1">
+                    <SelectValue placeholder="Selecione o parceiro..." />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {parceiros.map((p) => (
+                      <SelectItem key={p.id} value={p.id}>
+                        {p.nome}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+            )}
             <div>
               <Label className="text-xs font-semibold">Valor do Débito (R$) *</Label>
               <Input
@@ -1373,7 +1588,6 @@ export default function PartnerReport() {
               />
             </div>
           </div>
-
           <DialogFooter className="gap-2">
             <Button type="button" variant="outline" onClick={() => setIsDebitoDialogOpen(false)}>
               Cancelar
@@ -1433,6 +1647,11 @@ export default function PartnerReport() {
                     <span>Líquido a Transferir:</span>
                     <span>R$ {fmt(totalLiquidoAPagar)}</span>
                   </div>
+                  {saldoCredorRemanescente > 0 && (
+                    <div className="text-amber-700 font-semibold pt-1 border-t border-amber-200">
+                      Saldo devedor do parceiro a compensar: R$ {fmt(saldoCredorRemanescente)}
+                    </div>
+                  )}
                 </div>
 
                 <div className="space-y-1 pt-1">
