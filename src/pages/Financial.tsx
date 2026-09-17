@@ -335,9 +335,24 @@ export default function Financial() {
     return map
   }, [recebimentos])
 
+  const policiesWithActiveEndorsementInPeriod = useMemo(() => {
+    const set = new Set<string>()
+    for (const prev of allComissoesPrevistasList) {
+      if (!prev.endorsement || prev.status === 'Cancelada') continue
+      if (isCompetenciaInPeriod(period, prev.competencia, prev.data_prevista)) {
+        set.add(prev.policy)
+      }
+    }
+    return set
+  }, [allComissoesPrevistasList, period])
+
   // Helper para verificar se comissão da apólice está quitada (Soma dos BRUTOS >= previsto)
   const isPolicyCommissionSettled = useCallback(
     (p: Policy) => {
+      // Se a apólice possui endosso com previsão ativa e saldo pendente no período, ela NÃO está liquidada
+      if (policiesWithActiveEndorsementInPeriod.has(p.id)) {
+        return false
+      }
       if (p.comissao_recebida) return true
       const previsto =
         p.commission != null
@@ -349,12 +364,18 @@ export default function Financial() {
       const recBruto = receivedGrossByPolicy.get(p.id) || 0
       return previsto > 0 && recBruto >= previsto - 0.009
     },
-    [receivedGrossByPolicy],
+    [receivedGrossByPolicy, policiesWithActiveEndorsementInPeriod],
   )
 
   const applyFilters = useCallback(
     (p: Policy, checkDate = true): boolean => {
-      if (checkDate && !isDateInPeriod(period, p.start_date)) return false
+      if (
+        checkDate &&
+        !isDateInPeriod(period, p.start_date) &&
+        !policiesWithActiveEndorsementInPeriod.has(p.id)
+      ) {
+        return false
+      }
 
       if (statusFilter !== 'ALL') {
         if (statusFilter === 'Vencida' || statusFilter === 'Expirada') {
@@ -402,6 +423,7 @@ export default function Financial() {
       debouncedPolicySearchFilter,
       period,
       isPolicyCommissionSettled,
+      policiesWithActiveEndorsementInPeriod,
     ],
   )
 
@@ -410,17 +432,6 @@ export default function Financial() {
     () => reconciliarRecebimentosComPrevisoes(allComissoesPrevistasList, recebimentos),
     [allComissoesPrevistasList, recebimentos],
   )
-
-  const policiesWithActiveEndorsementInPeriod = useMemo(() => {
-    const set = new Set<string>()
-    for (const prev of allComissoesPrevistasList) {
-      if (!prev.endorsement || prev.status === 'Cancelada') continue
-      if (isCompetenciaInPeriod(period, prev.competencia, prev.data_prevista)) {
-        set.add(prev.policy)
-      }
-    }
-    return set
-  }, [allComissoesPrevistasList, period])
 
   // Mapa de recebimentos por apólice no período selecionado
   const recsInPeriodByPolicy = useMemo(() => {
@@ -1543,13 +1554,13 @@ export default function Financial() {
                 <tbody className="divide-y divide-slate-100">
                   {prevLoading ? (
                     <tr>
-                      <td colSpan={9} className="text-center p-8 text-slate-500">
+                      <td colSpan={10} className="text-center p-8 text-slate-500">
                         Carregando previsões...
                       </td>
                     </tr>
                   ) : prevPaginatedData.items.length === 0 ? (
                     <tr>
-                      <td colSpan={9} className="text-center p-8 text-slate-500">
+                      <td colSpan={10} className="text-center p-8 text-slate-500">
                         Nenhuma comissão prevista encontrada para os filtros selecionados.
                       </td>
                     </tr>
@@ -1869,7 +1880,37 @@ export default function Financial() {
                                       : 'bg-emerald-600 hover:bg-emerald-700 text-white text-xs h-8 px-2 shadow-sm'
                                   }
                                   title="Registrar recebimento de comissão"
-                                  onClick={() => handleOpenRegistrarRecebimento(p)}
+                                  onClick={() => {
+                                    // Se apólice pai já quitada mas com endosso pendente no período, abrir com dados do endosso
+                                    if (
+                                      hasActiveEndorsement &&
+                                      extraEndorsementSaldo > 0.009 &&
+                                      baseSaldo <= 0.009
+                                    ) {
+                                      const activeEndorsementPrev = allComissoesPrevistasList.find(
+                                        (prev) =>
+                                          prev.policy === p.id &&
+                                          Boolean(prev.endorsement) &&
+                                          prev.status !== 'Cancelada' &&
+                                          isCompetenciaInPeriod(
+                                            period,
+                                            prev.competencia,
+                                            prev.data_prevista,
+                                          ),
+                                      )
+                                      if (activeEndorsementPrev) {
+                                        handleOpenRegistrarRecebimento(
+                                          p,
+                                          activeEndorsementPrev.competencia,
+                                          activeEndorsementPrev.id,
+                                          extraEndorsementSaldo,
+                                          activeEndorsementPrev.endorsement,
+                                        )
+                                        return
+                                      }
+                                    }
+                                    handleOpenRegistrarRecebimento(p)
+                                  }}
                                 >
                                   <ArrowDownCircle className="w-3.5 h-3.5 mr-1" />
                                   Registrar recebimento
