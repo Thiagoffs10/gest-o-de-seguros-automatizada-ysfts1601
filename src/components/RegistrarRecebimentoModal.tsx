@@ -70,8 +70,15 @@ export function RegistrarRecebimentoModal({
         ) / 100
     : 0
 
+  // Quando comissaoPrevistaId ou endorsementId estiver presente, o teto da baixa é o saldo da própria previsão/endosso
+  const isEndorsementOrPrevisao = Boolean(endorsementId || comissaoPrevistaId)
+  const tetoBaixa =
+    isEndorsementOrPrevisao && initialValorBruto != null && initialValorBruto > 0
+      ? initialValorBruto
+      : Math.max(0, Math.round((comissaoPrevista - alreadyReceived) * 100) / 100)
+
   // Saldo a receber ANTES desta baixa
-  const saldoAtual = Math.max(0, Math.round((comissaoPrevista - alreadyReceived) * 100) / 100)
+  const saldoAtual = tetoBaixa
 
   // Quando o modal abre, preencher valor bruto sugerido = saldo atual e imposto padrão da seguradora
   useEffect(() => {
@@ -246,15 +253,29 @@ export function RegistrarRecebimentoModal({
           {/* Card com resumo de previsão e saldo */}
           <div className="grid grid-cols-3 gap-2 p-3 bg-slate-50 rounded-lg border text-center text-xs">
             <div>
-              <span className="text-slate-500 block">Comissão Prevista (Bruta)</span>
+              <span className="text-slate-500 block">
+                {isEndorsementOrPrevisao ? 'Valor da Previsão' : 'Comissão Prevista (Bruta)'}
+              </span>
               <strong className="text-slate-800 text-sm">
-                R$ {comissaoPrevista.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
+                R${' '}
+                {(isEndorsementOrPrevisao && initialValorBruto != null
+                  ? initialValorBruto
+                  : comissaoPrevista
+                ).toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
               </strong>
             </div>
             <div>
-              <span className="text-slate-500 block">Já Recebido (Bruto)</span>
-              <strong className="text-emerald-700 text-sm">
-                R$ {alreadyReceived.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
+              <span className="text-slate-500 block">
+                {isEndorsementOrPrevisao ? 'Origem' : 'Já Recebido (Bruto)'}
+              </span>
+              <strong
+                className={`text-sm ${isEndorsementOrPrevisao ? 'text-blue-700' : 'text-emerald-700'}`}
+              >
+                {isEndorsementOrPrevisao
+                  ? endorsementId
+                    ? 'Endosso'
+                    : 'Parcela'
+                  : `R$ ${alreadyReceived.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}`}
               </strong>
             </div>
             <div>

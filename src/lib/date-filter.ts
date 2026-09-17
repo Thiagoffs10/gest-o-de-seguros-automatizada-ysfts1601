@@ -140,6 +140,28 @@ export function isDateInPeriod(period: DatePeriod, dateStr?: string): boolean {
   return d < period.end
 }
 
+/**
+ * Verifica se uma competência no formato MM/AAAA (ex: "09/2026") ou data (AAAA-MM-DD)
+ * cai dentro do período selecionado.
+ */
+export function isCompetenciaInPeriod(
+  period: DatePeriod,
+  competencia?: string,
+  dataFallback?: string,
+): boolean {
+  if (competencia && competencia.includes('/')) {
+    const [mStr, yStr] = competencia.trim().split('/')
+    if (mStr && yStr) {
+      const formattedDate = `${yStr}-${mStr.padStart(2, '0')}-01`
+      return isDateInPeriod(period, formattedDate)
+    }
+  }
+  if (dataFallback) {
+    return isDateInPeriod(period, dataFallback)
+  }
+  return false
+}
+
 export function buildPocketBaseDateFilter(field: string, period: DatePeriod): string {
   if (period.start === '1970-01-01' && period.end === '2099-12-31') {
     return ''

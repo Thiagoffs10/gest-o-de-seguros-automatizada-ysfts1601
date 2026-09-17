@@ -74,7 +74,7 @@ import { useRealtime } from '@/hooks/use-realtime'
 import { usePermissions } from '@/hooks/use-permissions'
 import { matchDocument } from '@/lib/document-validators'
 import { todayLocalDate, formatDateDisplay } from '@/lib/utils'
-import { computePeriodFromFilters, isDateInPeriod } from '@/lib/date-filter'
+import { computePeriodFromFilters, isDateInPeriod, isCompetenciaInPeriod } from '@/lib/date-filter'
 import {
   calcNetCommission,
   computeReceivedCommissions,
@@ -568,15 +568,19 @@ export default function Financial() {
     let saldoParcialRecebido = 0
     let comissoesNaoRecebidas = 0
 
+    const periodStartPolicyIds = new Set(periodStartPolicies.map((p) => p.id))
+
     periodStartPolicies.forEach((p) => {
       if (p.status === 'Cancelada') return
 
       const polPrevs = prevsByPolicyMap.get(p.id) || []
       if (polPrevs.length > 0) {
         // Apólices com previsões cadastradas: saldo a receber = soma dos recResult.saldo das parcelas ativas
+        // (Nota: previsões vinculadas a endosso pertencem ao fluxo de endosso e competência própria)
         let polSaldo = 0
         let polRecebidoBruto = 0
         polPrevs.forEach((prev) => {
+          if (prev.endorsement) return
           const recResult = reconciliacaoMap.get(prev.id)
           const s = recResult ? recResult.saldo : Number(prev.valor_previsto) || 0
           const rBruto = recResult ? recResult.valorRecebidoBruto : 0
@@ -616,6 +620,37 @@ export default function Financial() {
         }
       }
     })
+
+    // INCLUSÃO DE PREVISÕES DE ENDOSSO:
+    // Coleta previsões ativas com endorsement vinculado cuja competência/data_prevista caia no período selecionado,
+    // garantindo que endossos de apólices iniciadas em meses anteriores (ou no próprio mês) componham os cards de pendência.
+    for (const prev of allComissoesPrevistasList) {
+      if (!prev.endorsement || prev.status === 'Cancelada') continue
+      if (!isCompetenciaInPeriod(period, prev.competencia, prev.data_prevista)) continue
+
+      // Verificar se a apólice pai não está cancelada e atende aos filtros gerais
+      const parentPol = allPolicies.find((p) => p.id === prev.policy)
+      if (parentPol) {
+        if (parentPol.status === 'Cancelada') continue
+        if (!applyFilters(parentPol, false)) continue
+      }
+
+      const recResult = reconciliacaoMap.get(prev.id)
+      const vPrev = Number(prev.valor_previsto) || 0
+      const recBruto = recResult ? recResult.valorRecebidoBruto : 0
+      const saldoPrev = recResult
+        ? recResult.saldo
+        : Math.max(0, Math.round((vPrev - recBruto) * 100) / 100)
+
+      if (saldoPrev > 0.009) {
+        if (recBruto > 0.009) {
+          hasPartialReceipts = true
+          saldoParcialRecebido = Math.round((saldoParcialRecebido + saldoPrev) * 100) / 100
+        } else {
+          comissoesNaoRecebidas = Math.round((comissoesNaoRecebidas + saldoPrev) * 100) / 100
+        }
+      }
+    }
 
     const saldoTotalAReceber =
       Math.round((saldoParcialRecebido + comissoesNaoRecebidas) * 100) / 100
@@ -829,6 +864,66 @@ export default function Financial() {
         saldo,
         status: rec > 0 ? 'Parcial' : 'Pendente',
         policy: p,
+      })
+    }
+
+    // Incluir previsões de endosso no detalhamento por seguradora se competência no período
+    for (const prev of allComissoesPrevistasList) {
+      if (!prev.endorsement || prev.status === 'Cancelada') continue
+      if (!isCompetenciaInPeriod(period, prev.competencia, prev.data_prevista)) continue
+
+      const parentPol = allPolicies.find((p) => p.id === prev.policy)
+      if (parentPol) {
+        if (parentPol.status === 'Cancelada') continue
+        if (!applyFilters(parentPol, false)) continue
+      }
+
+      const recResult = reconciliacaoMap.get(prev.id)
+      const vPrev = Number(prev.valor_previsto) || 0
+      const recBruto = recResult ? recResult.valorRecebidoBruto : 0
+      const saldoPrev = recResult
+        ? recResult.saldo
+        : Math.max(0, Math.round((vPrev - recBruto) * 100) / 100)
+
+      if (saldoPrev <= 0.009) continue
+
+      const segId =
+        parentPol?.seguradora ||
+        (prev as any).expand?.policy?.seguradora ||
+        parentPol?.insurance_company ||
+        'nao_identificada'
+      const segNome =
+        seguradoras.find((s) => s.id === segId)?.nome ||
+        parentPol?.expand?.seguradora?.nome ||
+        (prev as any).expand?.policy?.expand?.seguradora?.nome ||
+        parentPol?.insurance_company ||
+        'Seguradora Não Identificada'
+
+      const clienteNome =
+        parentPol?.expand?.client?.name ||
+        (prev as any).expand?.policy?.expand?.client?.name ||
+        'Cliente Não Informado'
+      const propostaNumero =
+        parentPol?.numero_proposta ||
+        (prev as any).expand?.policy?.numero_proposta ||
+        parentPol?.policy_number ||
+        '-'
+
+      const entry = getOrCreateSegEntry(segId, segNome)
+      entry.saldoTotal = Math.round((entry.saldoTotal + saldoPrev) * 100) / 100
+      entry.itens.push({
+        id: `prev_${prev.id}`,
+        tipo: 'Endosso',
+        clienteNome,
+        propostaNumero,
+        apoliceNumero: parentPol?.policy_number || (prev as any).expand?.policy?.policy_number,
+        competenciaOuOrigem: prev.competencia || 'Endosso',
+        valorPrevisto: vPrev,
+        valorRecebido: recBruto,
+        saldo: saldoPrev,
+        status: recBruto > 0 ? 'Parcial' : 'Pendente',
+        policy: parentPol,
+        comissaoPrevistaId: prev.id,
       })
     }
 
@@ -1544,7 +1639,7 @@ export default function Financial() {
                                     targetPolicy,
                                     prev.competencia,
                                     prev.id,
-                                    Number(prev.valor_previsto),
+                                    saldoDesta > 0 ? saldoDesta : Number(prev.valor_previsto),
                                     prev.endorsement,
                                   )
                                 }
@@ -2519,6 +2614,7 @@ export default function Financial() {
         allComissoesPrevistasList={allComissoesPrevistasList}
         recebimentos={recebimentos}
         receivedNetByPolicy={receivedNetByPolicy}
+        period={period}
       />
 
       {/* MODAL BLOCO 3: PROJEÇÃO POR COMPETÊNCIA */}

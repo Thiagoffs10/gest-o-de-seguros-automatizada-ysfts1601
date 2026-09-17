@@ -13,6 +13,7 @@ import { Badge } from '@/components/ui/badge'
 import { Policy, ComissaoRecebimento, ComissaoPrevista } from '@/types'
 import { formatCurrency, formatDateDisplay } from '@/lib/utils'
 import { reconciliarRecebimentosComPrevisoes } from '@/services/comissao-recebimentos'
+import { DatePeriod, isCompetenciaInPeriod } from '@/lib/date-filter'
 import {
   CheckCircle2,
   Clock,
@@ -51,6 +52,7 @@ interface Props {
   allComissoesPrevistasList?: ComissaoPrevista[]
   recebimentos?: ComissaoRecebimento[]
   receivedNetByPolicy?: Map<string, number>
+  period?: DatePeriod
 }
 
 const PAGE_SIZE = 10
@@ -70,6 +72,7 @@ export function RecebimentoDetailModal({
   allComissoesPrevistasList = [],
   recebimentos = [],
   receivedNetByPolicy = new Map(),
+  period,
 }: Props) {
   const [search, setSearch] = useState('')
   const debouncedSearch = useDebounce(search, 300)
@@ -214,7 +217,7 @@ export function RecebimentoDetailModal({
   const propostasRows = useMemo(() => {
     if (type === 'recebida') return []
 
-    return periodStartPolicies
+    const policyRows = periodStartPolicies
       .filter((p) => p.status !== 'Cancelada')
       .map((p) => {
         const polPrevs = prevsByPolicyMap.get(p.id) || []
@@ -226,6 +229,8 @@ export function RecebimentoDetailModal({
 
         if (hasPrevisao) {
           polPrevs.forEach((prev) => {
+            // Previsões de endosso têm seu próprio ciclo de competência e linhas dedicadas
+            if (prev.endorsement) return
             const recRes = reconciliacaoMap.get(prev.id)
             const pPrev = Number(prev.valor_previsto) || 0
             const pRec = recRes ? recRes.valorRecebidoBruto : 0
@@ -267,6 +272,8 @@ export function RecebimentoDetailModal({
 
         return {
           id: p.id,
+          tipo: 'Apolice' as const,
+          isEndorsement: false,
           proposta,
           apolice,
           clienteNome,
@@ -282,16 +289,84 @@ export function RecebimentoDetailModal({
           ultimoRecebimento,
         }
       })
-      .filter((row) => {
-        if (type === 'parcial') return row.isPartial
-        if (type === 'nao_recebida') return row.isPending
-        if (type === 'saldo_total') return row.saldo > 0
-        if (type === 'sem_previsao') return row.saldo > 0 && !row.hasPrevisao
-        return true
-      })
+
+    // Linhas de previsões ativas de endossos vinculadas cuja competência caia no período
+    const endorsementRows: typeof policyRows = []
+    if (period) {
+      for (const prev of allComissoesPrevistasList) {
+        if (!prev.endorsement || prev.status === 'Cancelada') continue
+        if (!isCompetenciaInPeriod(period, prev.competencia, prev.data_prevista)) continue
+
+        const parentPol = allPolicies.find((p) => p.id === prev.policy)
+        if (parentPol && parentPol.status === 'Cancelada') continue
+
+        const recRes = reconciliacaoMap.get(prev.id)
+        const pPrev = Number(prev.valor_previsto) || 0
+        const pRec = recRes ? recRes.valorRecebidoBruto : 0
+        const pSaldo = recRes ? recRes.saldo : Math.max(0, Math.round((pPrev - pRec) * 100) / 100)
+
+        const isSettled = pSaldo <= 0.009
+        const isPartial = !isSettled && pRec > 0.009
+        const isPending = !isSettled && pRec <= 0.009
+
+        const proposta =
+          parentPol?.numero_proposta ||
+          (prev as any).expand?.policy?.numero_proposta ||
+          parentPol?.policy_number ||
+          '-'
+        const apolice =
+          parentPol?.policy_number || (prev as any).expand?.policy?.policy_number || ''
+        const clienteNome =
+          parentPol?.expand?.client?.name ||
+          (prev as any).expand?.policy?.expand?.client?.name ||
+          'Cliente Não Informado'
+        const seguradoraNome =
+          parentPol?.expand?.seguradora?.nome ||
+          (prev as any).expand?.policy?.expand?.seguradora?.nome ||
+          parentPol?.insurance_company ||
+          '-'
+        const ultimoRecebimento = recRes?.ultimoRecebimento || undefined
+
+        let statusText: 'Pendente' | 'Parcial' | 'Recebida' = 'Pendente'
+        if (isSettled) statusText = 'Recebida'
+        else if (isPartial) statusText = 'Parcial'
+
+        endorsementRows.push({
+          id: prev.id,
+          tipo: 'Endosso' as const,
+          isEndorsement: true,
+          proposta,
+          apolice,
+          clienteNome,
+          seguradoraNome,
+          previsto: pPrev,
+          rec: pRec,
+          saldo: pSaldo,
+          statusText,
+          isSettled,
+          isPartial,
+          isPending,
+          hasPrevisao: true,
+          ultimoRecebimento,
+        })
+      }
+    }
+
+    const allRows = [...policyRows, ...endorsementRows]
+
+    return allRows.filter((row) => {
+      if (type === 'parcial') return row.isPartial
+      if (type === 'nao_recebida') return row.isPending
+      if (type === 'saldo_total') return row.saldo > 0.009
+      if (type === 'sem_previsao') return row.saldo > 0.009 && !row.hasPrevisao
+      return true
+    })
   }, [
     type,
     periodStartPolicies,
+    allPolicies,
+    allComissoesPrevistasList,
+    period,
     prevsByPolicyMap,
     reconciliacaoMap,
     receivedNetByPolicy,
@@ -704,7 +779,17 @@ export function RecebimentoDetailModal({
                     <tr key={r.id} className="hover:bg-slate-50/80">
                       <td className="p-2.5 font-bold text-slate-900">
                         <div className="flex flex-col">
-                          <span>{r.proposta}</span>
+                          <div className="flex items-center gap-1.5">
+                            <span>{r.proposta}</span>
+                            {r.isEndorsement && (
+                              <Badge
+                                variant="outline"
+                                className="text-[10px] px-1.5 py-0 border-blue-200 bg-blue-50 text-blue-700 font-normal"
+                              >
+                                Endosso
+                              </Badge>
+                            )}
+                          </div>
                           {r.apolice && r.apolice !== r.proposta && (
                             <span className="text-[10px] text-slate-400 font-normal">
                               Apólice: {r.apolice}
