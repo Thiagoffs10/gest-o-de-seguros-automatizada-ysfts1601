@@ -184,6 +184,7 @@ export function RecebimentoDetailModal({
         competencia: r.competencia || '-',
         origem: r.origem || 'Sistema',
         isEstorno: Boolean(r.is_estorno),
+        isEndorsement: Boolean(r.endorsement),
         valorBruto,
         deducoes,
         valorLiquido,
@@ -272,7 +273,7 @@ export function RecebimentoDetailModal({
 
         return {
           id: p.id,
-          tipo: 'Apolice' as const,
+          tipo: 'Apolice' as 'Apolice' | 'Endosso',
           isEndorsement: false,
           proposta,
           apolice,

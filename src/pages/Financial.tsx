@@ -405,6 +405,23 @@ export default function Financial() {
     ],
   )
 
+  // Reconciliação unificada recebimento ↔ previsão com inferência de data e FIFO por esgotamento
+  const reconciliacaoMap = useMemo(
+    () => reconciliarRecebimentosComPrevisoes(allComissoesPrevistasList, recebimentos),
+    [allComissoesPrevistasList, recebimentos],
+  )
+
+  const policiesWithActiveEndorsementInPeriod = useMemo(() => {
+    const set = new Set<string>()
+    for (const prev of allComissoesPrevistasList) {
+      if (!prev.endorsement || prev.status === 'Cancelada') continue
+      if (isCompetenciaInPeriod(period, prev.competencia, prev.data_prevista)) {
+        set.add(prev.policy)
+      }
+    }
+    return set
+  }, [allComissoesPrevistasList, period])
+
   // Mapa de recebimentos por apólice no período selecionado
   const recsInPeriodByPolicy = useMemo(() => {
     const set = new Set<string>()
@@ -449,7 +466,7 @@ export default function Financial() {
           (p.comissao_recebida === true &&
             Boolean(p.data_recebimento_comissao) &&
             isDateInPeriod(period, p.data_recebimento_comissao))
-        return inStart || inReceived
+        return inStart || inReceived || policiesWithActiveEndorsementInPeriod.has(p.id)
       }),
     [
       allPolicies,
@@ -460,6 +477,7 @@ export default function Financial() {
       debouncedPolicySearchFilter,
       debouncedCpfCnpjFilter,
       isPolicyCommissionSettled,
+      policiesWithActiveEndorsementInPeriod,
     ],
   )
 
@@ -745,6 +763,7 @@ export default function Financial() {
           saldo: number
           status: 'Pendente' | 'Parcial'
           policy?: Policy
+          comissaoPrevistaId?: string
         }>
       }
     >()
@@ -1715,7 +1734,39 @@ export default function Financial() {
                     </tr>
                   ) : (
                     paginatedCommPolicies.map((p) => {
-                      const previsto =
+                      const hasActiveEndorsement = policiesWithActiveEndorsementInPeriod.has(p.id)
+                      let extraEndorsementPrevisto = 0
+                      let extraEndorsementRecebido = 0
+                      let extraEndorsementSaldo = 0
+
+                      if (hasActiveEndorsement) {
+                        for (const prev of allComissoesPrevistasList) {
+                          if (
+                            prev.policy !== p.id ||
+                            !prev.endorsement ||
+                            prev.status === 'Cancelada'
+                          )
+                            continue
+                          if (!isCompetenciaInPeriod(period, prev.competencia, prev.data_prevista))
+                            continue
+
+                          const recResult = reconciliacaoMap.get(prev.id)
+                          const vPrev = Number(prev.valor_previsto) || 0
+                          const recBruto = recResult ? recResult.valorRecebidoBruto : 0
+                          const s = recResult
+                            ? recResult.saldo
+                            : Math.max(0, Math.round((vPrev - recBruto) * 100) / 100)
+
+                          extraEndorsementPrevisto =
+                            Math.round((extraEndorsementPrevisto + vPrev) * 100) / 100
+                          extraEndorsementRecebido =
+                            Math.round((extraEndorsementRecebido + recBruto) * 100) / 100
+                          extraEndorsementSaldo =
+                            Math.round((extraEndorsementSaldo + s) * 100) / 100
+                        }
+                      }
+
+                      const basePrevisto =
                         p.commission != null
                           ? Number(p.commission)
                           : Math.round(
@@ -1724,14 +1775,28 @@ export default function Financial() {
                                 100) *
                                 100,
                             ) / 100
-                      const recBrutoTotal =
-                        receivedGrossByPolicy.get(p.id) ?? (p.comissao_recebida ? previsto : 0)
-                      const recLiquidoTotal =
+                      const baseRecBrutoTotal =
+                        receivedGrossByPolicy.get(p.id) ?? (p.comissao_recebida ? basePrevisto : 0)
+                      const baseRecLiquidoTotal =
                         receivedNetByPolicy.get(p.id) ??
-                        (p.comissao_recebida ? Math.max(0, previsto - (p.iss || 0)) : 0)
-                      const saldo = Math.max(0, Math.round((previsto - recBrutoTotal) * 100) / 100)
+                        (p.comissao_recebida ? Math.max(0, basePrevisto - (p.iss || 0)) : 0)
+                      const baseSaldo = Math.max(
+                        0,
+                        Math.round((basePrevisto - baseRecBrutoTotal) * 100) / 100,
+                      )
+
+                      const previsto =
+                        Math.round((basePrevisto + extraEndorsementPrevisto) * 100) / 100
+                      const recBrutoTotal =
+                        Math.round((baseRecBrutoTotal + extraEndorsementRecebido) * 100) / 100
+                      const recLiquidoTotal =
+                        Math.round((baseRecLiquidoTotal + extraEndorsementRecebido) * 100) / 100
+                      const saldo = Math.round((baseSaldo + extraEndorsementSaldo) * 100) / 100
+
                       const quitada =
-                        p.comissao_recebida || (previsto > 0 && recBrutoTotal >= previsto - 0.009)
+                        (p.comissao_recebida &&
+                          (!hasActiveEndorsement || extraEndorsementSaldo <= 0.009)) ||
+                        (previsto > 0 && recBrutoTotal >= previsto - 0.009)
                       const parcial = !quitada && recBrutoTotal > 0
                       const acima = previsto > 0 && recBrutoTotal > previsto
                       const policyRecCount = recebimentos.filter((r) => r.policy === p.id).length
@@ -1742,7 +1807,14 @@ export default function Financial() {
                             className="p-3 font-bold text-slate-900"
                             title={p.policy_number ? `Apólice: ${p.policy_number}` : undefined}
                           >
-                            {p.numero_proposta || '-'}
+                            <div className="flex items-center gap-1.5 flex-wrap">
+                              <span>{p.numero_proposta || '-'}</span>
+                              {hasActiveEndorsement && (
+                                <Badge className="bg-blue-600 hover:bg-blue-600 text-white text-[10px] px-1.5 py-0 font-medium">
+                                  Inclui Endosso
+                                </Badge>
+                              )}
+                            </div>
                           </td>
                           <td className="p-3">{p.expand?.client?.name || '-'}</td>
                           <td className="p-3">
