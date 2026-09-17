@@ -42,6 +42,7 @@ export interface CreateEndorsementPayload {
   modelo_veiculo?: string
   valor_bruto?: number
   valor_liquido?: number
+  comissao_percent?: number
   observacao?: string
 }
 
@@ -54,6 +55,7 @@ export interface UpdateEndorsementPayload {
   modelo_veiculo?: string
   valor_bruto?: number
   valor_liquido?: number
+  comissao_percent?: number
   observacao?: string
 }
 
@@ -136,7 +138,12 @@ export async function createEndorsement(data: CreateEndorsementPayload): Promise
     data.valor_bruto !== undefined ? Math.round(Number(data.valor_bruto) * 100) / 100 : 0
   const vLiquido =
     data.valor_liquido !== undefined ? Math.round(Number(data.valor_liquido) * 100) / 100 : 0
-  const commPercent = Number(policy.commission_percent || 0)
+  const commPercent =
+    data.comissao_percent !== undefined &&
+    !isNaN(Number(data.comissao_percent)) &&
+    Number(data.comissao_percent) >= 0
+      ? Number(data.comissao_percent)
+      : Number(policy.commission_percent || 0)
   const commValor = Math.round(((vLiquido * commPercent) / 100) * 100) / 100
 
   const payload: Record<string, any> = {
@@ -252,11 +259,25 @@ export async function updateEndorsement(
     payload.valor_bruto = Math.round(Number(data.valor_bruto) * 100) / 100
   }
 
-  if (data.valor_liquido !== undefined) {
-    const vLiq = Math.round(Number(data.valor_liquido) * 100) / 100
+  const novoCommPercent =
+    data.comissao_percent !== undefined
+      ? Number(data.comissao_percent)
+      : current.comissao_percent !== undefined
+        ? Number(current.comissao_percent)
+        : 0
+
+  if (data.comissao_percent !== undefined) {
+    payload.comissao_percent = novoCommPercent
+  }
+
+  if (data.valor_liquido !== undefined || data.comissao_percent !== undefined) {
+    const vLiq =
+      data.valor_liquido !== undefined
+        ? Math.round(Number(data.valor_liquido) * 100) / 100
+        : Number(current.valor_liquido || 0)
     payload.valor_liquido = vLiq
-    const commPct = Number(current.comissao_percent || 0)
-    const commVal = Math.round(((vLiq * commPct) / 100) * 100) / 100
+
+    const commVal = Math.round(((vLiq * novoCommPercent) / 100) * 100) / 100
     payload.comissao_valor = commVal
 
     // Sincronizar com a comissão prevista correspondente caso exista e esteja Pendente
@@ -267,6 +288,7 @@ export async function updateEndorsement(
       if (prev.status === 'Pendente') {
         await pb.collection('comissoes_previstas').update(prev.id, {
           valor_previsto: commVal,
+          observacao: `Endosso (${payload.tipo || current.tipo || 'Alteração'}) — ${novoCommPercent}% sobre líq. R$ ${vLiq.toFixed(2)}`,
         })
       }
     }

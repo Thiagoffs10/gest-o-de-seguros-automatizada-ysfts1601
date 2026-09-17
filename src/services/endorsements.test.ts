@@ -119,6 +119,40 @@ describe('Endossos - Especificação e Integridade Financeira', () => {
     expect(prevs[0].chave_estavel).toContain(`prev_end_${end.id}`)
   })
 
+  // TESTE A2: Endosso com comissão personalizada diferente da apólice (ex.: apólice 20%, endosso 15%, líquido 2.177,04 -> 326,56)
+  it('A2) Cenário Endosso com comissão personalizada: apólice a 20%, endosso fechado a 15% calcula 326,56 e cria previsão independente', async () => {
+    // Configura apólice com 20% de comissão
+    const pbAny = pb as any
+    const store = pbAny.collection('policies')._store
+    store.set('policies', [{ ...samplePolicy, commission_percent: 20, commission: 200 }])
+
+    const end = await createEndorsement({
+      policy: 'pol_123',
+      tipo: 'Substituição de veículo',
+      data_endosso: '2026-09-17',
+      numero_proposta: '33695257',
+      valor_bruto: 2337.7,
+      valor_liquido: 2177.04,
+      comissao_percent: 15, // Usuário personalizou para 15% em vez dos 20% originais
+      placa: 'SLD3C51',
+      chassi: 'HACAALB36V3F06764',
+      modelo_veiculo: 'AION UT PREMIUM ELETI',
+    })
+
+    // 2177.04 * 15% = 326.556 -> arredonda para 326.56
+    expect(end.valor_liquido).toBe(2177.04)
+    expect(end.comissao_percent).toBe(15)
+    expect(end.comissao_valor).toBe(326.56)
+
+    // Verificar comissão prevista gerada
+    const prevs = await pb.collection('comissoes_previstas').getFullList()
+    expect(prevs.length).toBe(1)
+    expect(prevs[0].valor_previsto).toBe(326.56)
+    expect(prevs[0].policy).toBe('pol_123')
+    expect(prevs[0].endorsement).toBe(end.id)
+    expect(prevs[0].observacao).toContain('15% sobre líq. R$ 2177.04')
+  })
+
   // TESTE B: Endosso zero: histórico criado, nenhum lançamento financeiro
   it('B) Cenário Endosso Zero: registra no histórico operacional mas não gera previsão financeira de R$ 0,00', async () => {
     const end = await createEndorsement({

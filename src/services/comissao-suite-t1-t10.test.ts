@@ -269,6 +269,58 @@ describe('Suíte de Testes Obrigatórios T1 a T10 — Validação Financeira', (
   })
 
   // -------------------------------------------------------------------------
+  // T6.1 Endosso com taxa de comissão diferente da apólice (ex.: apólice 20%, endosso 15%)
+  // -------------------------------------------------------------------------
+  it('T6.1 Endosso com taxa de comissão personalizada (ex.: apólice 20%, endosso 15%) -> previsão calculada com 15% do líquido sem colidir', () => {
+    // Apólice original com 20% de comissão
+    const polOriginal = {
+      id: 'pol_t6_custom',
+      commission_percent: 20,
+      liquid_premium: 2474.35,
+      commission: 494.87,
+    }
+
+    const previsaoOriginal = {
+      id: 'prev_original_t6_custom',
+      policy: polOriginal.id,
+      competencia: '08/2026',
+      valor_previsto: 494.87,
+      chave_estavel: 'prev_pol_t6_custom_1_08_2026',
+    }
+
+    // Endosso fechado com taxa diferente: líquido R$ 2.177,04 a 15% (em vez de 20%)
+    const taxaEndossoCustom = 15
+    const valorLiquidoEndosso = 2177.04
+    const valorComissaoCalculada =
+      Math.round(((valorLiquidoEndosso * taxaEndossoCustom) / 100) * 100) / 100 // 326.56
+
+    const previsaoEndosso = {
+      id: 'prev_endosso_t6_custom',
+      policy: polOriginal.id,
+      endorsement: 'end_t6_custom_1',
+      competencia: '09/2026',
+      valor_previsto: valorComissaoCalculada,
+      chave_estavel: 'prev_end_end_t6_custom_1_1_09_2026',
+      observacao: `Endosso (Substituição de veículo) — ${taxaEndossoCustom}% sobre líq. R$ ${valorLiquidoEndosso.toFixed(2)}`,
+    }
+
+    // Previsão do endosso deve ter valor calculado com a taxa customizada (326.56, não 435.41 dos 20%)
+    expect(previsaoEndosso.valor_previsto).toBe(326.56)
+    expect(previsaoEndosso.valor_previsto).not.toBe(
+      Math.round(((valorLiquidoEndosso * polOriginal.commission_percent) / 100) * 100) / 100,
+    ) // 326.56 != 435.41
+
+    // Identidades e chaves estáveis independentes
+    expect(previsaoEndosso.id).not.toBe(previsaoOriginal.id)
+    expect(previsaoEndosso.chave_estavel).not.toBe(previsaoOriginal.chave_estavel)
+    expect(previsaoOriginal.valor_previsto).toBe(494.87)
+
+    // Total conjunto totalizável sem perda de rastreio: 494.87 + 326.56 = 821.43
+    const totalPrevisto = previsaoOriginal.valor_previsto + previsaoEndosso.valor_previsto
+    expect(totalPrevisto).toBe(821.43)
+  })
+
+  // -------------------------------------------------------------------------
   // T7 Endosso negativo -> redução/ajuste correto, nunca valor negativo vindo como receita positiva
   // -------------------------------------------------------------------------
   it('T7 Endosso negativo -> redução/ajuste correto, nunca valor negativo vindo como receita positiva', () => {

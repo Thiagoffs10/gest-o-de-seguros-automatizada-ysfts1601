@@ -59,8 +59,11 @@ export function EndorsementFormDialog({
   const [modeloVeiculo, setModeloVeiculo] = useState('')
   const [valorBruto, setValorBruto] = useState<number | ''>('')
   const [valorLiquido, setValorLiquido] = useState<number | ''>('')
+  const [taxaComissao, setTaxaComissao] = useState<number | ''>('')
   const [observacao, setObservacao] = useState('')
   const [isSubmitting, setIsSubmitting] = useState(false)
+
+  const defaultTaxa = Number(policy.commission_percent || 0)
 
   // Preenche dados ao abrir
   useEffect(() => {
@@ -76,6 +79,11 @@ export function EndorsementFormDialog({
         setValorLiquido(
           endorsementToEdit.valor_liquido != null ? endorsementToEdit.valor_liquido : '',
         )
+        setTaxaComissao(
+          endorsementToEdit.comissao_percent != null
+            ? endorsementToEdit.comissao_percent
+            : defaultTaxa,
+        )
         setObservacao(endorsementToEdit.observacao || '')
       } else {
         setTipo('Substituição de veículo')
@@ -86,11 +94,12 @@ export function EndorsementFormDialog({
         setModeloVeiculo('')
         setValorBruto('')
         setValorLiquido('')
+        setTaxaComissao(defaultTaxa)
         setObservacao('')
       }
       setIsSubmitting(false)
     }
-  }, [open, endorsementToEdit])
+  }, [open, endorsementToEdit, defaultTaxa])
 
   // Formatação amigável de placa brasileira (Mercosul ou padrão antigo)
   const formatPlaca = (val: string) => {
@@ -111,10 +120,24 @@ export function EndorsementFormDialog({
     setPlaca(formatPlaca(val))
   }
 
-  // Cálculo da comissão estimada baseada na regra da apólice
-  const commPercent = Number(policy.commission_percent || 0)
+  // Taxa efetiva para o cálculo: se vazia ou inválida (< 0 ou > 100), usa a taxa original da apólice
+  const taxaEfetiva =
+    taxaComissao === '' ||
+    isNaN(Number(taxaComissao)) ||
+    Number(taxaComissao) < 0 ||
+    Number(taxaComissao) > 100
+      ? defaultTaxa
+      : Number(taxaComissao)
+
+  const isTaxaValida =
+    taxaComissao !== '' &&
+    !isNaN(Number(taxaComissao)) &&
+    Number(taxaComissao) >= 0 &&
+    Number(taxaComissao) <= 100
+
+  // Cálculo da comissão estimada ao vivo baseada na taxa informada pelo usuário
   const numLiquido = valorLiquido === '' ? 0 : Number(valorLiquido)
-  const comissaoEstimada = Math.round(((numLiquido * commPercent) / 100) * 100) / 100
+  const comissaoEstimada = Math.round(((numLiquido * taxaEfetiva) / 100) * 100) / 100
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
@@ -138,6 +161,17 @@ export function EndorsementFormDialog({
       return
     }
 
+    if (
+      taxaComissao !== '' &&
+      (isNaN(Number(taxaComissao)) || Number(taxaComissao) < 0 || Number(taxaComissao) > 100)
+    ) {
+      toast({
+        title: 'Taxa inválida',
+        description: 'A comissão do endosso deve estar entre 0% e 100%. Usando taxa da apólice.',
+        variant: 'destructive',
+      })
+    }
+
     setIsSubmitting(true)
     try {
       const vBruto = valorBruto === '' ? 0 : Number(valorBruto)
@@ -153,6 +187,7 @@ export function EndorsementFormDialog({
           modelo_veiculo: modeloVeiculo,
           valor_bruto: vBruto,
           valor_liquido: vLiq,
+          comissao_percent: taxaEfetiva,
           observacao,
         })
         toast({ title: 'Endosso atualizado com sucesso!' })
@@ -167,6 +202,7 @@ export function EndorsementFormDialog({
           modelo_veiculo: modeloVeiculo,
           valor_bruto: vBruto,
           valor_liquido: vLiq,
+          comissao_percent: taxaEfetiva,
           observacao,
         })
         toast({
@@ -340,10 +376,11 @@ export function EndorsementFormDialog({
             </span>
             <p className="text-[11px] text-slate-500">
               Aceita valores positivos (aumento de prêmio), zero (sem alteração de prêmio) ou
-              negativos (devolução/redução de prêmio).
+              negativos (devolução/redução de prêmio). A comissão pode ser personalizada caso
+              discorde da regra original.
             </p>
 
-            <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
               <div>
                 <Label className="text-xs">Valor Bruto do Endosso (R$)</Label>
                 <Input
@@ -373,8 +410,40 @@ export function EndorsementFormDialog({
               </div>
 
               <div>
+                <div className="flex items-center justify-between">
+                  <Label className="text-xs font-semibold">Comissão do Endosso (%) *</Label>
+                  {taxaComissao !== '' && Number(taxaComissao) !== defaultTaxa && isTaxaValida && (
+                    <span className="text-[10px] text-blue-600 font-medium">Personalizada</span>
+                  )}
+                </div>
+                <Input
+                  type="number"
+                  step="0.01"
+                  min="0"
+                  max="100"
+                  placeholder={String(defaultTaxa)}
+                  className={`mt-1 font-semibold ${
+                    taxaComissao !== '' && !isTaxaValida ? 'border-amber-500 bg-amber-50/50' : ''
+                  }`}
+                  value={taxaComissao}
+                  onChange={(e) =>
+                    setTaxaComissao(e.target.value === '' ? '' : Number(e.target.value))
+                  }
+                />
+                <span className="text-[10px] text-slate-400 block mt-0.5">
+                  {taxaComissao === ''
+                    ? `Padrão da apólice: ${defaultTaxa}%`
+                    : !isTaxaValida
+                      ? `Inválida (0–100%). Aplicando padrão: ${defaultTaxa}%`
+                      : Number(taxaComissao) === defaultTaxa
+                        ? `Mesma da apólice original (${defaultTaxa}%)`
+                        : `Apólice original: ${defaultTaxa}%`}
+                </span>
+              </div>
+
+              <div>
                 <Label className="text-xs font-semibold text-slate-600">
-                  Comissão Calculada ({commPercent}%)
+                  Comissão Calculada ({taxaEfetiva}%)
                 </Label>
                 <div
                   className={`h-9 px-3 py-2 mt-1 rounded-md border text-sm font-bold flex items-center ${
