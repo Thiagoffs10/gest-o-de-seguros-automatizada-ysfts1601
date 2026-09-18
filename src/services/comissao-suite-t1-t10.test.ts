@@ -464,4 +464,95 @@ describe('Suíte de Testes Obrigatórios T1 a T10 — Validação Financeira', (
     expect(isDateInPeriod(singleDayPeriod, '2026-09-14')).toBe(false)
     expect(isDateInPeriod(singleDayPeriod, '2026-09-16')).toBe(false)
   })
+
+  // -------------------------------------------------------------------------
+  // Caso Real (Policy 14432373 - Sergio, Azul Seguros):
+  // Recebimento legado sem vínculo (competência vazia) é alocado por inferência
+  // de competência/FIFO na previsão da apólice pai (fica Recebida), e a previsão
+  // de endosso permanece Pendente.
+  // -------------------------------------------------------------------------
+  it('Recebimento legado sem vínculo (competência vazia) é alocado por inferência de competência/FIFO na previsão da apólice pai (fica Recebida), e a previsão de endosso permanece Pendente', () => {
+    // Previsão 1: Apólice Pai (08/2026 - R$ 484,97 líquida prevista)
+    const prevApolicePai: ComissaoPrevistaSimples = {
+      id: 'prev_pai_14432373',
+      policy: 'policy_14432373',
+      competencia: '08/2026',
+      data_prevista: '2026-08-22',
+      valor_previsto: 484.97,
+      parcela_numero: 1,
+      status: 'Pendente',
+    }
+
+    // Previsão 2: Endosso (09/2026 - R$ 326,56 pendente)
+    const prevEndosso: ComissaoPrevistaSimples = {
+      id: 'prev_endosso_14432373',
+      policy: 'policy_14432373',
+      competencia: '09/2026',
+      data_prevista: '2026-09-17',
+      valor_previsto: 326.56,
+      parcela_numero: 1,
+      status: 'Pendente',
+      endorsement: 'end_14432373',
+    }
+
+    // Recebimento Legado: 21/08/2026, bruto 494,87 / impostos 9,90, comissao_prevista vazia, competencia vazia
+    const recLegado: ComissaoRecebimento = {
+      id: 'rec_legado_14432373',
+      policy: 'policy_14432373',
+      data_recebimento: '2026-08-21',
+      valor_bruto: 494.87,
+      descontos_impostos: 9.9,
+      valor_liquido: 494.87, // no legado gravado igual ao bruto antes do fix de exibição
+      competencia: '',
+      comissao_prevista: null,
+      origem: 'Legado',
+      observacao: 'Legado — valor derivado do cadastro anterior',
+      created: '2026-08-21',
+      updated: '2026-08-21',
+    }
+
+    const mapa = reconciliarRecebimentosComPrevisoes([prevApolicePai, prevEndosso], [recLegado])
+
+    const resPai = mapa.get('prev_pai_14432373')
+    const resEndosso = mapa.get('prev_endosso_14432373')
+
+    // Previsão da Apólice Pai recebe a alocação (data 21/08/2026 infere competência 08/2026)
+    expect(resPai).toBeDefined()
+    expect(resPai?.status).toBe('Recebida')
+    expect(resPai?.valorRecebidoBruto).toBe(494.87)
+    expect(resPai?.saldo).toBe(0)
+    expect(resPai?.recebimentosVinculados).toHaveLength(1)
+
+    // Previsão de Endosso permanece Pendente com saldo integral
+    expect(resEndosso).toBeDefined()
+    expect(resEndosso?.status).toBe('Pendente')
+    expect(resEndosso?.valorRecebidoBruto).toBe(0)
+    expect(resEndosso?.saldo).toBe(326.56)
+    expect(resEndosso?.recebimentosVinculados).toHaveLength(0)
+
+    // Totalização consolidada dos cards do topo
+    const totalPrevisto = [prevApolicePai, prevEndosso].reduce(
+      (sum, p) => sum + (Number(p.valor_previsto) || 0),
+      0,
+    )
+    let totalRecebidoBruto = 0
+    let totalSaldo = 0
+    for (const res of mapa.values()) {
+      totalRecebidoBruto += res.valorRecebidoBruto || 0
+      totalSaldo += Math.max(0, res.saldo || 0)
+    }
+
+    expect(Math.round(totalPrevisto * 100) / 100).toBe(811.53) // 484.97 + 326.56
+    expect(Math.round(totalRecebidoBruto * 100) / 100).toBe(494.87)
+    expect(Math.round(totalSaldo * 100) / 100).toBe(326.56)
+
+    // Badge do topo neste caso deve ser Parcial (saldo > 0 e recebido > 0)
+    const badgeTopo =
+      totalSaldo === 0
+        ? 'Recebida'
+        : totalSaldo > 0 && totalRecebidoBruto > 0
+          ? 'Parcial'
+          : 'Pendente'
+    expect(badgeTopo).toBe('Parcial')
+  })
 })

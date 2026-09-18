@@ -37,7 +37,9 @@ import {
 import {
   getComissaoRecebimentosByPolicy,
   deleteComissaoRecebimento,
+  reconciliarRecebimentosComPrevisoes,
 } from '@/services/comissao-recebimentos'
+import { useMemo } from 'react'
 import { getComissoesPrevistasByPolicy } from '@/services/modelos-comissao'
 import {
   getEndorsementsByPolicy,
@@ -313,20 +315,32 @@ export default function PolicyDetail() {
     }
   }
 
-  if (!policy) return <div className="p-8 text-center text-slate-500">Carregando apólice...</div>
+  // Reconciliação centralizada com previsões e recebimentos (Hook incondicional)
+  const reconciliacaoMap = useMemo(() => {
+    if (previsoes.length > 0) {
+      return reconciliarRecebimentosComPrevisoes(previsoes, recebimentos)
+    }
+    return new Map()
+  }, [previsoes, recebimentos])
 
-  const fmtMoney = (v: number) => v?.toLocaleString('pt-BR', { minimumFractionDigits: 2 }) || '0,00'
-  const initialData =
-    dialogMode === 'edit' ? policy : dialogMode === 'renew' ? prepareRenewalData(policy) : undefined
-
-  // REGRA CORRETA:
-  // - Comissão prevista = valor bruto previsto
-  // - Já recebido = soma dos valores BRUTOS recebidos
-  // - Saldo a receber = comissão prevista - total BRUTO recebido
-  // - Impostos/descontos NÃO reduzem o saldo da comissão prevista
-  // - Valor líquido recebido = receita líquida realizada no financeiro
-  const comissaoPrevista =
-    policy.commission != null
+  // REGRA DE OURO DOS CARDS DO TOPO:
+  // Se previsoes.length > 0:
+  // - totalPrevisto = soma dos valor_previsto das previsões não-Cancelada
+  // - recebido = soma dos valorRecebidoBruto do mapa
+  // - saldo = soma dos saldos do mapa (mín 0)
+  // Senão: fallback para campos da apólice
+  const comissaoPrevista = useMemo(() => {
+    if (previsoes.length > 0) {
+      return (
+        Math.round(
+          previsoes
+            .filter((p) => p.status !== 'Cancelada')
+            .reduce((sum, p) => sum + (Number(p.valor_previsto) || 0), 0) * 100,
+        ) / 100
+      )
+    }
+    if (!policy) return 0
+    return policy.commission != null
       ? Number(policy.commission)
       : Math.round(
           (((policy.valor_liquido || policy.premium_amount || 0) *
@@ -334,15 +348,48 @@ export default function PolicyDetail() {
             100) *
             100,
         ) / 100
+  }, [previsoes, policy])
 
-  // Total BRUTO recebido (soma dos recebimentos brutos)
-  const jaRecebido =
-    recebimentos.length > 0
+  // Total BRUTO recebido
+  const jaRecebido = useMemo(() => {
+    if (previsoes.length > 0) {
+      let totalRecMap = 0
+      for (const res of reconciliacaoMap.values()) {
+        totalRecMap += res.valorRecebidoBruto || 0
+      }
+      return Math.round(totalRecMap * 100) / 100
+    }
+    return recebimentos.length > 0
       ? Math.round(recebimentos.reduce((sum, r) => sum + (Number(r.valor_bruto) || 0), 0) * 100) /
-        100
-      : policy.comissao_recebida
+          100
+      : policy?.comissao_recebida
         ? comissaoPrevista
         : 0
+  }, [
+    previsoes.length,
+    reconciliacaoMap,
+    recebimentos,
+    policy?.comissao_recebida,
+    comissaoPrevista,
+  ])
+
+  // Saldo a receber consolidado: soma dos saldos do mapa (mín 0)
+  const saldoAReceber = useMemo(() => {
+    if (previsoes.length > 0) {
+      let totalSaldo = 0
+      for (const res of reconciliacaoMap.values()) {
+        totalSaldo += Math.max(0, res.saldo || 0)
+      }
+      return Math.round(totalSaldo * 100) / 100
+    }
+    return Math.max(0, Math.round((comissaoPrevista - jaRecebido) * 100) / 100)
+  }, [previsoes.length, reconciliacaoMap, comissaoPrevista, jaRecebido])
+
+  if (!policy) return <div className="p-8 text-center text-slate-500">Carregando apólice...</div>
+
+  const fmtMoney = (v: number) => v?.toLocaleString('pt-BR', { minimumFractionDigits: 2 }) || '0,00'
+  const initialData =
+    dialogMode === 'edit' ? policy : dialogMode === 'renew' ? prepareRenewalData(policy) : undefined
 
   // Total de Impostos/Descontos realizados
   const impostosRealizados =
@@ -355,7 +402,6 @@ export default function PolicyDetail() {
         : 0
 
   // Total LÍQUIDO recebido (soma do líquido efetivamente recebido)
-  // Regra: NÃO usar líquido para reduzir o saldo bruto da comissão
   const receitaLiquidaRealizada =
     recebimentos.length > 0
       ? Math.round(
@@ -372,8 +418,6 @@ export default function PolicyDetail() {
         ? Math.max(0, comissaoPrevista - (policy.iss || 0))
         : 0
 
-  // Saldo = previsto bruto − realizado bruto (NÃO usar líquido para reduzir saldo)
-  const saldoAReceber = Math.max(0, Math.round((comissaoPrevista - jaRecebido) * 100) / 100)
   const temDivergenciaExcesso = jaRecebido > comissaoPrevista && comissaoPrevista > 0
 
   // Cálculo do veículo vigente (sem destruir registros históricos)
@@ -494,7 +538,7 @@ export default function PolicyDetail() {
             <div>
               <div className="flex items-center gap-2">
                 <CardTitle className="text-base font-bold text-slate-900">Comissões</CardTitle>
-                {saldoAReceber === 0 && comissaoPrevista > 0 && (
+                {saldoAReceber === 0 && (comissaoPrevista > 0 || jaRecebido > 0) && (
                   <Badge className="bg-emerald-600 text-white font-medium text-xs">Recebida</Badge>
                 )}
                 {saldoAReceber > 0 && jaRecebido > 0 && (
@@ -624,21 +668,13 @@ export default function PolicyDetail() {
                   </thead>
                   <tbody className="divide-y divide-slate-100">
                     {previsoes.map((prev) => {
-                      // Calcula o recebido para esta previsão específica
-                      const recsDesta = recebimentos.filter(
-                        (r) =>
-                          r.comissao_prevista === prev.id ||
-                          (r.competencia && prev.competencia && r.competencia === prev.competencia),
-                      )
-                      const recBrutoDesta =
-                        Math.round(
-                          recsDesta.reduce((acc, r) => acc + (Number(r.valor_bruto) || 0), 0) * 100,
-                        ) / 100
+                      const recResult = reconciliacaoMap.get(prev.id)
+                      const recBrutoDesta = recResult ? recResult.valorRecebidoBruto : 0
                       const vPrev = Number(prev.valor_previsto) || 0
-                      const saldoDesta = Math.max(
-                        0,
-                        Math.round((vPrev - recBrutoDesta) * 100) / 100,
-                      )
+                      const saldoDesta = recResult
+                        ? recResult.saldo
+                        : Math.max(0, Math.round((vPrev - recBrutoDesta) * 100) / 100)
+                      const statusDesta = recResult ? recResult.status : prev.status || 'Pendente'
 
                       return (
                         <tr key={prev.id} className="hover:bg-slate-50/80">
@@ -658,20 +694,16 @@ export default function PolicyDetail() {
                           <td className="p-2.5">
                             <Badge
                               className={
-                                prev.status === 'Recebida' || saldoDesta === 0
+                                statusDesta === 'Recebida'
                                   ? 'bg-emerald-600 text-white'
-                                  : prev.status === 'Parcial' || recBrutoDesta > 0
+                                  : statusDesta === 'Parcial'
                                     ? 'bg-amber-500 text-white'
-                                    : prev.status === 'Cancelada'
+                                    : statusDesta === 'Cancelada'
                                       ? 'bg-red-500 text-white'
                                       : 'bg-slate-400 text-white'
                               }
                             >
-                              {saldoDesta === 0 && vPrev > 0
-                                ? 'Recebida'
-                                : recBrutoDesta > 0
-                                  ? 'Parcial'
-                                  : prev.status || 'Pendente'}
+                              {statusDesta}
                             </Badge>
                           </td>
                           <td className="p-2.5 text-right">
@@ -683,7 +715,7 @@ export default function PolicyDetail() {
                                 className="h-7 text-xs text-blue-600 hover:text-blue-800 hover:bg-blue-50 px-2"
                               >
                                 <Link
-                                  to={`/financeiro?policy=${policy.policy_number || policy.numero_proposta || ''}&competencia=${encodeURIComponent(prev.competencia || '')}&prevId=${encodeURIComponent(prev.id)}&valor=${encodeURIComponent(String(prev.valor_previsto || ''))}`}
+                                  to={`/financeiro?policy=${policy.policy_number || policy.numero_proposta || ''}&competencia=${encodeURIComponent(prev.competencia || '')}&prevId=${encodeURIComponent(prev.id)}&valor=${encodeURIComponent(String(saldoDesta))}${prev.endorsement ? `&endorsement=${encodeURIComponent(prev.endorsement)}` : ''}`}
                                 >
                                   Receber
                                 </Link>
@@ -731,94 +763,105 @@ export default function PolicyDetail() {
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-slate-100">
-                    {recebimentos.map((rec) => (
-                      <tr key={rec.id} className="hover:bg-slate-50/80">
-                        <td className="p-2.5 font-medium">
-                          {formatDateDisplay(rec.data_recebimento)}
-                        </td>
-                        <td className="p-2.5 font-medium text-slate-900">
-                          {rec.competencia || (rec.parcela ? `Parc. ${rec.parcela}` : '-')}
-                        </td>
-                        <td
-                          className={`p-2.5 ${rec.is_estorno || rec.valor_bruto < 0 ? 'text-rose-600 font-bold' : 'font-medium'}`}
-                        >
-                          {rec.valor_bruto < 0
-                            ? `- R$ ${fmtMoney(Math.abs(rec.valor_bruto))}`
-                            : `R$ ${fmtMoney(rec.valor_bruto)}`}
-                        </td>
-                        <td className="p-2.5 text-slate-500">
-                          {rec.descontos_impostos ? `R$ ${fmtMoney(rec.descontos_impostos)}` : '-'}
-                        </td>
-                        <td
-                          className={`p-2.5 font-bold ${rec.is_estorno || (rec.valor_liquido || 0) < 0 ? 'text-rose-600' : 'text-emerald-700'}`}
-                        >
-                          {(rec.valor_liquido || 0) < 0
-                            ? `- R$ ${fmtMoney(Math.abs(rec.valor_liquido || 0))}`
-                            : `R$ ${fmtMoney(rec.valor_liquido)}`}
-                        </td>
-                        <td className="p-2.5">
-                          <div className="flex items-center gap-1.5">
-                            {rec.is_estorno && (
-                              <Badge
-                                variant="outline"
-                                className="text-[10px] bg-rose-50 text-rose-700 border-rose-200"
-                              >
-                                Estorno
-                              </Badge>
-                            )}
-                            <span className="text-slate-600 text-[11px]">
-                              {rec.observacao || rec.motivo_estorno || rec.origem || '-'}
-                            </span>
-                          </div>
-                        </td>
-                        <td className="p-2.5 text-right">
-                          <div className="flex items-center justify-end gap-1">
-                            {can('policies', 'update') && !rec.is_estorno && (
-                              <Button
-                                variant="ghost"
-                                size="sm"
-                                className="text-rose-600 hover:text-rose-700 hover:bg-rose-50 h-7 px-2"
-                                onClick={() => {
-                                  setEstornandoRecebimento(rec)
-                                  setIsEstornoOpen(true)
-                                }}
-                                title="Registrar estorno"
-                              >
-                                <RotateCcw className="w-3.5 h-3.5 mr-1" /> Estornar
-                              </Button>
-                            )}
-                            {can('policies', 'update') && !rec.is_estorno && (
-                              <Button
-                                variant="ghost"
-                                size="sm"
-                                className="text-blue-600 hover:text-blue-800 hover:bg-blue-50 h-7 px-2"
-                                onClick={() => {
-                                  setEditingRecebimento(rec)
-                                  setIsEditRecebimentoOpen(true)
-                                }}
-                                title="Editar recebimento"
-                              >
-                                <Pencil className="w-3.5 h-3.5" />
-                              </Button>
-                            )}
-                            {can('policies', 'delete') && (
-                              <Button
-                                variant="ghost"
-                                size="sm"
-                                className="text-red-500 hover:text-red-700 hover:bg-red-50 h-7 px-2"
-                                onClick={() => {
-                                  setDeletingRecebimento(rec)
-                                  setIsDeleteRecebimentoOpen(true)
-                                }}
-                                title="Excluir recebimento"
-                              >
-                                <Trash2 className="w-3.5 h-3.5" />
-                              </Button>
-                            )}
-                          </div>
-                        </td>
-                      </tr>
-                    ))}
+                    {recebimentos.map((rec) => {
+                      const valorLiquidoExibido =
+                        (rec.descontos_impostos || 0) > 0 && rec.valor_liquido === rec.valor_bruto
+                          ? (rec.valor_bruto || 0) - (rec.descontos_impostos || 0)
+                          : rec.valor_liquido != null
+                            ? rec.valor_liquido
+                            : rec.valor_bruto
+
+                      return (
+                        <tr key={rec.id} className="hover:bg-slate-50/80">
+                          <td className="p-2.5 font-medium">
+                            {formatDateDisplay(rec.data_recebimento)}
+                          </td>
+                          <td className="p-2.5 font-medium text-slate-900">
+                            {rec.competencia || (rec.parcela ? `Parc. ${rec.parcela}` : '-')}
+                          </td>
+                          <td
+                            className={`p-2.5 ${rec.is_estorno || rec.valor_bruto < 0 ? 'text-rose-600 font-bold' : 'font-medium'}`}
+                          >
+                            {rec.valor_bruto < 0
+                              ? `- R$ ${fmtMoney(Math.abs(rec.valor_bruto))}`
+                              : `R$ ${fmtMoney(rec.valor_bruto)}`}
+                          </td>
+                          <td className="p-2.5 text-slate-500">
+                            {rec.descontos_impostos
+                              ? `R$ ${fmtMoney(rec.descontos_impostos)}`
+                              : '-'}
+                          </td>
+                          <td
+                            className={`p-2.5 font-bold ${rec.is_estorno || (valorLiquidoExibido || 0) < 0 ? 'text-rose-600' : 'text-emerald-700'}`}
+                          >
+                            {(valorLiquidoExibido || 0) < 0
+                              ? `- R$ ${fmtMoney(Math.abs(valorLiquidoExibido || 0))}`
+                              : `R$ ${fmtMoney(valorLiquidoExibido || 0)}`}
+                          </td>
+                          <td className="p-2.5">
+                            <div className="flex items-center gap-1.5">
+                              {rec.is_estorno && (
+                                <Badge
+                                  variant="outline"
+                                  className="text-[10px] bg-rose-50 text-rose-700 border-rose-200"
+                                >
+                                  Estorno
+                                </Badge>
+                              )}
+                              <span className="text-slate-600 text-[11px]">
+                                {rec.observacao || rec.motivo_estorno || rec.origem || '-'}
+                              </span>
+                            </div>
+                          </td>
+                          <td className="p-2.5 text-right">
+                            <div className="flex items-center justify-end gap-1">
+                              {can('policies', 'update') && !rec.is_estorno && (
+                                <Button
+                                  variant="ghost"
+                                  size="sm"
+                                  className="text-rose-600 hover:text-rose-700 hover:bg-rose-50 h-7 px-2"
+                                  onClick={() => {
+                                    setEstornandoRecebimento(rec)
+                                    setIsEstornoOpen(true)
+                                  }}
+                                  title="Registrar estorno"
+                                >
+                                  <RotateCcw className="w-3.5 h-3.5 mr-1" /> Estornar
+                                </Button>
+                              )}
+                              {can('policies', 'update') && !rec.is_estorno && (
+                                <Button
+                                  variant="ghost"
+                                  size="sm"
+                                  className="text-blue-600 hover:text-blue-800 hover:bg-blue-50 h-7 px-2"
+                                  onClick={() => {
+                                    setEditingRecebimento(rec)
+                                    setIsEditRecebimentoOpen(true)
+                                  }}
+                                  title="Editar recebimento"
+                                >
+                                  <Pencil className="w-3.5 h-3.5" />
+                                </Button>
+                              )}
+                              {can('policies', 'delete') && (
+                                <Button
+                                  variant="ghost"
+                                  size="sm"
+                                  className="text-red-500 hover:text-red-700 hover:bg-red-50 h-7 px-2"
+                                  onClick={() => {
+                                    setDeletingRecebimento(rec)
+                                    setIsDeleteRecebimentoOpen(true)
+                                  }}
+                                  title="Excluir recebimento"
+                                >
+                                  <Trash2 className="w-3.5 h-3.5" />
+                                </Button>
+                              )}
+                            </div>
+                          </td>
+                        </tr>
+                      )
+                    })}
                   </tbody>
                 </table>
               </div>
