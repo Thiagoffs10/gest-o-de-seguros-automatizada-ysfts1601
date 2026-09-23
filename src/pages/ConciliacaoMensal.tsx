@@ -16,6 +16,7 @@ import {
   getComissaoRecebimentos,
   createComissaoRecebimento,
 } from '@/services/comissao-recebimentos'
+import { getAllEndorsements } from '@/services/endorsements'
 import { getErrorMessage } from '@/lib/pocketbase/errors'
 import { Policy, CustoFixo, Conciliacao, ComissaoRecebimento } from '@/types'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
@@ -75,6 +76,7 @@ export default function ConciliacaoMensal() {
   const [policies, setPolicies] = useState<Policy[]>([])
   const [custos, setCustos] = useState<CustoFixo[]>([])
   const [recebimentos, setRecebimentos] = useState<ComissaoRecebimento[]>([])
+  const [endorsements, setEndorsements] = useState<any[]>([])
   const [conciliacao, setConciliacao] = useState<Conciliacao | null>(null)
   const [loading, setLoading] = useState(true)
   const [actionLoading, setActionLoading] = useState(false)
@@ -85,16 +87,18 @@ export default function ConciliacaoMensal() {
   const loadData = useCallback(async () => {
     setLoading(true)
     try {
-      const [pols, custosData, conc, recs] = await Promise.all([
+      const [pols, custosData, conc, recs, endos] = await Promise.all([
         getPolicies(),
         getCustosFixos(),
         getConciliacao(mes, ano),
         getComissaoRecebimentos().catch(() => []),
+        getAllEndorsements().catch(() => []),
       ])
       setPolicies(pols)
       setCustos(custosData)
       setConciliacao(conc)
       setRecebimentos(recs)
+      setEndorsements(endos)
     } catch {
       /* ignored */
     }
@@ -108,6 +112,20 @@ export default function ConciliacaoMensal() {
   useRealtime('custos_fixos', () => loadData())
   useRealtime('conciliacoes', () => loadData())
   useRealtime('comissao_recebimentos', () => loadData())
+  useRealtime('endorsements', () => loadData())
+
+  const endorsementPolicyIds = useMemo(() => {
+    const set = new Set<string>()
+    endorsements.forEach((e) => {
+      if (e.policy) set.add(e.policy)
+    })
+    recebimentos.forEach((r) => {
+      if (r.endorsement || r.origem === 'Endosso' || r.origem === 'Ajuste de Endosso') {
+        if (r.policy) set.add(r.policy)
+      }
+    })
+    return set
+  }, [endorsements, recebimentos])
 
   const m = useMemo(() => {
     // Produção do mês selecionado (início da vigência no período)
@@ -381,18 +399,23 @@ export default function ConciliacaoMensal() {
       const belongsToPeriodProduction = isDateInPeriod(period, p.start_date)
 
       return {
-        clienteNome: p.expand?.client?.name || 'Cliente não informado',
-        seguradoraNome: p.expand?.seguradora?.nome || p.insurance_company || '-',
-        parceiroNome: p.expand?.parceiro?.nome,
-        tipoSeguro: p.tipo_de_seguro || p.coverage_type || '-',
-        numeroApolice: p.policy_number || '-',
-        valorLiquido: p.valor_liquido || p.premium_amount || 0,
-        comissaoPrevista: belongsToPeriodProduction ? net : 0,
-        comissaoRecebida: receivedInPeriod ? net : 0,
-        statusComissao: (receivedInPeriod ? 'Recebida' : 'Pendente') as 'Recebida' | 'Pendente',
-        dataRecebimento: p.data_recebimento_comissao,
-      }
-    })
+        const isEndosso = endorsementPolicyIds.has(p.id)
+        const baseNum = p.policy_number || p.numero_proposta || '-'
+        const prefixo = isEndosso ? '[Endosso] ' : ''
+        return {
+          clienteNome: p.expand?.client?.name || 'Cliente não informado',
+          seguradoraNome: p.expand?.seguradora?.nome || p.insurance_company || '-',
+          parceiroNome: p.expand?.parceiro?.nome,
+          tipoSeguro: p.tipo_de_seguro || p.coverage_type || '-',
+          numeroApolice: `${prefixo}${baseNum}`,
+          valorLiquido: p.valor_liquido || p.premium_amount || 0,
+          comissaoPrevista: belongsToPeriodProduction ? net : 0,
+          comissaoRecebida: receivedInPeriod ? net : 0,
+          statusComissao: (receivedInPeriod ? 'Recebida' : 'Pendente') as 'Recebida' | 'Pendente',
+          dataRecebimento: p.data_recebimento_comissao,
+          isEndosso,
+        }
+      })
 
     generateConciliacaoPDF({
       mes,
@@ -869,6 +892,7 @@ export default function ConciliacaoMensal() {
         onMarkCommissionReceived={handleMarkCommissionReceived}
         onMarkRepassePaid={handleMarkRepassePaid}
         onMarkCustoPaid={handleMarkCustoPaid}
+        endorsementPolicyIds={endorsementPolicyIds}
       />
     </div>
   )

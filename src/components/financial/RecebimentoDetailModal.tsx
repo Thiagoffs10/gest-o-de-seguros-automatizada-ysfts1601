@@ -506,18 +506,22 @@ export function RecebimentoDetailModal({
             { header: 'Valor Recebido', dataKey: 'valorLiquidoFmt', align: 'right' },
             { header: 'Saldo da Apólice', dataKey: 'saldoApoliceFmt', align: 'right' },
           ],
-          rows: filteredMovimentos.map((r) => ({
-            propostaFormatada:
+          rows: filteredMovimentos.map((r) => {
+            const prefixo = r.isEndorsement ? '[Endosso] ' : ''
+            const baseProposta =
               r.apolice && r.apolice !== r.proposta
                 ? `${r.proposta}\n(Ap: ${r.apolice})`
-                : r.proposta,
-            clienteNome: r.clienteNome,
-            seguradoraNome: r.seguradoraNome,
-            producaoLabel: r.producaoLabel,
-            dataRecebimentoFmt: formatDateDisplay(r.dataRecebimento),
-            valorLiquidoFmt: `R$ ${formatCurrency(r.valorLiquido)}`,
-            saldoApoliceFmt: `R$ ${formatCurrency(r.saldoApolice)}`,
-          })),
+                : r.proposta
+            return {
+              propostaFormatada: `${prefixo}${baseProposta}`,
+              clienteNome: r.clienteNome,
+              seguradoraNome: r.seguradoraNome,
+              producaoLabel: r.producaoLabel,
+              dataRecebimentoFmt: formatDateDisplay(r.dataRecebimento),
+              valorLiquidoFmt: `R$ ${formatCurrency(r.valorLiquido)}`,
+              saldoApoliceFmt: `R$ ${formatCurrency(r.saldoApolice)}`,
+            }
+          }),
           totalRow: {
             propostaFormatada: `Total Consolidado (${filteredMovimentos.length} lançamentos)`,
             clienteNome: '',
@@ -585,19 +589,23 @@ export function RecebimentoDetailModal({
             { header: 'Último Recebimento', dataKey: 'ultimoRecFmt', align: 'center' },
             { header: 'Status', dataKey: 'statusText', align: 'center' },
           ],
-          rows: filteredPropostas.map((r) => ({
-            propostaFormatada:
+          rows: filteredPropostas.map((r) => {
+            const prefixo = r.isEndorsement ? '[Endosso] ' : ''
+            const baseProposta =
               r.apolice && r.apolice !== r.proposta
                 ? `${r.proposta}\n(Ap: ${r.apolice})`
-                : r.proposta,
-            clienteNome: r.clienteNome,
-            seguradoraNome: r.seguradoraNome,
-            previstoFmt: `R$ ${formatCurrency(r.previsto)}`,
-            recFmt: `R$ ${formatCurrency(r.rec)}`,
-            saldoFmt: `R$ ${formatCurrency(r.saldo)}`,
-            ultimoRecFmt: r.ultimoRecebimento ? formatDateDisplay(r.ultimoRecebimento) : '-',
-            statusText: r.statusText,
-          })),
+                : r.proposta
+            return {
+              propostaFormatada: `${prefixo}${baseProposta}`,
+              clienteNome: r.clienteNome,
+              seguradoraNome: r.seguradoraNome,
+              previstoFmt: `R$ ${formatCurrency(r.previsto)}`,
+              recFmt: `R$ ${formatCurrency(r.rec)}`,
+              saldoFmt: `R$ ${formatCurrency(r.saldo)}`,
+              ultimoRecFmt: r.ultimoRecebimento ? formatDateDisplay(r.ultimoRecebimento) : '-',
+              statusText: r.statusText,
+            }
+          }),
           totalRow: {
             propostaFormatada: `Total Consolidado (${filteredPropostas.length} propostas)`,
             clienteNome: '',
@@ -859,7 +867,17 @@ export function RecebimentoDetailModal({
                     <tr key={r.id} className="hover:bg-slate-50/80">
                       <td className="p-2.5 font-bold text-slate-900">
                         <div className="flex flex-col">
-                          <span>{r.proposta}</span>
+                          <div className="flex items-center gap-1.5">
+                            <span>{r.proposta}</span>
+                            {r.isEndorsement && (
+                              <Badge
+                                variant="outline"
+                                className="text-[10px] px-1.5 py-0 border-blue-200 bg-blue-50 text-blue-700 font-normal"
+                              >
+                                Endosso
+                              </Badge>
+                            )}
+                          </div>
                           {r.apolice && r.apolice !== r.proposta && (
                             <span className="text-[10px] text-slate-400 font-normal">
                               Apólice: {r.apolice}

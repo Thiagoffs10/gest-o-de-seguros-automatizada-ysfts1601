@@ -144,18 +144,22 @@ export function ProjecaoCompetenciaModal({
           { header: 'Já Recebido', dataKey: 'recebidoFmt', align: 'right' },
           { header: 'Saldo Previsto', dataKey: 'saldoFmt', align: 'right' },
         ],
-        rows: filteredRows.map((r) => ({
-          propostaFormatada:
+        rows: filteredRows.map((r) => {
+          const prefixo = r.origem === 'Endosso' ? '[Endosso] ' : ''
+          const baseProposta =
             r.apoliceNumero && r.apoliceNumero !== r.propostaNumero
               ? `${r.propostaNumero}\n(Ap: ${r.apoliceNumero})`
-              : r.propostaNumero,
-          clienteNome: r.clienteNome,
-          seguradoraNome: r.seguradoraNome,
-          produtoNome: r.produtoNome,
-          previstoFmt: `R$ ${formatCurrency(r.valorPrevisto)}`,
-          recebidoFmt: `R$ ${formatCurrency(r.valorRecebido)}`,
-          saldoFmt: `R$ ${formatCurrency(r.saldoPrevisto)}`,
-        })),
+              : r.propostaNumero
+          return {
+            propostaFormatada: `${prefixo}${baseProposta}`,
+            clienteNome: r.clienteNome,
+            seguradoraNome: r.seguradoraNome,
+            produtoNome: r.produtoNome,
+            previstoFmt: `R$ ${formatCurrency(r.valorPrevisto)}`,
+            recebidoFmt: `R$ ${formatCurrency(r.valorRecebido)}`,
+            saldoFmt: `R$ ${formatCurrency(r.saldoPrevisto)}`,
+          }
+        }),
         totalRow: {
           propostaFormatada: `Total da Competência (${filteredRows.length} previsões)`,
           clienteNome: '',
@@ -276,7 +280,17 @@ export function ProjecaoCompetenciaModal({
                   <tr key={r.id} className="hover:bg-slate-50/80">
                     <td className="p-2.5 font-bold text-slate-900">
                       <div className="flex flex-col">
-                        <span>{r.propostaNumero}</span>
+                        <div className="flex items-center gap-1.5 flex-wrap">
+                          <span>{r.propostaNumero}</span>
+                          {r.origem === 'Endosso' && (
+                            <Badge
+                              variant="outline"
+                              className="text-[10px] bg-blue-50 text-blue-700 border-blue-200"
+                            >
+                              Endosso
+                            </Badge>
+                          )}
+                        </div>
                         {r.apoliceNumero && r.apoliceNumero !== r.propostaNumero && (
                           <span className="text-[10px] text-slate-400 font-normal">
                             Apólice: {r.apoliceNumero}

@@ -27,6 +27,7 @@ export interface ConciliacaoReportData {
     comissaoRecebida: number
     statusComissao: 'Recebida' | 'Pendente'
     dataRecebimento?: string
+    isEndosso?: boolean
   }[]
 }
 
@@ -67,18 +68,26 @@ export function generateConciliacaoPDF(data: ConciliacaoReportData) {
   const tableRows =
     data.policies && data.policies.length > 0
       ? data.policies
-          .map(
-            (p) => `<tr>
+          .map((p) => {
+            const prefixo =
+              p.isEndosso || p.numeroApolice?.startsWith('[Endosso] ')
+                ? p.numeroApolice?.startsWith('[Endosso] ')
+                  ? ''
+                  : '[Endosso] '
+                : ''
+            const numExibicao = `${prefixo}${p.numeroApolice || '-'}`
+            return `<tr>
         <td style="font-weight:600;color:#0f172a">${p.clienteNome}</td>
         <td>${p.seguradoraNome}</td>
+        <td>${numExibicao}</td>
         <td>${p.parceiroNome || '-'}</td>
         <td style="text-align:right">R$ ${fmt(p.comissaoPrevista)}</td>
         <td style="text-align:right">R$ ${fmt(p.comissaoRecebida)}</td>
         <td style="text-align:center"><span class="badge ${p.statusComissao === 'Recebida' ? 'paid' : 'pending'}">${p.statusComissao}</span></td>
-      </tr>`,
-          )
+      </tr>`
+          })
           .join('')
-      : `<tr><td colspan="6" style="text-align:center;padding:12px;color:#94a3b8">Nenhuma apólice cadastrada neste mês</td></tr>`
+      : `<tr><td colspan="7" style="text-align:center;padding:12px;color:#94a3b8">Nenhuma apólice cadastrada neste mês</td></tr>`
 
   const html = `<!DOCTYPE html><html><head><title>Relatório de Conciliação Mensal - ${mesNome}/${data.ano}</title>
 <style>
@@ -216,6 +225,7 @@ table.data-table tr:nth-child(even){background:#f8fafc}
       <tr>
         <th>Cliente</th>
         <th>Seguradora</th>
+        <th>Proposta / Apólice</th>
         <th>Parceiro</th>
         <th style="text-align:right">Comissão Prevista</th>
         <th style="text-align:right">Comissão Recebida</th>

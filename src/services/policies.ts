@@ -1,5 +1,6 @@
 import pb from '@/lib/pocketbase/client'
-import { Policy, ComissaoPrevista } from '@/types'
+import { Policy, ComissaoPrevista, Endorsement } from '@/types'
+import { getVeiculoVigente } from '@/services/endorsements'
 
 import { formatDateForInput, todayLocalDate, toLocalDate } from '@/lib/utils'
 
@@ -534,13 +535,26 @@ export const deletePolicyWithRelations = async (id: string) => {
   await pb.collection('policies').delete(id)
 }
 
-export function prepareRenewalData(policy: Policy): Partial<Policy> {
+export function prepareRenewalData(policy: Policy, endorsements?: Endorsement[]): Partial<Policy> {
   const data: any = { ...policy }
   delete data.id
   delete data.expand
   delete data.created
   delete data.updated
   delete data.policy_code
+
+  // Veículo vigente: se houver endossos, pega do mais recente com dados de veículo
+  const veiculo = getVeiculoVigente(policy, endorsements || [])
+  data.placa = veiculo.placa || ''
+  data.chassi = veiculo.chassi || ''
+  data.modelo_veiculo = veiculo.modelo_veiculo || ''
+
+  // Identificação da anterior para a nota de histórico
+  const numAnterior = policy.policy_number || policy.numero_proposta || policy.id
+  const notaRenovacao = `Renovação da apólice anterior nº ${numAnterior}.`
+  const previousNotes = (policy.notes || '').trim()
+  const combinedNotes = previousNotes ? `${notaRenovacao}\n\n${previousNotes}` : notaRenovacao
+
   return {
     ...data,
     numero_proposta: '',
@@ -556,6 +570,7 @@ export function prepareRenewalData(policy: Policy): Partial<Policy> {
     pago_parceiro: false,
     data_pagamento_parceiro: null,
     previous_policy: policy.id,
+    notes: combinedNotes,
   }
 }
 

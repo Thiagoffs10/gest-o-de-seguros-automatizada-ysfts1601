@@ -55,6 +55,7 @@ interface ConciliacaoDetailModalProps {
   onMarkCommissionReceived: (policyId: string) => Promise<void>
   onMarkRepassePaid?: (policyId: string) => Promise<void>
   onMarkCustoPaid?: (custoId: string) => Promise<void>
+  endorsementPolicyIds?: Set<string>
 }
 
 const fmt = (v: number) =>
@@ -72,6 +73,7 @@ export function ConciliacaoDetailModal({
   onMarkCommissionReceived,
   onMarkRepassePaid,
   onMarkCustoPaid,
+  endorsementPolicyIds,
 }: ConciliacaoDetailModalProps) {
   const [search, setSearch] = useState('')
   const [seguradoraFilter, setSeguradoraFilter] = useState('ALL')
@@ -328,6 +330,7 @@ export function ConciliacaoDetailModal({
     const daysPending = computeDaysPending(p.start_date)
     const isCommissionPending = !p.comissao_recebida
     const isRepassePending = p.tipo_de_venda === 'Parceiro' && !p.pago_parceiro
+    const isEndosso = Boolean(endorsementPolicyIds?.has(p.id))
 
     return (
       <div
@@ -345,6 +348,14 @@ export function ConciliacaoDetailModal({
             <span className="text-xs px-2 py-0.5 rounded bg-slate-100 text-slate-700 font-mono">
               Apólice {p.policy_number || '-'}
             </span>
+            {isEndosso && (
+              <Badge
+                variant="outline"
+                className="text-[10px] bg-blue-50 text-blue-700 border-blue-200"
+              >
+                Endosso
+              </Badge>
+            )}
             {p.tipo_de_seguro && (
               <span className="text-xs px-2 py-0.5 rounded bg-blue-50 text-blue-700">
                 {p.tipo_de_seguro}
