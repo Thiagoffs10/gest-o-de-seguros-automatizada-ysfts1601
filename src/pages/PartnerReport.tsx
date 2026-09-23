@@ -26,6 +26,7 @@ import {
   updateParceiroDebito,
   deleteParceiroDebito,
   executarFechamentoParceiro,
+  normalizeDateForPocketBase,
 } from '@/services/parceiro-pagamentos'
 import { Policy, Parceiro, Client, ParceiroDebitoItem, ParceiroPagamento } from '@/types'
 import { Button } from '@/components/ui/button'
@@ -826,11 +827,17 @@ export default function PartnerReport() {
       // Garante atomicidade: se falhar, nada é gravado.
       // Se débito > repasse disponível, abate somente o disponível e mantém o saldo restante pendente.
       // Repasse R$ 0,00 continua zero e nunca é recalculado.
+      const canonicalDataPagamento = normalizeDateForPocketBase(
+        dataPagamentoFinal || todayLocalDate(),
+      )
       const res = await executarFechamentoParceiro({
         parceiro_id: targetPartnerId,
-        data_pagamento: dataPagamentoFinal || todayLocalDate(),
+        data_pagamento: canonicalDataPagamento,
         observacoes: observacaoPagamento.trim(),
-        debitos: debitosToClose,
+        debitos: debitosToClose.map((d) => ({
+          ...d,
+          data: normalizeDateForPocketBase(d.data || canonicalDataPagamento),
+        })),
         taxa_pix_manual: taxaPixManual,
         policy_ids: policyIdsToPay,
       })

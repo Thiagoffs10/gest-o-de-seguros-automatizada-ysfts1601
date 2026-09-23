@@ -13,9 +13,30 @@ routerAdd(
       )
     }
 
+    // Helper inline para normalizar datas para o formato canônico do PocketBase: 'YYYY-MM-DD 00:00:00.000Z'
+    var normalizeDate = function (val) {
+      if (!val) {
+        var now = new Date()
+        var yNow = now.getFullYear()
+        var mNow = String(now.getMonth() + 1).padStart(2, '0')
+        var dNow = String(now.getDate()).padStart(2, '0')
+        return yNow + '-' + mNow + '-' + dNow + ' 00:00:00.000Z'
+      }
+      var str = String(val).trim()
+      var matchIso = str.match(/^(\d{4})-(\d{2})-(\d{2})/)
+      if (matchIso) {
+        return matchIso[1] + '-' + matchIso[2] + '-' + matchIso[3] + ' 00:00:00.000Z'
+      }
+      var matchBr = str.match(/^(\d{2})\/(\d{2})\/(\d{4})/)
+      if (matchBr) {
+        return matchBr[3] + '-' + matchBr[2] + '-' + matchBr[1] + ' 00:00:00.000Z'
+      }
+      return str
+    }
+
     var body = e.requestInfo().body || {}
     var parceiroId = body.parceiro_id || body.parceiro
-    var dataPagamento = body.data_pagamento
+    var rawDataPagamento = body.data_pagamento
     var observacoes = body.observacoes || ''
     var debitoInputs = body.debitos || []
     var taxaPixManual = body.taxa_pix_manual
@@ -23,9 +44,11 @@ routerAdd(
     if (!parceiroId) {
       return e.badRequestError('Parceiro não informado.')
     }
-    if (!dataPagamento) {
+    if (!rawDataPagamento) {
       return e.badRequestError('Data de pagamento não informada.')
     }
+
+    var dataPagamento = normalizeDate(rawDataPagamento)
 
     var parceiro
     try {
@@ -87,28 +110,13 @@ routerAdd(
         // "Se o débito do parceiro for maior que o repasse disponível, abata somente o valor disponível e mantenha o saldo restante da dívida pendente."
         var repasseDisponivel = totalComissoes
         var totalDebitosAbatidos = 0
-        var debitosProcessadosDetalhes = []
-
-        // 2.1 Criar registro de pagamento primeiro para vincular
-        var pagamentosCol = txApp.findCollectionByNameOrId('parceiro_pagamentos')
-        var pagRecord = new Record(pagamentosCol)
-        pagRecord.set('parceiro', parceiroId)
-        pagRecord.set('data_pagamento', dataPagamento)
-        pagRecord.set('total_comissoes', totalComissoes)
-        pagRecord.set('policies_ids', JSON.stringify(paidPolicyIds))
-        pagRecord.set('observacoes', observacoes)
-        pagRecord.set('usuario_id', auth.id)
-        pagRecord.set('usuario_nome', auth.getString('name') || auth.getString('email') || '')
-
-        // Salvar provisoriamente para obter o ID no SQLite dentro da tx
-        txApp.save(pagRecord)
-
-        var debitosCol = txApp.findCollectionByNameOrId('parceiro_debitos')
+        var debitosPlan = []
 
         for (var dIdx = 0; dIdx < debitoInputs.length; dIdx++) {
           var dInput = debitoInputs[dIdx]
           var originalVal = Number(dInput.valor) || 0
           var desc = dInput.descricao || 'Débito'
+          var debDate = normalizeDate(dInput.data || rawDataPagamento)
           if (originalVal <= 0) continue
 
           var existingDebito = null
@@ -124,15 +132,14 @@ routerAdd(
 
           if (repasseDisponivel <= 0) {
             // Nenhum repasse sobrou para abater este débito
-            // Mantém pendente integralmente
+            // Se já existe no banco, continua pendente como está. Se não existe, planejar inserção pendente.
             if (!existingDebito) {
-              var newPending = new Record(debitosCol)
-              newPending.set('parceiro', parceiroId)
-              newPending.set('descricao', desc)
-              newPending.set('valor', originalVal)
-              newPending.set('data', dInput.data || dataPagamento)
-              newPending.set('status', 'Pendente')
-              txApp.save(newPending)
+              debitosPlan.push({
+                type: 'new_pending',
+                descricao: desc,
+                valor: originalVal,
+                data: debDate,
+              })
             }
             continue
           }
@@ -143,28 +150,12 @@ routerAdd(
             repasseDisponivel = Math.round((repasseDisponivel - valorAbatido) * 100) / 100
             totalDebitosAbatidos = Math.round((totalDebitosAbatidos + valorAbatido) * 100) / 100
 
-            if (existingDebito) {
-              existingDebito.set('status', 'Pago')
-              existingDebito.set('pagamento', pagRecord.id)
-              existingDebito.set('descricao', desc)
-              existingDebito.set('valor', valorAbatido)
-              txApp.save(existingDebito)
-            } else {
-              var newPago = new Record(debitosCol)
-              newPago.set('parceiro', parceiroId)
-              newPago.set('descricao', desc)
-              newPago.set('valor', valorAbatido)
-              newPago.set('data', dInput.data || dataPagamento)
-              newPago.set('status', 'Pago')
-              newPago.set('pagamento', pagRecord.id)
-              txApp.save(newPago)
-            }
-
-            debitosProcessadosDetalhes.push({
+            debitosPlan.push({
+              type: 'paid_full',
+              existing: existingDebito,
               descricao: desc,
               valor: valorAbatido,
-              data: dInput.data || dataPagamento,
-              status: 'Pago',
+              data: debDate,
             })
           } else {
             // Débito é maior que o repasse disponível:
@@ -176,39 +167,13 @@ routerAdd(
             totalDebitosAbatidos =
               Math.round((totalDebitosAbatidos + valorAbatidoParcial) * 100) / 100
 
-            if (existingDebito) {
-              // Ajusta o débito original para o valor abatido e marca como Pago vinculado ao pagamento
-              existingDebito.set('status', 'Pago')
-              existingDebito.set('pagamento', pagRecord.id)
-              existingDebito.set('descricao', desc + ' [Abatimento parcial]')
-              existingDebito.set('valor', valorAbatidoParcial)
-              txApp.save(existingDebito)
-            } else {
-              var newPagoParcial = new Record(debitosCol)
-              newPagoParcial.set('parceiro', parceiroId)
-              newPagoParcial.set('descricao', desc + ' [Abatimento parcial]')
-              newPagoParcial.set('valor', valorAbatidoParcial)
-              newPagoParcial.set('data', dInput.data || dataPagamento)
-              newPagoParcial.set('status', 'Pago')
-              newPagoParcial.set('pagamento', pagRecord.id)
-              txApp.save(newPagoParcial)
-            }
-
-            // Cria o registro do saldo remanescente que continua PENDENTE
-            var saldoRemanescenteRecord = new Record(debitosCol)
-            saldoRemanescenteRecord.set('parceiro', parceiroId)
-            saldoRemanescenteRecord.set('descricao', desc + ' [Saldo remanescente]')
-            saldoRemanescenteRecord.set('valor', saldoRestante)
-            saldoRemanescenteRecord.set('data', dInput.data || dataPagamento)
-            saldoRemanescenteRecord.set('status', 'Pendente')
-            txApp.save(saldoRemanescenteRecord)
-
-            debitosProcessadosDetalhes.push({
-              descricao: desc + ' [Abatimento parcial]',
-              valor: valorAbatidoParcial,
-              saldo_restante_pendente: saldoRestante,
-              data: dInput.data || dataPagamento,
-              status: 'Pago Parcial',
+            debitosPlan.push({
+              type: 'paid_partial',
+              existing: existingDebito,
+              descricao: desc,
+              valorAbatido: valorAbatidoParcial,
+              saldoRestante: saldoRestante,
+              data: debDate,
             })
           }
         }
@@ -228,14 +193,113 @@ routerAdd(
 
         var valorLiquido = Math.max(0, Math.round((baseTransferencia - taxaPixFinal) * 100) / 100)
 
-        // 4. Atualizar registro do parceiro_pagamento com os números consolidados finais
+        // Detalhes dos débitos para salvar no registro de pagamento
+        var debitosProcessadosDetalhes = []
+        for (var pIdx = 0; pIdx < debitosPlan.length; pIdx++) {
+          var item = debitosPlan[pIdx]
+          if (item.type === 'paid_full') {
+            debitosProcessadosDetalhes.push({
+              descricao: item.descricao,
+              valor: item.valor,
+              data: item.data,
+              status: 'Pago',
+            })
+          } else if (item.type === 'paid_partial') {
+            debitosProcessadosDetalhes.push({
+              descricao: item.descricao + ' [Abatimento parcial]',
+              valor: item.valorAbatido,
+              saldo_restante_pendente: item.saldoRestante,
+              data: item.data,
+              status: 'Pago Parcial',
+            })
+          }
+        }
+
+        // 4. Salvar o registro de parceiro_pagamentos UMA ÚNICA VEZ com todos os totais consolidados
+        // Geramos um ID explicitamente (ou setamos os campos e salvamos uma única vez)
+        var pagamentosCol = txApp.findCollectionByNameOrId('parceiro_pagamentos')
+        var pagRecord = new Record(pagamentosCol)
+        var generatedPagamentoId = $security.randomString(15)
+        pagRecord.set('id', generatedPagamentoId)
+        pagRecord.set('parceiro', parceiroId)
+        pagRecord.set('data_pagamento', dataPagamento)
+        pagRecord.set('total_comissoes', totalComissoes)
         pagRecord.set('total_debitos', totalDebitosAbatidos)
         pagRecord.set('taxa_pix', taxaPixFinal)
         pagRecord.set('valor_liquido', valorLiquido)
+        pagRecord.set('policies_ids', JSON.stringify(paidPolicyIds))
         pagRecord.set('detalhes_debitos', JSON.stringify(debitosProcessadosDetalhes))
+        pagRecord.set('observacoes', observacoes)
+        pagRecord.set('usuario_id', auth.id)
+        pagRecord.set('usuario_nome', auth.getString('name') || auth.getString('email') || '')
+
         txApp.save(pagRecord)
 
-        // 5. Atualizar todas as apólices para pago_parceiro = true e gravar a data
+        // Confirmar o ID salvo
+        var savedPagamentoId = pagRecord.id || generatedPagamentoId
+
+        // 5. Agora executar as mutações dos débitos vinculando savedPagamentoId de forma confiável
+        var debitosCol = txApp.findCollectionByNameOrId('parceiro_debitos')
+        for (var execIdx = 0; execIdx < debitosPlan.length; execIdx++) {
+          var planItem = debitosPlan[execIdx]
+          if (planItem.type === 'paid_full') {
+            if (planItem.existing) {
+              planItem.existing.set('status', 'Pago')
+              planItem.existing.set('pagamento', savedPagamentoId)
+              planItem.existing.set('descricao', planItem.descricao)
+              planItem.existing.set('valor', planItem.valor)
+              planItem.existing.set('data', planItem.data)
+              txApp.save(planItem.existing)
+            } else {
+              var newPago = new Record(debitosCol)
+              newPago.set('parceiro', parceiroId)
+              newPago.set('descricao', planItem.descricao)
+              newPago.set('valor', planItem.valor)
+              newPago.set('data', planItem.data)
+              newPago.set('status', 'Pago')
+              newPago.set('pagamento', savedPagamentoId)
+              txApp.save(newPago)
+            }
+          } else if (planItem.type === 'paid_partial') {
+            if (planItem.existing) {
+              // Ajusta o débito original para o valor abatido e marca como Pago vinculado ao pagamento
+              planItem.existing.set('status', 'Pago')
+              planItem.existing.set('pagamento', savedPagamentoId)
+              planItem.existing.set('descricao', planItem.descricao + ' [Abatimento parcial]')
+              planItem.existing.set('valor', planItem.valorAbatido)
+              planItem.existing.set('data', planItem.data)
+              txApp.save(planItem.existing)
+            } else {
+              var newPagoParcial = new Record(debitosCol)
+              newPagoParcial.set('parceiro', parceiroId)
+              newPagoParcial.set('descricao', planItem.descricao + ' [Abatimento parcial]')
+              newPagoParcial.set('valor', planItem.valorAbatido)
+              newPagoParcial.set('data', planItem.data)
+              newPagoParcial.set('status', 'Pago')
+              newPagoParcial.set('pagamento', savedPagamentoId)
+              txApp.save(newPagoParcial)
+            }
+
+            // Cria o registro do saldo remanescente que continua PENDENTE (sem vínculo a pagamento)
+            var saldoRemanescenteRecord = new Record(debitosCol)
+            saldoRemanescenteRecord.set('parceiro', parceiroId)
+            saldoRemanescenteRecord.set('descricao', planItem.descricao + ' [Saldo remanescente]')
+            saldoRemanescenteRecord.set('valor', planItem.saldoRestante)
+            saldoRemanescenteRecord.set('data', planItem.data)
+            saldoRemanescenteRecord.set('status', 'Pendente')
+            txApp.save(saldoRemanescenteRecord)
+          } else if (planItem.type === 'new_pending') {
+            var newPending = new Record(debitosCol)
+            newPending.set('parceiro', parceiroId)
+            newPending.set('descricao', planItem.descricao)
+            newPending.set('valor', planItem.valor)
+            newPending.set('data', planItem.data)
+            newPending.set('status', 'Pendente')
+            txApp.save(newPending)
+          }
+        }
+
+        // 6. Atualizar todas as apólices para pago_parceiro = true e gravar a data canônica
         // NUNCA alterar valor_repasse = 0.00
         for (var pI = 0; pI < policies.length; pI++) {
           var polToUpdate = policies[pI]
@@ -247,7 +311,7 @@ routerAdd(
 
         result = {
           success: true,
-          pagamento_id: pagRecord.id,
+          pagamento_id: savedPagamentoId,
           parceiro_id: parceiroId,
           data_pagamento: dataPagamento,
           total_comissoes: totalComissoes,
@@ -261,9 +325,11 @@ routerAdd(
       })
     } catch (err) {
       $app.logger().error('Erro na transação de fechamento de parceiro', 'error', String(err))
+      var errMsg = String(err.message || err)
       return e.json(400, {
         success: false,
-        error: String(err.message || err),
+        message: errMsg,
+        error: errMsg,
       })
     }
 
