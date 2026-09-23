@@ -64,6 +64,7 @@ import { maskDocument, formatClientDocument } from '@/lib/document-validators'
 import { formatDateDisplay, todayLocalDate, extractDateOnly } from '@/lib/utils'
 import { useToast } from '@/hooks/use-toast'
 import { useAuth } from '@/hooks/use-auth'
+import { getErrorMessage } from '@/lib/pocketbase/errors'
 
 const fmt = (v: number) =>
   (v || 0).toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })
@@ -871,7 +872,7 @@ export default function PartnerReport() {
     } catch (err: any) {
       toast({
         title: 'Erro ao salvar pagamento',
-        description: err.message || 'Tente novamente.',
+        description: getErrorMessage(err),
         variant: 'destructive',
       })
     } finally {

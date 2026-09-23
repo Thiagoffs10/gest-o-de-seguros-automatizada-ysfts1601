@@ -41,14 +41,10 @@ routerAdd(
         // 1. Buscar apólices com repasse pendente para este parceiro
         // Regra de segurança: apenas apólices estritamente PENDENTES (pago_parceiro != true)
         // Regra de segurança: se valor_repasse for 0.00 explícito, não recalcular!
-        var policies = txApp.findRecordsByFilter(
-          'policies',
-          'parceiro = {:parceiroId} && (pago_parceiro = false || pago_parceiro = null)',
-          '-start_date',
-          1000,
-          0,
-          { parceiroId: parceiroId },
-        )
+        var safeParceiroId = String(parceiroId).replace(/["\\]/g, '')
+        var filterStr =
+          'parceiro = "' + safeParceiroId + '" && (pago_parceiro = false || pago_parceiro = null)'
+        var policies = txApp.findRecordsByFilter('policies', filterStr, '-start_date', 1000, 0)
 
         // Se houver filtro específico de apólices no payload, respeitar APENAS as que estão efetivamente pendentes
         var policyIdsFilter = body.policy_ids || []
