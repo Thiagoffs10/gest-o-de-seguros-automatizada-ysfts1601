@@ -389,7 +389,11 @@ export default function PolicyDetail() {
 
   const fmtMoney = (v: number) => v?.toLocaleString('pt-BR', { minimumFractionDigits: 2 }) || '0,00'
   const initialData =
-    dialogMode === 'edit' ? policy : dialogMode === 'renew' ? prepareRenewalData(policy) : undefined
+    dialogMode === 'edit'
+      ? policy
+      : dialogMode === 'renew'
+        ? prepareRenewalData(policy, endorsements)
+        : undefined
 
   // Total de Impostos/Descontos realizados
   const impostosRealizados =

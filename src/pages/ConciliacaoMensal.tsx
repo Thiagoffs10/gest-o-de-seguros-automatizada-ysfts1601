@@ -397,25 +397,24 @@ export default function ConciliacaoMensal() {
         Boolean(p.data_recebimento_comissao) &&
         isDateInPeriod(period, p.data_recebimento_comissao)
       const belongsToPeriodProduction = isDateInPeriod(period, p.start_date)
+      const isEndosso = endorsementPolicyIds.has(p.id)
+      const baseNum = p.policy_number || p.numero_proposta || '-'
+      const prefixo = isEndosso ? '[Endosso] ' : ''
 
       return {
-        const isEndosso = endorsementPolicyIds.has(p.id)
-        const baseNum = p.policy_number || p.numero_proposta || '-'
-        const prefixo = isEndosso ? '[Endosso] ' : ''
-        return {
-          clienteNome: p.expand?.client?.name || 'Cliente não informado',
-          seguradoraNome: p.expand?.seguradora?.nome || p.insurance_company || '-',
-          parceiroNome: p.expand?.parceiro?.nome,
-          tipoSeguro: p.tipo_de_seguro || p.coverage_type || '-',
-          numeroApolice: `${prefixo}${baseNum}`,
-          valorLiquido: p.valor_liquido || p.premium_amount || 0,
-          comissaoPrevista: belongsToPeriodProduction ? net : 0,
-          comissaoRecebida: receivedInPeriod ? net : 0,
-          statusComissao: (receivedInPeriod ? 'Recebida' : 'Pendente') as 'Recebida' | 'Pendente',
-          dataRecebimento: p.data_recebimento_comissao,
-          isEndosso,
-        }
-      })
+        clienteNome: p.expand?.client?.name || 'Cliente não informado',
+        seguradoraNome: p.expand?.seguradora?.nome || p.insurance_company || '-',
+        parceiroNome: p.expand?.parceiro?.nome,
+        tipoSeguro: p.tipo_de_seguro || p.coverage_type || '-',
+        numeroApolice: `${prefixo}${baseNum}`,
+        valorLiquido: p.valor_liquido || p.premium_amount || 0,
+        comissaoPrevista: belongsToPeriodProduction ? net : 0,
+        comissaoRecebida: receivedInPeriod ? net : 0,
+        statusComissao: (receivedInPeriod ? 'Recebida' : 'Pendente') as 'Recebida' | 'Pendente',
+        dataRecebimento: p.data_recebimento_comissao,
+        isEndosso,
+      }
+    })
 
     generateConciliacaoPDF({
       mes,

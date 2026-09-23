@@ -11,6 +11,7 @@ import {
   countActivePolicies,
   cancelPolicy,
 } from '@/services/policies'
+import { getEndorsementsByPolicy } from '@/services/endorsements'
 import { getClients } from '@/services/clients'
 import { getSeguradoras } from '@/services/seguradoras'
 import { getParceiros } from '@/services/parceiros'
@@ -60,6 +61,7 @@ export default function Policies() {
   const [loading, setLoading] = useState(true)
   const [dialogMode, setDialogMode] = useState<DialogMode>(null)
   const [selectedPolicy, setSelectedPolicy] = useState<Policy | null>(null)
+  const [selectedEndorsements, setSelectedEndorsements] = useState<any[]>([])
   const [nameSearch, setNameSearch] = useState('')
 
   // Debounce de 300ms nos campos de busca de texto
@@ -191,6 +193,7 @@ export default function Policies() {
       }
       setDialogMode(null)
       setSelectedPolicy(null)
+      setSelectedEndorsements([])
       setFieldErrors({})
       loadData()
     } catch (err) {
@@ -206,9 +209,15 @@ export default function Policies() {
     setDialogMode('edit')
   }
 
-  const handleRenew = (policy: Policy) => {
+  const handleRenew = async (policy: Policy) => {
     setSelectedPolicy(policy)
     setFieldErrors({})
+    try {
+      const ends = await getEndorsementsByPolicy(policy.id)
+      setSelectedEndorsements(ends)
+    } catch {
+      setSelectedEndorsements([])
+    }
     setDialogMode('renew')
   }
 
@@ -266,6 +275,7 @@ export default function Policies() {
   const closeDialog = () => {
     setDialogMode(null)
     setSelectedPolicy(null)
+    setSelectedEndorsements([])
     setFieldErrors({})
   }
 
@@ -279,7 +289,7 @@ export default function Policies() {
     dialogMode === 'edit' && selectedPolicy
       ? selectedPolicy
       : dialogMode === 'renew' && selectedPolicy
-        ? prepareRenewalData(selectedPolicy)
+        ? prepareRenewalData(selectedPolicy, selectedEndorsements)
         : undefined
 
   const dialogTitle =

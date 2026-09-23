@@ -5,6 +5,7 @@ import {
   createEndorsement,
   deleteEndorsement,
 } from './endorsements'
+import { prepareRenewalData } from '@/services/policies'
 import { Policy, Endorsement, ComissaoPrevista, ComissaoRecebimento } from '@/types'
 import pb from '@/lib/pocketbase/client'
 
@@ -366,5 +367,47 @@ describe('Endossos - Especificação e Integridade Financeira', () => {
     const veiculoAposEnd2 = getVeiculoVigente(samplePolicy, [end1, end2])
     expect(veiculoAposEnd2.placa).toBe('GHI9012')
     expect(veiculoAposEnd2.modelo_veiculo).toBe('Jeep Compass Limited')
+  })
+
+  // TESTE H: Renovação de apólice pré-preenche com o veículo vigente e limpa dados financeiros
+  it('H) Cenário Renovação: prepareRenewalData herda veículo do último endosso e zera campos operacionais', () => {
+    const end1: Endorsement = {
+      id: 'end_subst',
+      policy: samplePolicy.id,
+      tipo: 'Substituição de veículo',
+      data_endosso: '2026-06-15',
+      placa: 'REN9999',
+      chassi: '9BWCHASSI9999',
+      modelo_veiculo: 'VW T-Cross Highline',
+      created: '',
+      updated: '',
+    }
+
+    // 1. Com endossos de substituição de veículo
+    const renewalWithEndorsement = prepareRenewalData(samplePolicy, [end1])
+    expect(renewalWithEndorsement.placa).toBe('REN9999')
+    expect(renewalWithEndorsement.chassi).toBe('9BWCHASSI9999')
+    expect(renewalWithEndorsement.modelo_veiculo).toBe('VW T-Cross Highline')
+    expect(renewalWithEndorsement.status).toBe('Ativa')
+    expect(renewalWithEndorsement.policy_number).toBe('')
+    expect(renewalWithEndorsement.numero_proposta).toBe('')
+    expect(renewalWithEndorsement.comissao_recebida).toBe(false)
+    expect(renewalWithEndorsement.data_recebimento_comissao).toBeNull()
+    expect(renewalWithEndorsement.pago_parceiro).toBe(false)
+    expect(renewalWithEndorsement.previous_policy).toBe(samplePolicy.id)
+    expect(renewalWithEndorsement.notes).toContain(
+      `Renovação da apólice anterior nº ${samplePolicy.policy_number}.`,
+    )
+    // Dados cadastrais base mantidos
+    expect(renewalWithEndorsement.client).toBe(samplePolicy.client)
+    expect(renewalWithEndorsement.seguradora).toBe(samplePolicy.seguradora)
+    expect(renewalWithEndorsement.tipo_de_seguro).toBe(samplePolicy.tipo_de_seguro)
+
+    // 2. Sem endossos: herda veículo original da apólice
+    const renewalWithoutEndorsement = prepareRenewalData(samplePolicy, [])
+    expect(renewalWithoutEndorsement.placa).toBe('ABC1234')
+    expect(renewalWithoutEndorsement.chassi).toBe('9BWZZZ377VT004253')
+    expect(renewalWithoutEndorsement.modelo_veiculo).toBe('Honda Civic LX')
+    expect(renewalWithoutEndorsement.policy_number).toBe('')
   })
 })
