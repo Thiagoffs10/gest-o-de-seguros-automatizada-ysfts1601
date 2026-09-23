@@ -13,9 +13,15 @@ import {
   Building2,
   ChevronRight,
   ArrowLeft,
+  AlertCircle,
 } from 'lucide-react'
 import { getPolicies, updatePolicyFinancial } from '@/services/policies'
 import { getParceiros } from '@/services/parceiros'
+import {
+  getParceiroDebitosPendentes,
+  executarFechamentoParceiro,
+} from '@/services/parceiro-pagamentos'
+import { ParceiroDebito } from '@/types'
 import { getSeguradoras } from '@/services/seguradoras'
 import { getCustosFixos } from '@/services/custos-fixos'
 import {
@@ -148,6 +154,12 @@ export default function Financial() {
   const [isDeleteRecebimentoOpen, setIsDeleteRecebimentoOpen] = useState(false)
   const [deletingRecebimento, setDeletingRecebimento] = useState<ComissaoRecebimento | null>(null)
   const [deleteLoading, setDeleteLoading] = useState(false)
+
+  // Estados para trava e modal informativo de débitos pendentes na baixa rápida de repasse
+  const [quickPayPolicy, setQuickPayPolicy] = useState<Policy | null>(null)
+  const [quickPayDebitos, setQuickPayDebitos] = useState<ParceiroDebito[]>([])
+  const [isQuickPayModalOpen, setIsQuickPayModalOpen] = useState(false)
+  const [quickPayLoading, setQuickPayLoading] = useState(false)
 
   const navigate = useNavigate()
 
@@ -1237,19 +1249,114 @@ export default function Financial() {
   }
 
   const handleQuickPayRepasse = async (policyId: string) => {
-    if (saving) return
-    setSaving(true)
+    if (saving || quickPayLoading) return
+    const policy = allPolicies.find((p) => p.id === policyId)
+    if (!policy) {
+      toast({ title: 'Apólice não encontrada', variant: 'destructive' })
+      return
+    }
+
+    const partnerId = policy.parceiro || policy.expand?.parceiro?.id
+    if (!partnerId) {
+      // Se não tiver parceiro vinculado, faz a baixa simples padrão
+      setSaving(true)
+      try {
+        await updatePolicyFinancial(policyId, {
+          pago_parceiro: true,
+          data_pagamento_parceiro: todayLocalDate(),
+        })
+        toast({ title: 'Repasse marcado como pago!' })
+        loadData()
+      } catch (err: any) {
+        toast({ title: 'Erro', description: err.message, variant: 'destructive' })
+      } finally {
+        setSaving(false)
+      }
+      return
+    }
+
+    // Buscar débitos/adiantamentos pendentes do parceiro
+    setQuickPayLoading(true)
     try {
-      await updatePolicyFinancial(policyId, {
-        pago_parceiro: true,
-        data_pagamento_parceiro: todayLocalDate(),
+      const debitosPendentes = await getParceiroDebitosPendentes(partnerId)
+      if (debitosPendentes && debitosPendentes.length > 0) {
+        // Exibe modal informativo com a lista de débitos e cálculo antes de confirmar
+        setQuickPayPolicy(policy)
+        setQuickPayDebitos(debitosPendentes)
+        setIsQuickPayModalOpen(true)
+      } else {
+        // Parceiro sem débitos: baixa direta
+        setSaving(true)
+        try {
+          await updatePolicyFinancial(policyId, {
+            pago_parceiro: true,
+            data_pagamento_parceiro: todayLocalDate(),
+          })
+          toast({ title: 'Repasse marcado como pago!' })
+          loadData()
+        } catch (err: any) {
+          toast({ title: 'Erro', description: err.message, variant: 'destructive' })
+        } finally {
+          setSaving(false)
+        }
+      }
+    } catch (err: any) {
+      toast({
+        title: 'Erro ao verificar débitos do parceiro',
+        description: err.message,
+        variant: 'destructive',
       })
-      toast({ title: 'Repasse marcado como pago!' })
+    } finally {
+      setQuickPayLoading(false)
+    }
+  }
+
+  const handleConfirmQuickPayComDebitos = async () => {
+    if (!quickPayPolicy || quickPayLoading) return
+    const partnerId = quickPayPolicy.parceiro || quickPayPolicy.expand?.parceiro?.id
+    if (!partnerId) return
+
+    setQuickPayLoading(true)
+    try {
+      // Utiliza o mesmo fechamento transacional do parceiro (mesma rotina do Relatório do Parceiro)
+      // vinculando os débitos de forma atômica e rastreável ao pagamento
+      const debitosToClose = quickPayDebitos.map((d) => ({
+        id: d.id,
+        descricao: d.descricao,
+        valor: d.valor,
+        data: d.data,
+      }))
+
+      const res = await executarFechamentoParceiro({
+        parceiro_id: partnerId,
+        data_pagamento: todayLocalDate(),
+        observacoes: 'Baixa rápida via Financeiro com compensação de débitos/adiantamentos.',
+        debitos: debitosToClose,
+        taxa_pix_manual: null, // cálculo automático sobre a base líquida
+        policy_ids: [quickPayPolicy.id],
+      })
+
+      if (!res.success) {
+        throw new Error(res.error || 'Falha no fechamento do repasse.')
+      }
+
+      toast({
+        title: 'Repasse baixado com compensação de débitos!',
+        description: `Líquido a pagar: R$ ${fmtMoney(res.valor_liquido)}. Débitos abatidos: R$ ${fmtMoney(res.total_debitos_abatidos)}.`,
+      })
+
+      setIsQuickPayModalOpen(false)
+      setQuickPayPolicy(null)
+      setQuickPayDebitos([])
       loadData()
     } catch (err: any) {
-      toast({ title: 'Erro', description: err.message, variant: 'destructive' })
+      toast({
+        title: 'Erro ao processar baixa com débitos',
+        description: err.message,
+        variant: 'destructive',
+      })
     } finally {
-      setSaving(false)
+      setQuickPayLoading(false)
     }
   }
 
@@ -2097,6 +2204,183 @@ export default function Financial() {
           </div>
         </div>
       </Card>
+
+      {/* Modal Informativo de Débitos Pendentes na Baixa Rápida de Repasse */}
+      <Dialog
+        open={isQuickPayModalOpen}
+        onOpenChange={(open) => {
+          if (!open) {
+            setIsQuickPayModalOpen(false)
+            setQuickPayPolicy(null)
+            setQuickPayDebitos([])
+          }
+        }}
+      >
+        <DialogContent className="sm:max-w-lg">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2 text-amber-700">
+              <AlertCircle className="w-5 h-5 text-amber-600" />
+              <span>Atenção: Débitos / Adiantamentos Pendentes</span>
+            </DialogTitle>
+          </DialogHeader>
+
+          {quickPayPolicy && (
+            <div className="space-y-3 text-xs text-slate-700 py-1">
+              <div className="p-2.5 bg-amber-50 border border-amber-200 rounded text-amber-900 leading-relaxed">
+                Este parceiro possui{' '}
+                <strong>{quickPayDebitos.length} débito(s) / adiantamento(s) pendente(s)</strong>{' '}
+                registrado(s). A baixa deste repasse aplicará a dedução da dívida de forma
+                rastreável e atômica.
+              </div>
+
+              <div>
+                <span className="font-semibold text-slate-800 block mb-1">
+                  Parceiro:{' '}
+                  <span className="font-bold text-blue-700">
+                    {quickPayPolicy.expand?.parceiro?.nome || 'Parceiro'}
+                  </span>
+                </span>
+                <span className="text-slate-500 block">
+                  Proposta / Apólice:{' '}
+                  {quickPayPolicy.numero_proposta || quickPayPolicy.policy_number || '-'} — Cliente:{' '}
+                  {quickPayPolicy.expand?.client?.name || '-'}
+                </span>
+              </div>
+
+              {/* Lista dos Débitos */}
+              <div className="border rounded-md overflow-hidden bg-white">
+                <div className="bg-slate-100 p-2 font-semibold text-slate-700 border-b flex justify-between">
+                  <span>Descrição do Débito / Adiantamento</span>
+                  <span>Valor</span>
+                </div>
+                <div className="max-h-36 overflow-y-auto divide-y divide-slate-100">
+                  {quickPayDebitos.map((deb, idx) => (
+                    <div key={deb.id || idx} className="p-2 flex justify-between items-center">
+                      <div className="truncate pr-2">
+                        <span className="font-medium text-slate-800">{deb.descricao}</span>
+                        {deb.data && (
+                          <span className="text-slate-600 text-[11px] ml-1.5">
+                            ({formatDateDisplay(deb.data)})
+                          </span>
+                        )}
+                      </div>
+                      <span className="font-bold text-red-600 whitespace-nowrap">
+                        - R$ {fmtMoney(deb.valor)}
+                      </span>
+                    </div>
+                  ))}
+                </div>
+              </div>
+
+              {/* Resumo do Cálculo: Comissão - Débitos - Taxa PIX = Líquido */}
+              {(() => {
+                const comissaoRepasse = Number(quickPayPolicy.valor_repasse) || 0
+                const totalDebitos =
+                  Math.round(
+                    quickPayDebitos.reduce((acc, d) => acc + (Number(d.valor) || 0), 0) * 100,
+                  ) / 100
+                const debitoAbatidoEfetivo = Math.min(comissaoRepasse, totalDebitos)
+                const baseAposDeducao = Math.max(
+                  0,
+                  Math.round((comissaoRepasse - totalDebitos) * 100) / 100,
+                )
+                // Taxa PIX: 1% sobre o valor efetivamente transferido (base líquida após dedução), máx R$ 10,00
+                // Se nada a transferir (base 0), taxa PIX é R$ 0,00
+                const taxaPix =
+                  baseAposDeducao > 0
+                    ? Math.round(Math.min(10, (baseAposDeducao * 1) / 100) * 100) / 100
+                    : 0
+                const liquidoFinal = Math.max(
+                  0,
+                  Math.round((baseAposDeducao - taxaPix) * 100) / 100,
+                )
+                const saldoDevedorRemanescente = Math.max(
+                  0,
+                  Math.round((totalDebitos - comissaoRepasse) * 100) / 100,
+                )
+
+                return (
+                  <div className="p-3 bg-slate-50 border rounded space-y-1.5 text-xs">
+                    <div className="flex justify-between">
+                      <span className="text-slate-600">Comissão de Repasse:</span>
+                      <strong className="text-slate-800">R$ {fmtMoney(comissaoRepasse)}</strong>
+                    </div>
+                    <div className="flex justify-between text-red-600">
+                      <span>(-) Débitos a Compensar:</span>
+                      <strong>- R$ {fmtMoney(debitoAbatidoEfetivo)}</strong>
+                    </div>
+                    {taxaPix > 0 && (
+                      <div className="flex justify-between text-red-600">
+                        <span>(-) Taxa PIX (1% s/ líquido após dedução):</span>
+                        <strong>- R$ {fmtMoney(taxaPix)}</strong>
+                      </div>
+                    )}
+                    <div className="flex justify-between font-bold text-sm text-blue-700 border-t pt-1.5">
+                      <span>Valor Líquido a Pagar:</span>
+                      <span>R$ {fmtMoney(liquidoFinal)}</span>
+                    </div>
+
+                    {liquidoFinal === 0 && (
+                      <div className="p-2 bg-blue-50 border border-blue-200 rounded text-blue-800 text-[11px] font-medium mt-1">
+                        {saldoDevedorRemanescente > 0 ? (
+                          <>
+                            <strong>Nada a transferir:</strong> O adiantamento é maior que a
+                            comissão. A comissão de R$ {fmtMoney(comissaoRepasse)} abaterá parte da
+                            dívida. O saldo devedor remanescente de{' '}
+                            <strong>R$ {fmtMoney(saldoDevedorRemanescente)}</strong> permanecerá
+                            pendente.
+                          </>
+                        ) : (
+                          <>
+                            <strong>Nada a transferir:</strong> A comissão quita exatamente o valor
+                            do adiantamento. O débito será marcado como Pago e nenhum valor
+                            adicional precisa ser transferido via PIX.
+                          </>
+                        )}
+                      </div>
+                    )}
+
+                    {saldoDevedorRemanescente > 0 && liquidoFinal > 0 && (
+                      <div className="text-amber-700 text-[11px] font-medium pt-1">
+                        Saldo devedor remanescente do parceiro: R${' '}
+                        {fmtMoney(saldoDevedorRemanescente)}
+                      </div>
+                    )}
+                  </div>
+                )
+              })()}
+
+              <p className="text-[11px] text-slate-500 italic">
+                Ao confirmar, o repasse será baixado e o débito será liquidado/abatido vinculado ao
+                fechamento permanente, de forma idempotente.
+              </p>
+            </div>
+          )}
+
+          <DialogFooter className="pt-2">
+            <Button
+              type="button"
+              variant="outline"
+              onClick={() => {
+                setIsQuickPayModalOpen(false)
+                setQuickPayPolicy(null)
+                setQuickPayDebitos([])
+              }}
+              disabled={quickPayLoading}
+            >
+              Cancelar
+            </Button>
+            <Button
+              type="button"
+              className="bg-emerald-600 hover:bg-emerald-700 text-white"
+              onClick={handleConfirmQuickPayComDebitos}
+              disabled={quickPayLoading}
+            >
+              {quickPayLoading ? 'Processando...' : 'Confirmar Baixa com Débitos'}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
 
       <CommissionEditDialog
         open={!!editPolicy}
