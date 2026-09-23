@@ -337,3 +337,50 @@ export function computeRealProfit(
 ): number {
   return Math.round((commReceived - repassePaid - paidCosts) * 100) / 100
 }
+
+export interface QuickPayLiquidacaoResult {
+  comissaoRepasse: number
+  totalDebitos: number
+  debitoAbatidoEfetivo: number
+  baseAposDeducao: number
+  taxaPix: number
+  liquidoFinal: number
+  saldoDevedorRemanescente: number
+}
+
+/**
+ * Realiza o cálculo de liquidação rápida de repasse com dedução de débitos/adiantamentos.
+ * Regras:
+ * - Se houver débitos, deduz da comissão de repasse.
+ * - Taxa PIX: 1% sobre o líquido a pagar APÓS a dedução, limitado ao teto de R$ 10,00.
+ * - Caso débito >= comissão: líquido = R$ 0,00, taxa PIX = R$ 0,00, sem valores negativos.
+ * - Sem débitos: líquido = comissão, taxa PIX = 1% (teto R$ 10,00).
+ */
+export function computeQuickPayLiquidacao(
+  comissaoRepasse: number,
+  debitos: Array<{ valor: number }>,
+): QuickPayLiquidacaoResult {
+  const repasse = Math.max(0, Math.round((Number(comissaoRepasse) || 0) * 100) / 100)
+  const totalDeb =
+    Math.round(debitos.reduce((acc, d) => acc + (Number(d.valor) || 0), 0) * 100) / 100
+
+  const debitoAbatido = Math.min(repasse, totalDeb)
+  const baseAposDeducao = Math.max(0, Math.round((repasse - totalDeb) * 100) / 100)
+
+  // Taxa PIX: 1% sobre o líquido após dedução, máx R$ 10,00. R$ 0,00 se nada a transferir
+  const taxaPix =
+    baseAposDeducao > 0 ? Math.round(Math.min(10, (baseAposDeducao * 1) / 100) * 100) / 100 : 0
+
+  const liquidoFinal = Math.max(0, Math.round((baseAposDeducao - taxaPix) * 100) / 100)
+  const saldoDevedorRemanescente = Math.max(0, Math.round((totalDeb - repasse) * 100) / 100)
+
+  return {
+    comissaoRepasse: repasse,
+    totalDebitos: totalDeb,
+    debitoAbatidoEfetivo: debitoAbatido,
+    baseAposDeducao,
+    taxaPix,
+    liquidoFinal,
+    saldoDevedorRemanescente,
+  }
+}

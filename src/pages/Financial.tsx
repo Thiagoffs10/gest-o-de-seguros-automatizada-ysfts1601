@@ -94,6 +94,7 @@ import {
   computeExpectedProfit,
   computeRealProfit,
   getPartnerPolicies,
+  computeQuickPayLiquidacao,
 } from '@/lib/financial-calcs'
 import { DevTrackingPanel } from '@/components/DevTrackingPanel'
 import { PortfolioExportButton } from '@/components/PortfolioExportButton'
@@ -2274,30 +2275,17 @@ export default function Financial() {
 
               {/* Resumo do Cálculo: Comissão - Débitos - Taxa PIX = Líquido */}
               {(() => {
-                const comissaoRepasse = Number(quickPayPolicy.valor_repasse) || 0
-                const totalDebitos =
-                  Math.round(
-                    quickPayDebitos.reduce((acc, d) => acc + (Number(d.valor) || 0), 0) * 100,
-                  ) / 100
-                const debitoAbatidoEfetivo = Math.min(comissaoRepasse, totalDebitos)
-                const baseAposDeducao = Math.max(
-                  0,
-                  Math.round((comissaoRepasse - totalDebitos) * 100) / 100,
+                const resCalc = computeQuickPayLiquidacao(
+                  Number(quickPayPolicy.valor_repasse) || 0,
+                  quickPayDebitos,
                 )
-                // Taxa PIX: 1% sobre o valor efetivamente transferido (base líquida após dedução), máx R$ 10,00
-                // Se nada a transferir (base 0), taxa PIX é R$ 0,00
-                const taxaPix =
-                  baseAposDeducao > 0
-                    ? Math.round(Math.min(10, (baseAposDeducao * 1) / 100) * 100) / 100
-                    : 0
-                const liquidoFinal = Math.max(
-                  0,
-                  Math.round((baseAposDeducao - taxaPix) * 100) / 100,
-                )
-                const saldoDevedorRemanescente = Math.max(
-                  0,
-                  Math.round((totalDebitos - comissaoRepasse) * 100) / 100,
-                )
+                const {
+                  comissaoRepasse,
+                  debitoAbatidoEfetivo,
+                  taxaPix,
+                  liquidoFinal,
+                  saldoDevedorRemanescente,
+                } = resCalc
 
                 return (
                   <div className="p-3 bg-slate-50 border rounded space-y-1.5 text-xs">
