@@ -1854,38 +1854,12 @@ export default function Financial() {
                   ) : (
                     paginatedCommPolicies.map((p) => {
                       const hasActiveEndorsement = policiesWithActiveEndorsementInPeriod.has(p.id)
-                      let extraEndorsementPrevisto = 0
-                      let extraEndorsementRecebido = 0
-                      let extraEndorsementSaldo = 0
+                      const policyPrevisoes = allComissoesPrevistasList.filter(
+                        (prev) => prev.policy === p.id && prev.status !== 'Cancelada',
+                      )
 
-                      if (hasActiveEndorsement) {
-                        for (const prev of allComissoesPrevistasList) {
-                          if (
-                            prev.policy !== p.id ||
-                            !prev.endorsement ||
-                            prev.status === 'Cancelada'
-                          )
-                            continue
-                          if (!isCompetenciaInPeriod(period, prev.competencia, prev.data_prevista))
-                            continue
-
-                          const recResult = reconciliacaoMap.get(prev.id)
-                          const vPrev = Number(prev.valor_previsto) || 0
-                          const recBruto = recResult ? recResult.valorRecebidoBruto : 0
-                          const s = recResult
-                            ? recResult.saldo
-                            : Math.max(0, Math.round((vPrev - recBruto) * 100) / 100)
-
-                          extraEndorsementPrevisto =
-                            Math.round((extraEndorsementPrevisto + vPrev) * 100) / 100
-                          extraEndorsementRecebido =
-                            Math.round((extraEndorsementRecebido + recBruto) * 100) / 100
-                          extraEndorsementSaldo =
-                            Math.round((extraEndorsementSaldo + s) * 100) / 100
-                        }
-                      }
-
-                      const basePrevisto =
+                      // Fallback padrão se não houver previsões cadastradas
+                      const fallbackPrevisto =
                         p.commission != null
                           ? Number(p.commission)
                           : Math.round(
@@ -1894,30 +1868,77 @@ export default function Financial() {
                                 100) *
                                 100,
                             ) / 100
-                      const baseRecBrutoTotal =
-                        receivedGrossByPolicy.get(p.id) ?? (p.comissao_recebida ? basePrevisto : 0)
-                      const baseRecLiquidoTotal =
-                        receivedNetByPolicy.get(p.id) ??
-                        (p.comissao_recebida ? Math.max(0, basePrevisto - (p.iss || 0)) : 0)
-                      const baseSaldo = Math.max(
+                      const fallbackPrevistoLiquido = Math.max(
                         0,
-                        Math.round((basePrevisto - baseRecBrutoTotal) * 100) / 100,
+                        Math.round((fallbackPrevisto - Number(p.iss || 0)) * 100) / 100,
                       )
 
-                      const previsto =
-                        Math.round((basePrevisto + extraEndorsementPrevisto) * 100) / 100
-                      const recBrutoTotal =
-                        Math.round((baseRecBrutoTotal + extraEndorsementRecebido) * 100) / 100
-                      const recLiquidoTotal =
-                        Math.round((baseRecLiquidoTotal + extraEndorsementRecebido) * 100) / 100
-                      const saldo = Math.round((baseSaldo + extraEndorsementSaldo) * 100) / 100
+                      // 1. Previsto consolidado da apólice:
+                      // Se houver previsões em comissoes_previstas (status !== 'Cancelada'), previsto = soma(valor_previsto).
+                      // Fallback (sem previsões): max(0, comissão bruta - iss).
+                      let previsto = 0
+                      let saldo = 0
 
+                      if (policyPrevisoes.length > 0) {
+                        for (const prev of policyPrevisoes) {
+                          const vPrev = Number(prev.valor_previsto) || 0
+                          previsto = Math.round((previsto + vPrev) * 100) / 100
+
+                          // 2. Saldo: soma dos saldos reconciliados por previsão
+                          const recRes = reconciliacaoMap.get(prev.id)
+                          const s = recRes
+                            ? recRes.saldo
+                            : Math.max(
+                                0,
+                                Math.round(
+                                  (vPrev - (recRes ? recRes.valorRecebidoBruto : 0)) * 100,
+                                ) / 100,
+                              )
+                          saldo = Math.round((saldo + s) * 100) / 100
+                        }
+                      } else {
+                        previsto = fallbackPrevistoLiquido
+                      }
+
+                      // 3. Já Recebido: conta cada comissao_recebimento UMA única vez
+                      // (receivedGrossByPolicy já agrega todas as baixas da apólice, inclusive de endossos)
+                      const hasRawGross = receivedGrossByPolicy.has(p.id)
+                      const rawRecBruto = receivedGrossByPolicy.get(p.id) || 0
+                      const recBrutoTotal = hasRawGross
+                        ? rawRecBruto
+                        : p.comissao_recebida
+                          ? previsto
+                          : 0
+
+                      const hasRawNet = receivedNetByPolicy.has(p.id)
+                      const rawRecLiquido = receivedNetByPolicy.get(p.id) || 0
+                      const recLiquidoTotal = hasRawNet
+                        ? rawRecLiquido
+                        : p.comissao_recebida
+                          ? previsto
+                          : 0
+
+                      // Fallback do saldo para quando não há previsões cadastradas
+                      if (policyPrevisoes.length === 0) {
+                        saldo = Math.max(0, Math.round((previsto - recBrutoTotal) * 100) / 100)
+                      }
+
+                      // 4. Status:
+                      // quitada = saldo <= 0,009 && (recebido > 0 || comissao_recebida);
+                      // parcial = !quitada && recebido > 0;
+                      // "Acima" somente se quitada && previsto > 0 && recBrutoTotal > previsto + 0.01 (excedente REAL, não por dupla contagem ou dedução de imposto)
                       const quitada =
-                        (p.comissao_recebida &&
-                          (!hasActiveEndorsement || extraEndorsementSaldo <= 0.009)) ||
-                        (previsto > 0 && recBrutoTotal >= previsto - 0.009)
-                      const parcial = !quitada && recBrutoTotal > 0
-                      const acima = previsto > 0 && recBrutoTotal > previsto
+                        saldo <= 0.009 && (recBrutoTotal > 0.009 || Boolean(p.comissao_recebida))
+                      const parcial = !quitada && recBrutoTotal > 0.009
+                      // Se a apólice possui previsão de comissão líquida (valor_previsto = bruto - iss),
+                      // o valor bruto recebido pode ser maior que o previsto líquido exatamente pelo imposto (ex.: ISS 9,90).
+                      // Um excedente real ocorre quando recBrutoTotal supera a comissão bruta esperada (ou previsto + iss + 0.01).
+                      const totalBrutoEsperado = Math.max(
+                        previsto + Number(p.iss || 0),
+                        fallbackPrevisto,
+                      )
+                      const acima =
+                        quitada && previsto > 0 && recBrutoTotal > totalBrutoEsperado + 0.01
                       const policyRecCount = recebimentos.filter((r) => r.policy === p.id).length
 
                       return (
@@ -1989,29 +2010,43 @@ export default function Financial() {
                                   }
                                   title="Registrar recebimento de comissão"
                                   onClick={() => {
-                                    // Se apólice pai já quitada mas com endosso pendente no período, abrir com dados do endosso
-                                    if (
-                                      hasActiveEndorsement &&
-                                      extraEndorsementSaldo > 0.009 &&
-                                      baseSaldo <= 0.009
-                                    ) {
+                                    // Se houver previsão de endosso pendente no período, priorizar preenchimento
+                                    if (hasActiveEndorsement) {
                                       const activeEndorsementPrev = allComissoesPrevistasList.find(
-                                        (prev) =>
-                                          prev.policy === p.id &&
-                                          Boolean(prev.endorsement) &&
-                                          prev.status !== 'Cancelada' &&
-                                          isCompetenciaInPeriod(
-                                            period,
-                                            prev.competencia,
-                                            prev.data_prevista,
-                                          ),
+                                        (prev) => {
+                                          if (
+                                            prev.policy !== p.id ||
+                                            !prev.endorsement ||
+                                            prev.status === 'Cancelada'
+                                          )
+                                            return false
+                                          if (
+                                            !isCompetenciaInPeriod(
+                                              period,
+                                              prev.competencia,
+                                              prev.data_prevista,
+                                            )
+                                          )
+                                            return false
+                                          const recRes = reconciliacaoMap.get(prev.id)
+                                          const s = recRes
+                                            ? recRes.saldo
+                                            : Number(prev.valor_previsto) || 0
+                                          return s > 0.009
+                                        },
                                       )
                                       if (activeEndorsementPrev) {
+                                        const recRes = reconciliacaoMap.get(
+                                          activeEndorsementPrev.id,
+                                        )
+                                        const s = recRes
+                                          ? recRes.saldo
+                                          : Number(activeEndorsementPrev.valor_previsto) || 0
                                         handleOpenRegistrarRecebimento(
                                           p,
                                           activeEndorsementPrev.competencia,
                                           activeEndorsementPrev.id,
-                                          extraEndorsementSaldo,
+                                          s,
                                           activeEndorsementPrev.endorsement,
                                         )
                                         return

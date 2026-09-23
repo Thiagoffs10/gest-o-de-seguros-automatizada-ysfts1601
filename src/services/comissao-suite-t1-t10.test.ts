@@ -555,4 +555,130 @@ describe('Suíte de Testes Obrigatórios T1 a T10 — Validação Financeira', (
           : 'Pendente'
     expect(badgeTopo).toBe('Parcial')
   })
+
+  // -------------------------------------------------------------------------
+  // Caso de não-duplicação (Aba Por Apólice):
+  // Previsões 484,97 + 326,56 (endosso) e recebimentos 494,87 (legado) + 326,56 (endosso)
+  // -> consolidado previsto 811,53, recebido 821,43, saldo 0,00, status "Recebida" (não "Acima")
+  // -------------------------------------------------------------------------
+  it('Caso de não-duplicação na linha consolidada: apólice com previsões 484,97 + 326,56 e recebimentos 494,87 + 326,56 -> previsto 811,53, recebido 821,43, saldo 0,00, status Recebida (não Acima)', () => {
+    const prevApolicePai: ComissaoPrevistaSimples = {
+      id: 'prev_14432373_pai',
+      policy: 'pol_14432373',
+      competencia: '08/2026',
+      data_prevista: '2026-08-22',
+      valor_previsto: 484.97,
+      parcela_numero: 1,
+      status: 'Recebida',
+    }
+    const prevEndosso: ComissaoPrevistaSimples = {
+      id: 'prev_14432373_end',
+      policy: 'pol_14432373',
+      competencia: '09/2026',
+      data_prevista: '2026-09-17',
+      valor_previsto: 326.56,
+      parcela_numero: 1,
+      status: 'Recebida',
+      endorsement: 'end_14432373',
+    }
+
+    const recLegado: ComissaoRecebimento = {
+      id: 'rec_legado',
+      policy: 'pol_14432373',
+      comissao_prevista: 'prev_14432373_pai',
+      data_recebimento: '2026-08-21',
+      valor_bruto: 494.87,
+      valor_liquido: 488.34,
+      origem: 'Legado',
+      created: '2026-08-21',
+      updated: '2026-08-21',
+    }
+
+    const recEndosso: ComissaoRecebimento = {
+      id: 'rec_endosso',
+      policy: 'pol_14432373',
+      comissao_prevista: 'prev_14432373_end',
+      data_recebimento: '2026-09-18',
+      valor_bruto: 326.56,
+      valor_liquido: 326.56,
+      origem: 'Manual',
+      created: '2026-09-18',
+      updated: '2026-09-18',
+    }
+
+    const allPrevisoes = [prevApolicePai, prevEndosso]
+    const allRecebimentos = [recLegado, recEndosso]
+
+    // 1. Reconciliação
+    const reconciliacaoMap = reconciliarRecebimentosComPrevisoes(allPrevisoes, allRecebimentos)
+
+    // 2. Mapas recebidos por apólice (contando cada recebimento exatamente uma vez)
+    const receivedGrossByPolicy = new Map<string, number>()
+    const receivedNetByPolicy = new Map<string, number>()
+    for (const r of allRecebimentos) {
+      const valBruto = Number(r.valor_bruto) || 0
+      const valLiq = r.valor_liquido != null ? Number(r.valor_liquido) : valBruto
+      receivedGrossByPolicy.set(r.policy, (receivedGrossByPolicy.get(r.policy) || 0) + valBruto)
+      receivedNetByPolicy.set(r.policy, (receivedNetByPolicy.get(r.policy) || 0) + valLiq)
+    }
+
+    // 3. Lógica exata da aba "Por Apólice" aplicada para a apólice
+    const p: Policy = {
+      id: 'pol_14432373',
+      numero_proposta: '14432373',
+      policy_number: '14432373',
+      valor_liquido: 2474.34,
+      commission_percent: 20,
+      commission: 494.87,
+      iss: 9.9,
+      comissao_recebida: true,
+    } as Policy
+
+    const policyPrevisoes = allPrevisoes.filter(
+      (prev) => prev.policy === p.id && prev.status !== 'Cancelada',
+    )
+
+    let previsto = 0
+    let saldo = 0
+
+    if (policyPrevisoes.length > 0) {
+      for (const prev of policyPrevisoes) {
+        const vPrev = Number(prev.valor_previsto) || 0
+        previsto = Math.round((previsto + vPrev) * 100) / 100
+
+        const recRes = reconciliacaoMap.get(prev.id)
+        const s = recRes
+          ? recRes.saldo
+          : Math.max(0, Math.round((vPrev - (recRes ? recRes.valorRecebidoBruto : 0)) * 100) / 100)
+        saldo = Math.round((saldo + s) * 100) / 100
+      }
+    }
+
+    const recBrutoTotal = receivedGrossByPolicy.has(p.id)
+      ? receivedGrossByPolicy.get(p.id)!
+      : p.comissao_recebida
+        ? previsto
+        : 0
+
+    const quitada = saldo <= 0.009 && (recBrutoTotal > 0.009 || Boolean(p.comissao_recebida))
+    const parcial = !quitada && recBrutoTotal > 0.009
+    const fallbackPrevisto = Number(p.commission || 0)
+    const totalBrutoEsperado = Math.max(previsto + Number(p.iss || 0), fallbackPrevisto)
+    const acima = quitada && previsto > 0 && recBrutoTotal > totalBrutoEsperado + 0.01
+
+    const statusBadge = quitada
+      ? acima
+        ? 'Recebida (Acima)'
+        : 'Recebida'
+      : parcial
+        ? 'Parcial'
+        : 'Pendente'
+
+    expect(previsto).toBe(811.53) // 484.97 + 326.56
+    expect(Math.round(recBrutoTotal * 100) / 100).toBe(821.43) // 494.87 + 326.56 (sem somar 326.56 2x)
+    expect(saldo).toBe(0.0)
+    expect(quitada).toBe(true)
+    expect(acima).toBe(false) // 821.43 coincide com total bruto esperado (811.53 + 9.90 = 821.43) -> Recebida
+    expect(statusBadge).toBe('Recebida')
+  })
 })

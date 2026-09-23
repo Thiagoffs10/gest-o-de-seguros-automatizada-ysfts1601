@@ -410,4 +410,34 @@ describe('Endossos - Especificação e Integridade Financeira', () => {
     expect(renewalWithoutEndorsement.modelo_veiculo).toBe('Honda Civic LX')
     expect(renewalWithoutEndorsement.policy_number).toBe('')
   })
+
+  // TESTE I: Renovação deriva start_date do end_date da anterior e end_date = +1 ano com clamp de bissexto
+  it('I) Cenário Renovação de datas: start_date = end_date da anterior e end_date = +1 ano com clamp de bissexto', () => {
+    // 1. Caso real 14432373: vigência anterior até 2027-08-22 -> renovação 2027-08-22 a 2028-08-22
+    const policy2027: Policy = {
+      ...samplePolicy,
+      end_date: '2027-08-22',
+    } as Policy
+    const ren2027 = prepareRenewalData(policy2027)
+    expect(ren2027.start_date).toBe('2027-08-22')
+    expect(ren2027.end_date).toBe('2028-08-22')
+
+    // 2. Caso ano bissexto: anterior terminando em 29/02/2028 (ano bissexto) -> próximo ano (2029) não é bissexto -> clamp para 28/02/2029
+    const policyBissexto: Policy = {
+      ...samplePolicy,
+      end_date: '2028-02-29',
+    } as Policy
+    const renBissexto = prepareRenewalData(policyBissexto)
+    expect(renBissexto.start_date).toBe('2028-02-29')
+    expect(renBissexto.end_date).toBe('2029-02-28')
+
+    // 3. Caso end_date vazia/indefinida -> fallback para data atual e data atual + 365d
+    const policySemData: Policy = {
+      ...samplePolicy,
+      end_date: '',
+    } as Policy
+    const renSemData = prepareRenewalData(policySemData)
+    expect(renSemData.start_date).toBeDefined()
+    expect(renSemData.end_date).toBeDefined()
+  })
 })

@@ -3,6 +3,7 @@ import { Policy, ComissaoPrevista, Endorsement } from '@/types'
 import { getVeiculoVigente } from '@/services/endorsements'
 
 import { formatDateForInput, todayLocalDate, toLocalDate } from '@/lib/utils'
+import { extractDatePart } from '@/lib/date-filter'
 
 /**
  * Prepara payload para CRIAÇÃO de uma nova apólice.
@@ -555,12 +556,38 @@ export function prepareRenewalData(policy: Policy, endorsements?: Endorsement[])
   const previousNotes = (policy.notes || '').trim()
   const combinedNotes = previousNotes ? `${notaRenovacao}\n\n${previousNotes}` : notaRenovacao
 
+  // Determinar vigência da renovação:
+  // start_date = end_date da anterior (quando a anterior termina)
+  // end_date = mesmo dia/mês do ano seguinte (+1 ano, com clamp para 29/02 em ano não bissexto)
+  // Se end_date estiver vazia ou inválida, fallback para hoje / hoje+1 ano.
+  let startDate = todayLocalDate()
+  let endDate = toLocalDate(new Date(Date.now() + 365 * 86400000))
+
+  const rawEndDate = extractDatePart(policy.end_date)
+  if (rawEndDate && /^\d{4}-\d{2}-\d{2}$/.test(rawEndDate)) {
+    const parts = rawEndDate.split('-')
+    const y = parseInt(parts[0], 10)
+    const m = parseInt(parts[1], 10)
+    const d = parseInt(parts[2], 10)
+
+    if (!isNaN(y) && !isNaN(m) && !isNaN(d) && m >= 1 && m <= 12 && d >= 1 && d <= 31) {
+      startDate = rawEndDate
+      const targetYear = y + 1
+      const targetMonthIndex = m - 1
+      const daysInTargetMonth = new Date(targetYear, targetMonthIndex + 1, 0).getDate()
+      const clampedDay = Math.min(d, daysInTargetMonth)
+      const mStr = String(m).padStart(2, '0')
+      const dStr = String(clampedDay).padStart(2, '0')
+      endDate = `${targetYear}-${mStr}-${dStr}`
+    }
+  }
+
   return {
     ...data,
     numero_proposta: '',
     policy_number: '',
-    start_date: todayLocalDate(),
-    end_date: toLocalDate(new Date(Date.now() + 365 * 86400000)),
+    start_date: startDate,
+    end_date: endDate,
     renewal_date: undefined,
     status: 'Ativa',
     comissao_recebida: false,
