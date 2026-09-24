@@ -34,7 +34,12 @@ import { useToast } from '@/hooks/use-toast'
 import { useRealtime } from '@/hooks/use-realtime'
 import { usePermissions } from '@/hooks/use-permissions'
 import { useAuth } from '@/hooks/use-auth'
-import { computePeriod, isDateInPeriod, isCompetenciaInPeriod, formatBRDate } from '@/lib/date-filter'
+import {
+  computePeriod,
+  isDateInPeriod,
+  isCompetenciaInPeriod,
+  formatBRDate,
+} from '@/lib/date-filter'
 import { todayLocalDate } from '@/lib/utils'
 import {
   calcNetCommission,
@@ -470,10 +475,10 @@ export default function ConciliacaoMensal() {
       const endorsementPrevVal = endorsementPrevByPolicy.get(p.id) || 0
       const hasEndorsementInPeriod = endorsementPrevVal > 0
 
-      // Regra 2:
-      // se a apólice pertence à produção do período -> prevista = valor líquido da apólice
-      // senão, se tem endosso/previsão de endosso com competência no período -> prevista = valor da previsão do endosso do período
-      // caso contrário 0.
+      // Regra alinhada 100% à tela e ao m.expectedComm:
+      // - Se a apólice pertence à produção do período (start_date no período): comissão líquida (net)
+      // - Se a apólice NÃO pertence à produção do período mas possui endosso ativo com competência no período: endorsementPrevVal
+      // Caso real: apólice pai de mês anterior com endosso vigente no mês -> mostra endorsementPrevVal (ex: R$ 326,56)
       let comissaoPrevista = 0
       if (belongsToPeriodProduction) {
         comissaoPrevista = net
