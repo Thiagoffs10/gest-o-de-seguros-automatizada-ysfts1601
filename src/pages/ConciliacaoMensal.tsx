@@ -17,6 +17,7 @@ import {
   createComissaoRecebimento,
 } from '@/services/comissao-recebimentos'
 import { getAllEndorsements } from '@/services/endorsements'
+import { getAllComissoesPrevistas } from '@/services/modelos-comissao'
 import { getErrorMessage } from '@/lib/pocketbase/errors'
 import { Policy, CustoFixo, Conciliacao, ComissaoRecebimento } from '@/types'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
@@ -33,7 +34,7 @@ import { useToast } from '@/hooks/use-toast'
 import { useRealtime } from '@/hooks/use-realtime'
 import { usePermissions } from '@/hooks/use-permissions'
 import { useAuth } from '@/hooks/use-auth'
-import { computePeriod, isDateInPeriod, formatBRDate } from '@/lib/date-filter'
+import { computePeriod, isDateInPeriod, isCompetenciaInPeriod, formatBRDate } from '@/lib/date-filter'
 import { todayLocalDate } from '@/lib/utils'
 import {
   calcNetCommission,
@@ -77,6 +78,7 @@ export default function ConciliacaoMensal() {
   const [custos, setCustos] = useState<CustoFixo[]>([])
   const [recebimentos, setRecebimentos] = useState<ComissaoRecebimento[]>([])
   const [endorsements, setEndorsements] = useState<any[]>([])
+  const [comissoesPrevistas, setComissoesPrevistas] = useState<any[]>([])
   const [conciliacao, setConciliacao] = useState<Conciliacao | null>(null)
   const [loading, setLoading] = useState(true)
   const [actionLoading, setActionLoading] = useState(false)
@@ -87,18 +89,20 @@ export default function ConciliacaoMensal() {
   const loadData = useCallback(async () => {
     setLoading(true)
     try {
-      const [pols, custosData, conc, recs, endos] = await Promise.all([
+      const [pols, custosData, conc, recs, endos, prevs] = await Promise.all([
         getPolicies(),
         getCustosFixos(),
         getConciliacao(mes, ano),
         getComissaoRecebimentos().catch(() => []),
         getAllEndorsements().catch(() => []),
+        getAllComissoesPrevistas().catch(() => []),
       ])
       setPolicies(pols)
       setCustos(custosData)
       setConciliacao(conc)
       setRecebimentos(recs)
       setEndorsements(endos)
+      setComissoesPrevistas(prevs)
     } catch {
       /* ignored */
     }
@@ -113,6 +117,7 @@ export default function ConciliacaoMensal() {
   useRealtime('conciliacoes', () => loadData())
   useRealtime('comissao_recebimentos', () => loadData())
   useRealtime('endorsements', () => loadData())
+  useRealtime('comissoes_previstas', () => loadData())
 
   const endorsementPolicyIds = useMemo(() => {
     const set = new Set<string>()
@@ -124,19 +129,57 @@ export default function ConciliacaoMensal() {
         if (r.policy) set.add(r.policy)
       }
     })
+    comissoesPrevistas.forEach((cp) => {
+      if (cp.endorsement || (cp.origem_modelo && cp.origem_modelo.includes('Endosso'))) {
+        if (cp.policy) set.add(cp.policy)
+      }
+    })
     return set
-  }, [endorsements, recebimentos])
+  }, [endorsements, recebimentos, comissoesPrevistas])
 
   const m = useMemo(() => {
     // Produção do mês selecionado (início da vigência no período)
     const periodPolicies = policies.filter((p) => isDateInPeriod(period, p.start_date))
-    const expectedComm = computeExpectedCommissions(policies, period)
+    // Comissão prevista de produção do período + previsões de endosso ativas na competência do período
+    let expectedComm = computeExpectedCommissions(policies, period)
+    for (const prev of comissoesPrevistas) {
+      if (!prev.endorsement || prev.status === 'Cancelada') continue
+      // Se a apólice pai iniciou no próprio período, já foi considerada em computeExpectedCommissions
+      const parentPol = policies.find((p) => p.id === prev.policy)
+      if (parentPol && isDateInPeriod(period, parentPol.start_date)) continue
+      if (isCompetenciaInPeriod(period, prev.competencia, prev.data_prevista)) {
+        const v = Number(prev.valor_previsto) || 0
+        expectedComm = Math.round((expectedComm + v) * 100) / 100
+      }
+    }
 
     // Comissões recebidas: data de recebimento da comissão no período (usando comissao_recebimentos como fonte dos realizados)
     const receivedComm = computeReceivedCommissions(policies, period, recebimentos)
 
     // Pendentes do mês selecionado: comissões da produção do mês com saldo pendente (previsto bruto - bruto recebido)
-    const pendingComm = computePendingCommissions(periodPolicies, recebimentos)
+    let pendingComm = computePendingCommissions(periodPolicies, recebimentos)
+    for (const prev of comissoesPrevistas) {
+      if (!prev.endorsement || prev.status === 'Cancelada') continue
+      const parentPol = policies.find((p) => p.id === prev.policy)
+      if (parentPol && isDateInPeriod(period, parentPol.start_date)) continue
+      if (isCompetenciaInPeriod(period, prev.competencia, prev.data_prevista)) {
+        // Verificar saldo desta previsão de endosso
+        const vPrev = Number(prev.valor_previsto) || 0
+        // Recebimentos vinculados a este endosso/previsão
+        let recBruto = 0
+        for (const r of recebimentos) {
+          if (
+            r.comissao_prevista === prev.id ||
+            r.endorsement === prev.endorsement ||
+            (r.policy === prev.policy && r.competencia === prev.competencia)
+          ) {
+            recBruto += Number(r.valor_bruto) || 0
+          }
+        }
+        const saldoEndosso = Math.max(0, Math.round((vPrev - recBruto) * 100) / 100)
+        pendingComm = Math.round((pendingComm + saldoEndosso) * 100) / 100
+      }
+    }
 
     // Repasses pagos: data de pagamento do repasse no período
     const paidRepasses = computePaidRepasses(policies, period)
@@ -190,7 +233,7 @@ export default function ConciliacaoMensal() {
       lucroReal,
       pendencias,
     }
-  }, [policies, custos, period, recebimentos])
+  }, [policies, custos, period, recebimentos, comissoesPrevistas])
 
   const isClosed = !!conciliacao
 
@@ -376,30 +419,90 @@ export default function ConciliacaoMensal() {
   }, [detailModalType, policies, custos, period, recebimentos])
 
   const handleDownloadPDF = () => {
-    // Apólices para o relatório da conciliação: apólices da produção do mês OU apólices com comissão recebida no mês
+    // 1. Mapa de apólices com previsão ativa de endosso na competência do período
+    // e cálculo do valor previsto de endosso no período por apólice
+    const endorsementPrevByPolicy = new Map<string, number>()
+    for (const prev of comissoesPrevistas) {
+      if (!prev.endorsement || prev.status === 'Cancelada') continue
+      if (isCompetenciaInPeriod(period, prev.competencia, prev.data_prevista)) {
+        const v = Number(prev.valor_previsto) || 0
+        endorsementPrevByPolicy.set(
+          prev.policy,
+          Math.round(((endorsementPrevByPolicy.get(prev.policy) || 0) + v) * 100) / 100,
+        )
+      }
+    }
+
+    // Mapa de recebimentos por apólice no período a partir de comissao_recebimentos
+    const recsInPeriodByPolicy = new Map<string, number>()
+    for (const r of recebimentos) {
+      if (r.data_recebimento && isDateInPeriod(period, r.data_recebimento)) {
+        const val = r.valor_liquido != null ? Number(r.valor_liquido) : Number(r.valor_bruto) || 0
+        recsInPeriodByPolicy.set(
+          r.policy,
+          Math.round(((recsInPeriodByPolicy.get(r.policy) || 0) + val) * 100) / 100,
+        )
+      }
+    }
+
+    // Apólices para o relatório da conciliação:
+    // a) Apólices da produção do mês
+    // b) Apólices com comissão recebida no mês (por comissao_recebimentos ou legado)
+    // c) Apólices que possuem previsão de endosso ativa na competência do período
     const reportMap = new Map<string, (typeof policies)[0]>()
     m.periodPolicies.forEach((p) => reportMap.set(p.id, p))
     policies.forEach((p) => {
-      if (
+      const hasRecTable = (recsInPeriodByPolicy.get(p.id) || 0) > 0
+      const hasLegacyRec =
         p.comissao_recebida &&
-        p.data_recebimento_comissao &&
+        Boolean(p.data_recebimento_comissao) &&
         isDateInPeriod(period, p.data_recebimento_comissao)
-      ) {
+      const hasEndorsementInPeriod = endorsementPrevByPolicy.has(p.id)
+
+      if (hasRecTable || hasLegacyRec || hasEndorsementInPeriod) {
         reportMap.set(p.id, p)
       }
     })
 
     const reportPolicies = Array.from(reportMap.values()).map((p) => {
       const net = calcNetCommission(p)
-      // Se a comissão foi recebida dentro do período selecionado, ela conta como recebida neste relatório
-      const receivedInPeriod =
+      const belongsToPeriodProduction = isDateInPeriod(period, p.start_date)
+      const endorsementPrevVal = endorsementPrevByPolicy.get(p.id) || 0
+      const hasEndorsementInPeriod = endorsementPrevVal > 0
+
+      // Regra 2:
+      // se a apólice pertence à produção do período -> prevista = valor líquido da apólice
+      // senão, se tem endosso/previsão de endosso com competência no período -> prevista = valor da previsão do endosso do período
+      // caso contrário 0.
+      let comissaoPrevista = 0
+      if (belongsToPeriodProduction) {
+        comissaoPrevista = net
+      } else if (hasEndorsementInPeriod) {
+        comissaoPrevista = endorsementPrevVal
+      }
+
+      // O comissaoRecebida da linha continua sendo apenas o recebido NO período
+      let comissaoRecebida = 0
+      if (recsInPeriodByPolicy.has(p.id)) {
+        comissaoRecebida = recsInPeriodByPolicy.get(p.id)!
+      } else if (
         p.comissao_recebida &&
         Boolean(p.data_recebimento_comissao) &&
         isDateInPeriod(period, p.data_recebimento_comissao)
-      const belongsToPeriodProduction = isDateInPeriod(period, p.start_date)
-      const isEndosso = endorsementPolicyIds.has(p.id)
+      ) {
+        comissaoRecebida = net
+      }
+
+      const receivedInPeriod = comissaoRecebida > 0
+      const isEndosso = endorsementPolicyIds.has(p.id) || hasEndorsementInPeriod
       const baseNum = p.policy_number || p.numero_proposta || '-'
       const prefixo = isEndosso ? '[Endosso] ' : ''
+
+      const statusComissao: 'Recebida' | 'Pendente' =
+        comissaoRecebida >= (comissaoPrevista > 0 ? comissaoPrevista - 0.009 : 0.01) ||
+        (receivedInPeriod && comissaoPrevista === 0)
+          ? 'Recebida'
+          : 'Pendente'
 
       return {
         clienteNome: p.expand?.client?.name || 'Cliente não informado',
@@ -408,9 +511,9 @@ export default function ConciliacaoMensal() {
         tipoSeguro: p.tipo_de_seguro || p.coverage_type || '-',
         numeroApolice: `${prefixo}${baseNum}`,
         valorLiquido: p.valor_liquido || p.premium_amount || 0,
-        comissaoPrevista: belongsToPeriodProduction ? net : 0,
-        comissaoRecebida: receivedInPeriod ? net : 0,
-        statusComissao: (receivedInPeriod ? 'Recebida' : 'Pendente') as 'Recebida' | 'Pendente',
+        comissaoPrevista,
+        comissaoRecebida,
+        statusComissao,
         dataRecebimento: p.data_recebimento_comissao,
         isEndosso,
       }
