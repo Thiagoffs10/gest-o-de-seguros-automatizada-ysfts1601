@@ -315,6 +315,11 @@ export default function Financial() {
       loadData()
     }
   })
+  useRealtime('recebimentos_legados', () => {
+    if (!isOperationInProgressRef.current) {
+      loadData()
+    }
+  })
 
   const period = useMemo(() => computePeriodFromFilters(filters), [filters])
 

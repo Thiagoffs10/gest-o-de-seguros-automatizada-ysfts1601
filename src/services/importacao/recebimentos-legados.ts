@@ -2,6 +2,8 @@ import pb from '@/lib/pocketbase/client'
 import { RecebimentoLegado } from '@/types'
 import { LinhaConferida } from './extrato-service'
 
+export type { RecebimentoLegado } from '@/types'
+
 export interface CreateRecebimentoLegadoPayload {
   seguradora_nome: string
   data_credito: string

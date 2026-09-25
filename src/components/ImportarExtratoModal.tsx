@@ -40,8 +40,8 @@ import {
 import {
   registrarRecebimentoLegado,
   registrarLinhasComoLegadoEmLote,
-  RecebimentoLegado,
 } from '@/services/importacao/recebimentos-legados'
+import { RecebimentoLegado } from '@/types'
 import { formatCurrency, formatBRDate } from '@/lib/utils'
 
 interface ImportarExtratoModalProps {

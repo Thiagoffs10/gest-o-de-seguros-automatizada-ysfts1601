@@ -2,7 +2,9 @@ import { describe, it, expect } from 'vitest'
 import { parseExtratoSeguradora, detectarFormatoExtrato } from './extrato-parsers'
 import { parseCsvText } from './spreadsheet-reader'
 import { parsePropostaTexto, detectarFormatoProposta } from './proposta-parsers'
-import { gerarIdempotencyHash } from './extrato-service'
+import { registrarRecebimentoLegado, registrarLinhasComoLegadoEmLote } from './recebimentos-legados'
+import { gerarIdempotencyHash, LinhaConferida } from './extrato-service'
+import pb from '@/lib/pocketbase/client'
 
 describe('Fluxo de Automação de Entrada - Extratos e Propostas', () => {
   // =========================================================================
@@ -301,6 +303,153 @@ Prêmio Total: R$ 3.210,00
       expect(res.renovacao.apoliceAnterior).toBe('5544332211')
       expect(res.renovacao.seguradoraAnterior).toBe('Porto Seguro')
       expect(res.renovacao.classeBonus).toBe('8')
+    })
+  })
+
+  // =========================================================================
+  // PARTE 3: FLUXO DE RECEBIMENTOS LEGADOS (IDEMPOTÊNCIA E SOMA DOS TOTAIS)
+  // =========================================================================
+  describe('Recebimentos Legados (Idempotência e Soma de Totais)', () => {
+    it('Registra comissão como legado garantindo idempotência e soma exata', async () => {
+      // Simula banco em memória para recebimentos_legados e import_rows
+      const legadosStore: any[] = []
+      const importRowsStore: any[] = []
+
+      // Mock PocketBase collection para recebimentos_legados e import_rows
+      const origCollection = pb.collection.bind(pb)
+      pb.collection = ((name: string) => {
+        if (name === 'recebimentos_legados') {
+          return {
+            getFirstListItem: async (filter: string) => {
+              const hashMatch = filter.match(/idempotency_hash = "([^"]+)"/)
+              if (hashMatch) {
+                const targetHash = hashMatch[1]
+                const found = legadosStore.find((item) => item.idempotency_hash === targetHash)
+                if (found) return found
+              }
+              throw new Error('Not found')
+            },
+            create: async (data: any) => {
+              const record = {
+                id: `leg_${Date.now()}_${Math.random().toString(36).substr(2, 4)}`,
+                ...data,
+                created: new Date().toISOString(),
+                updated: new Date().toISOString(),
+              }
+              legadosStore.push(record)
+              return record
+            },
+            getFullList: async () => [...legadosStore],
+          } as any
+        }
+        if (name === 'import_rows') {
+          return {
+            create: async (data: any) => {
+              importRowsStore.push(data)
+              return { id: `row_${Date.now()}`, ...data }
+            },
+          } as any
+        }
+        return origCollection(name)
+      }) as any
+
+      try {
+        const hashLinha1 = 'ext_Porto_Seguro_PROP-1122_p1_d2026-09-25_v35000'
+        const hashLinha2 = 'ext_Porto_Seguro_PROP-3344_p1_d2026-09-25_v20000'
+
+        const linhasParaRegistrar: LinhaConferida[] = [
+          {
+            linha: {
+              id: 'l1',
+              seguradoraNome: 'Porto Seguro',
+              numeroExtrato: 'OP-100',
+              tipoReferencia: 'PROPOSTA',
+              numeroProposta: 'PROP-1122',
+              numeroApolice: '',
+              endosso: '0',
+              parcela: 1,
+              dataCredito: '2026-09-25',
+              premioLiquido: 2333.33,
+              comissaoBruta: 350.0,
+              impostos: 0,
+              liquidoPago: 350.0,
+              isLinhaInformativa: false,
+            },
+            fila: 'SEM_PREVISAO',
+            motivoFila: 'Sem apólice no sistema',
+            idempotencyHash: hashLinha1,
+            selecionadoParaBaixa: true,
+          },
+          {
+            linha: {
+              id: 'l2',
+              seguradoraNome: 'Porto Seguro',
+              numeroExtrato: 'OP-100',
+              tipoReferencia: 'PROPOSTA',
+              numeroProposta: 'PROP-3344',
+              numeroApolice: '',
+              endosso: '0',
+              parcela: 1,
+              dataCredito: '2026-09-25',
+              premioLiquido: 1333.33,
+              comissaoBruta: 200.0,
+              impostos: 0,
+              liquidoPago: 200.0,
+              isLinhaInformativa: false,
+            },
+            fila: 'SEM_PREVISAO',
+            motivoFila: 'Sem apólice no sistema',
+            idempotencyHash: hashLinha2,
+            selecionadoParaBaixa: true,
+          },
+        ]
+
+        // 1. Primeira importação em lote
+        const res1 = await registrarLinhasComoLegadoEmLote(linhasParaRegistrar, {
+          loteId: 'lote_teste_01',
+          loteNome: 'extrato_porto_set26.xlsx',
+          seguradoraNome: 'Porto Seguro',
+        })
+
+        expect(res1.sucessos).toBe(2)
+        expect(res1.falhas.length).toBe(0)
+        expect(res1.totalValor).toBe(550.0) // 350 + 200 = 550
+        expect(legadosStore.length).toBe(2)
+        expect(importRowsStore.length).toBe(2)
+
+        // Conferir a soma líquida dos registros gravados
+        const somaGravada = legadosStore.reduce(
+          (acc, item) => acc + Number(item.valor_liquido || 0),
+          0,
+        )
+        expect(somaGravada).toBe(550.0)
+
+        // 2. Idempotência: reimportar o mesmo lote NÃO deve duplicar
+        const resReimport = await registrarLinhasComoLegadoEmLote(linhasParaRegistrar, {
+          loteId: 'lote_teste_02',
+          loteNome: 'extrato_porto_set26_copia.xlsx',
+          seguradoraNome: 'Porto Seguro',
+        })
+
+        // Retorna sucesso mantendo os registros já existentes (sem duplicar na collection)
+        expect(resReimport.sucessos).toBe(2)
+        expect(resReimport.totalValor).toBe(550.0)
+        // Store não deve ter 4 registros; continua tendo apenas 2
+        expect(legadosStore.length).toBe(2)
+
+        // 3. Teste unitário de chamada avulsa de registrarRecebimentoLegado com mesmo hash
+        const recExistente = await registrarRecebimentoLegado({
+          seguradora_nome: 'Porto Seguro',
+          data_credito: '2026-09-25',
+          valor_liquido: 350.0,
+          idempotency_hash: hashLinha1,
+        })
+        expect(recExistente.id).toBe(legadosStore[0].id)
+        expect(legadosStore.length).toBe(2)
+      } finally {
+        // Restaurar coleção original
+        pb.collection = origCollection
+      }
     })
   })
 })
