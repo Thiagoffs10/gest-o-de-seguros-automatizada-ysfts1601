@@ -145,10 +145,17 @@ async function unzipEntries(zipData: Uint8Array): Promise<Record<string, string>
 async function decompressDeflate(data: Uint8Array): Promise<string> {
   // Tentativa com DecompressionStream nativo (Browser moderno & Node 18+)
   if (typeof DecompressionStream !== 'undefined') {
+    const chunk =
+      data.buffer instanceof ArrayBuffer &&
+      data.byteOffset === 0 &&
+      data.byteLength === data.buffer.byteLength
+        ? data
+        : new Uint8Array(data)
+
     try {
       const ds = new DecompressionStream('deflate-raw')
       const writer = ds.writable.getWriter()
-      writer.write(data)
+      writer.write(chunk as unknown as BufferSource)
       writer.close()
       const response = new Response(ds.readable)
       const buffer = await response.arrayBuffer()
@@ -158,7 +165,7 @@ async function decompressDeflate(data: Uint8Array): Promise<string> {
       try {
         const ds = new DecompressionStream('deflate')
         const writer = ds.writable.getWriter()
-        writer.write(data)
+        writer.write(chunk as unknown as BufferSource)
         writer.close()
         const response = new Response(ds.readable)
         const buffer = await response.arrayBuffer()

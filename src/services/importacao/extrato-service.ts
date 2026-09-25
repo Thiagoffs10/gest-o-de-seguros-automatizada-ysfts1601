@@ -310,7 +310,7 @@ export async function reconciliarExtratoComBanco(
   return {
     formato: parseResult.formato,
     seguradoraNome: parseResult.seguradoraNomeSugerida,
-    arquivoNome,
+    arquivoNome: nomeArquivo,
     totalLinhas: parseResult.totalLinhasArquivo,
     filas: {
       aprovados,

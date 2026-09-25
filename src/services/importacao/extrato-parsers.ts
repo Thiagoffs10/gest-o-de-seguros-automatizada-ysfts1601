@@ -224,7 +224,7 @@ function parsePortoSeguro(rows: string[][]): ExtratoParseResult {
       if (
         !segurado &&
         cell.length > 5 &&
-        /^[A-Za-zÀ-ÿ\s.\-]+$/.test(cell) &&
+        /^[A-Za-zÀ-ÿ\s.-]+$/.test(cell) &&
         !cell.toLowerCase().includes('auto') &&
         !cell.toLowerCase().includes('porto')
       ) {
@@ -323,7 +323,7 @@ function parseBradesco(rows: string[][]): ExtratoParseResult {
       rowStr.includes('LANCAMENTO') ||
       rowStr.includes('LANÇAMENTO')
     ) {
-      const match = /(?:FATURA|LOTE)[:\s]+([0-9\-.\/]+)/i.exec(rowStr)
+      const match = /(?:FATURA|LOTE)[:\s]+([0-9\-./]+)/i.exec(rowStr)
       if (match) numeroLoteFatura = match[1].trim()
     }
     for (const cell of row) {
@@ -395,7 +395,7 @@ function parseBradesco(rows: string[][]): ExtratoParseResult {
       if (
         !segurado &&
         cell.length > 6 &&
-        /^[A-Za-zÀ-ÿ\s.\-]+$/.test(cell) &&
+        /^[A-Za-zÀ-ÿ\s.-]+$/.test(cell) &&
         !cell.toUpperCase().includes('BRADESCO') &&
         !cell.toUpperCase().includes('FATURA')
       ) {
@@ -528,7 +528,7 @@ function parseTokioMarine(rows: string[][]): ExtratoParseResult {
       if (
         !cliente &&
         cell.length > 5 &&
-        /^[A-Za-zÀ-ÿ\s.\-]+$/.test(cell) &&
+        /^[A-Za-zÀ-ÿ\s.-]+$/.test(cell) &&
         !cell.toLowerCase().includes('tokio')
       ) {
         cliente = cell
@@ -653,7 +653,7 @@ function parseMapfre(rows: string[][]): ExtratoParseResult {
       if (
         !segurado &&
         cell.length > 6 &&
-        /^[A-Za-zÀ-ÿ\s.\-]+$/.test(cell) &&
+        /^[A-Za-zÀ-ÿ\s.-]+$/.test(cell) &&
         !cell.toLowerCase().includes('mapfre')
       ) {
         segurado = cell

@@ -1,5 +1,13 @@
 import { useState, useEffect, useRef } from 'react'
-import { Plus, Info, ExternalLink, SlidersHorizontal, Sparkles } from 'lucide-react'
+import {
+  Plus,
+  Info,
+  ExternalLink,
+  SlidersHorizontal,
+  Sparkles,
+  Loader2,
+  FileText,
+} from 'lucide-react'
 import { Link } from 'react-router-dom'
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip'
 import { ClientFormDialog } from '@/components/ClientFormDialog'
@@ -23,11 +31,9 @@ import {
   SelectValue,
 } from '@/components/ui/select'
 import { Textarea } from '@/components/ui/textarea'
-import { Loader2, FileText, Plus, Info, ExternalLink } from 'lucide-react'
 import { TIPOS_DE_SEGURO, TIPOS_DE_VENDA } from '@/lib/constants'
 import { ImportarPropostaPdfModal } from '@/components/ImportarPropostaPdfModal'
 import { PropostaImportadaConferida } from '@/services/importacao/proposta-service'
-import { createClient } from '@/services/clients'
 import {
   Client,
   Seguradora,
@@ -474,7 +480,7 @@ export function PolicyFormDialog({
           email: p.segurado.email || undefined,
           phone: p.segurado.telefone || undefined,
           notes:
-            !p.segurado.mesmoQueSegurado && p.condutorPrincipal.nome
+            !p.condutorPrincipal.mesmoQueSegurado && p.condutorPrincipal.nome
               ? `[Condutor Principal: ${p.condutorPrincipal.nome}]`
               : undefined,
         })

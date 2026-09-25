@@ -152,10 +152,10 @@ export function parsePropostaTexto(text: string, nomeArquivo: string = ''): Prop
 function extrairNumeroProposta(text: string, formato: SeguradoraPropostaFormato): string {
   // Padrões comuns: "Proposta: 123456", "Nº da Proposta: 123456", "Proposta nº: 123456"
   const patterns = [
-    /proposta(?:\s+n[ºo.]|\s+número)?[:\s]+([0-9\-.\/]{4,20})/i,
-    /n[ºo]\s+da\s+proposta[:\s]+([0-9\-.\/]{4,20})/i,
-    /proposta\s+de\s+seguro[:\s]+([0-9\-.\/]{4,20})/i,
-    /c[oó]digo\s+da\s+proposta[:\s]+([0-9\-.\/]{4,20})/i,
+    /proposta(?:\s+n[ºo.]|\s+número)?[:\s]+([0-9\-./]{4,20})/i,
+    /n[ºo]\s+da\s+proposta[:\s]+([0-9\-./]{4,20})/i,
+    /proposta\s+de\s+seguro[:\s]+([0-9\-./]{4,20})/i,
+    /c[oó]digo\s+da\s+proposta[:\s]+([0-9\-./]{4,20})/i,
   ]
 
   for (const regex of patterns) {
@@ -181,7 +181,7 @@ function extrairVigencias(text: string): { inicio: string; fim: string } {
 
   // Padrão: "Vigência: de 24/09/2026 até 24/09/2027" ou "às 24:00 de ..."
   const vigMatch =
-    /vig[êe]ncia[:\s]+(?:das?\s+[0-9]{1,2}h(?:[0-9]{2})?\s+do?\s+dia\s+)?(\d{1,2}[/\.-]\d{1,2}[/\.-]\d{4})(?:\s+at[ée]|\s+[aà]\s+|\s+ao?\s+dia\s+)(?:das?\s+[0-9]{1,2}h(?:[0-9]{2})?\s+do?\s+dia\s+)?(\d{1,2}[/\.-]\d{1,2}[/\.-]\d{4})/i.exec(
+    /vig[êe]ncia[:\s]+(?:das?\s+[0-9]{1,2}h(?:[0-9]{2})?\s+do?\s+dia\s+)?(\d{1,2}[/.-]\d{1,2}[/.-]\d{4})(?:\s+at[ée]|\s+[aà]\s+|\s+ao?\s+dia\s+)(?:das?\s+[0-9]{1,2}h(?:[0-9]{2})?\s+do?\s+dia\s+)?(\d{1,2}[/.-]\d{1,2}[/.-]\d{4})/i.exec(
       text,
     )
 
@@ -191,11 +191,11 @@ function extrairVigencias(text: string): { inicio: string; fim: string } {
   } else {
     // Procura por "Início de vigência" e "Fim de vigência"
     const iniMatch =
-      /(?:in[íi]cio\s+da?\s+vig[êe]ncia|vig[êe]ncia\s+in[íi]cio)[:\s]+(\d{1,2}[/\.-]\d{1,2}[/\.-]\d{4})/i.exec(
+      /(?:in[íi]cio\s+da?\s+vig[êe]ncia|vig[êe]ncia\s+in[íi]cio)[:\s]+(\d{1,2}[/.-]\d{1,2}[/.-]\d{4})/i.exec(
         text,
       )
     const fimMatch =
-      /(?:t[ée]rmino\s+da?\s+vig[êe]ncia|fim\s+da?\s+vig[êe]ncia|vig[êe]ncia\s+fim)[:\s]+(\d{1,2}[/\.-]\d{1,2}[/\.-]\d{4})/i.exec(
+      /(?:t[ée]rmino\s+da?\s+vig[êe]ncia|fim\s+da?\s+vig[êe]ncia|vig[êe]ncia\s+fim)[:\s]+(\d{1,2}[/.-]\d{1,2}[/.-]\d{4})/i.exec(
         text,
       )
     if (iniMatch) inicio = parseDataFlexivel(iniMatch[1])
@@ -217,14 +217,14 @@ function extrairPremios(text: string): { liquido: number; iof: number; total: nu
   let iof = 0
   let total = 0
 
-  const liqMatch = /pr[êe]mio\s+l[íi]quido(?:\s+total)?[:\s]+R?\$?\s*([0-9.\,]+)/i.exec(text)
+  const liqMatch = /pr[êe]mio\s+l[íi]quido(?:\s+total)?[:\s]+R?\$?\s*([0-9.,]+)/i.exec(text)
   if (liqMatch) liquido = parseMoeda(liqMatch[1])
 
-  const iofMatch = /iof[:\s]+R?\$?\s*([0-9.\,]+)/i.exec(text)
+  const iofMatch = /iof[:\s]+R?\$?\s*([0-9.,]+)/i.exec(text)
   if (iofMatch) iof = parseMoeda(iofMatch[1])
 
   const totMatch =
-    /(?:pr[êe]mio\s+total|valor\s+total\s+do\s+seguro)[:\s]+R?\$?\s*([0-9.\,]+)/i.exec(text)
+    /(?:pr[êe]mio\s+total|valor\s+total\s+do\s+seguro)[:\s]+R?\$?\s*([0-9.,]+)/i.exec(text)
   if (totMatch) total = parseMoeda(totMatch[1])
 
   // Se tem líquido e iof mas não tem total
@@ -321,7 +321,7 @@ function extrairVeiculo(text: string): PropostaVeiculoExtraido {
 
   // Marca / Modelo: geralmente próximo a "Veículo:", "Modelo:", "Descrição do veículo"
   const modMatch =
-    /(?:ve[íi]culo|modelo|marca\/modelo)[:\s]+([A-Za-z0-9\s.\-/\+]+?)(?:\s+ano|\s+placa|\s+chassi|\s+fipe|\n|$)/i.exec(
+    /(?:ve[íi]culo|modelo|marca\/modelo)[:\s]+([A-Za-z0-9\s.\-/+]+?)(?:\s+ano|\s+placa|\s+chassi|\s+fipe|\n|$)/i.exec(
       text,
     )
   if (modMatch) {
@@ -373,7 +373,7 @@ function extrairSegurado(
 
   // Nome do Segurado: após "Segurado:", "Nome do Segurado:", "Nome / Razão Social:"
   const nomeMatch =
-    /(?:nome\s+do\s+segurado|segurado(?:\s*\(a\))?|proponente)[:\s]+([A-Za-zÀ-ÿ\s.\-]+?)(?:\s+cpf|\s+cnpj|\s+nasc|\s+data|\s+endere[çc]o|\n|$)/i.exec(
+    /(?:nome\s+do\s+segurado|segurado(?:\s*\(a\))?|proponente)[:\s]+([A-Za-zÀ-ÿ\s.-]+?)(?:\s+cpf|\s+cnpj|\s+nasc|\s+data|\s+endere[çc]o|\n|$)/i.exec(
       text,
     )
   if (nomeMatch) {
@@ -384,7 +384,7 @@ function extrairSegurado(
   // Data de nascimento (Allianz NÃO traz)
   if (formato !== 'ALLIANZ') {
     const nascMatch =
-      /(?:data\s+de\s+nascimento|nascimento|nasc\.?)[:\s]+(\d{1,2}[/\.-]\d{1,2}[/\.-]\d{4})/i.exec(
+      /(?:data\s+de\s+nascimento|nascimento|nasc\.?)[:\s]+(\d{1,2}[/.-]\d{1,2}[/.-]\d{4})/i.exec(
         text,
       )
     if (nascMatch) {
@@ -440,7 +440,7 @@ function extrairCondutor(
 
   // Procurar por bloco "Condutor Principal", "Principal Condutor", "Condutor habitual"
   const condMatch =
-    /(?:condutor\s+principal|principal\s+condutor|condutor\s+habitual|perfil\s+do\s+condutor)[:\s]+([A-Za-zÀ-ÿ\s.\-]+?)(?:\s+cpf|\s+nasc|\s+parentesco|\s+sexo|\n|$)/i.exec(
+    /(?:condutor\s+principal|principal\s+condutor|condutor\s+habitual|perfil\s+do\s+condutor)[:\s]+([A-Za-zÀ-ÿ\s.-]+?)(?:\s+cpf|\s+nasc|\s+parentesco|\s+sexo|\n|$)/i.exec(
       text,
     )
 
@@ -499,7 +499,7 @@ function extrairRenovacao(text: string): PropostaRenovacaoExtraida {
   }
 
   const segAntMatch =
-    /(?:seguradora\s+anterior|cia\s+anterior)[:\s]+([A-Za-zÀ-ÿ\s.\-]+?)(?:\s+ap[oó]lice|\s+b[oó]nus|\n|$)/i.exec(
+    /(?:seguradora\s+anterior|cia\s+anterior)[:\s]+([A-Za-zÀ-ÿ\s.-]+?)(?:\s+ap[oó]lice|\s+b[oó]nus|\n|$)/i.exec(
       text,
     )
   if (segAntMatch) {

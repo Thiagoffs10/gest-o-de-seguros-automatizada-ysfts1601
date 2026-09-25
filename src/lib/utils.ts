@@ -118,3 +118,14 @@ export function formatDateTimeDisplay(dateStr?: string | null): string {
   if (isNaN(dateObj.getTime())) return formatDateDisplay(dateStr)
   return dateObj.toLocaleString('pt-BR')
 }
+
+/**
+ * Formats a date (YYYY-MM-DD) into DD/MM/YYYY.
+ */
+export function formatBRDate(d?: string | null): string {
+  if (!d) return '-'
+  const dateOnly = extractDateOnly(d)
+  if (!dateOnly || !dateOnly.includes('-')) return String(d)
+  const [y, m, day] = dateOnly.split('-')
+  return `${day}/${m}/${y}`
+}

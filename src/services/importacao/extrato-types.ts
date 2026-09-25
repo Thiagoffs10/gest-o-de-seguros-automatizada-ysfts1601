@@ -104,7 +104,7 @@ export function parseDataFlexivel(val: any): string {
     return str.substring(0, 10)
   }
   // DD/MM/YYYY ou DD/MM/YY
-  const brMatch = /^(\d{1,2})[/\.-](\d{1,2})[/\.-](\d{2,4})/.exec(str)
+  const brMatch = /^(\d{1,2})[/.-](\d{1,2})[/.-](\d{2,4})/.exec(str)
   if (brMatch) {
     const dia = brMatch[1].padStart(2, '0')
     const mes = brMatch[2].padStart(2, '0')

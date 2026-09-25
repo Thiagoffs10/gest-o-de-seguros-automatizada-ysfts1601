@@ -673,7 +673,7 @@ export default function Policies() {
             valor_bruto: p.premioTotal || 0,
             valor_liquido: p.premioLiquido || 0,
             forma_pagamento: p.formaPagamento || '',
-            parcelas: p.quantidadeParcelas ? String(p.quantidadeParcelas) : '',
+            parcelas: p.quantidadeParcelas != null ? p.quantidadeParcelas : undefined,
             start_date: p.vigenciaInicio || '',
             end_date: p.vigenciaFim || '',
             previous_policy: conferida.renovacaoPolicyCorrespondente?.id || '',
