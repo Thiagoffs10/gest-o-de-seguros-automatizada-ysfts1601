@@ -23,8 +23,11 @@ import {
   SelectValue,
 } from '@/components/ui/select'
 import { Textarea } from '@/components/ui/textarea'
-import { Loader2 } from 'lucide-react'
+import { Loader2, FileText, Plus, Info, ExternalLink } from 'lucide-react'
 import { TIPOS_DE_SEGURO, TIPOS_DE_VENDA } from '@/lib/constants'
+import { ImportarPropostaPdfModal } from '@/components/ImportarPropostaPdfModal'
+import { PropostaImportadaConferida } from '@/services/importacao/proposta-service'
+import { createClient } from '@/services/clients'
 import {
   Client,
   Seguradora,
@@ -330,6 +333,8 @@ export function PolicyFormDialog({
   const [tiposSeguroList, setTiposSeguroList] = useState<TipoSeguro[]>([])
   const [produtosList, setProdutosList] = useState<Produto[]>([])
   const [modeloAtivo, setModeloAtivo] = useState<ModeloComissao | null>(null)
+  const [isImportarPropostaOpen, setIsImportarPropostaOpen] = useState(false)
+  const [camposFaltantesDestaque, setCamposFaltantesDestaque] = useState<string[]>([])
   const skipAuto = useRef(true)
 
   useEffect(() => {
@@ -450,6 +455,79 @@ export function PolicyFormDialog({
         return next
       })
     }
+  }
+
+  const handlePropostaImportada = async (conferida: PropostaImportadaConferida) => {
+    const p = conferida.proposta
+    let clientId = ''
+
+    // Se achou cliente existente, usa ele
+    if (conferida.clienteExistente) {
+      clientId = conferida.clienteExistente.id
+    } else if (p.segurado.nome) {
+      // Cria cliente automaticamente ou pré-preenche
+      try {
+        const novoCli = await createClient({
+          name: p.segurado.nome,
+          cpf: p.segurado.cpfCnpj || undefined,
+          birth_date: p.segurado.dataNascimento || undefined,
+          email: p.segurado.email || undefined,
+          phone: p.segurado.telefone || undefined,
+          notes:
+            !p.segurado.mesmoQueSegurado && p.condutorPrincipal.nome
+              ? `[Condutor Principal: ${p.condutorPrincipal.nome}]`
+              : undefined,
+        })
+        setClientsList((prev) => [novoCli, ...prev])
+        clientId = novoCli.id
+        toast({
+          title: 'Cliente pré-cadastrado!',
+          description: `${novoCli.name} cadastrado a partir dos dados do PDF.`,
+        })
+      } catch (errCli) {
+        console.warn('Erro ao auto-cadastrar cliente da proposta:', errCli)
+      }
+    }
+
+    // Registra condutor principal nas anotações se for separado
+    let notasCondutor = ''
+    if (!p.condutorPrincipal.mesmoQueSegurado && p.condutorPrincipal.nome) {
+      notasCondutor = `Condutor Principal: ${p.condutorPrincipal.nome} (CPF: ${p.condutorPrincipal.cpf || 'Não informado'})`
+    }
+
+    // Destacar campos faltantes
+    const faltantesKeys = p.camposFaltantes.map((cf) => cf.campo)
+    setCamposFaltantesDestaque(faltantesKeys)
+
+    // Preenche o formulário da apólice
+    setForm((prev: any) => ({
+      ...prev,
+      client: clientId || prev.client,
+      seguradora: conferida.seguradoraIdCorrespondente || prev.seguradora,
+      numero_proposta: p.numeroProposta || prev.numero_proposta,
+      policy_number: p.numeroApolice || '', // apólice fica vazia aguardando emissão
+      tipo_de_seguro: p.tipoSeguro || prev.tipo_de_seguro,
+      placa: p.veiculo.placa || prev.placa,
+      chassi: p.veiculo.chassi || prev.chassi,
+      modelo_veiculo: p.veiculo.marcaModelo || prev.modelo_veiculo,
+      valor_bruto: p.premioTotal || prev.valor_bruto,
+      valor_liquido: p.premioLiquido || prev.valor_liquido,
+      forma_pagamento: p.formaPagamento || prev.forma_pagamento,
+      parcelas: p.quantidadeParcelas || prev.parcelas,
+      start_date: p.vigenciaInicio || prev.start_date,
+      end_date: p.vigenciaFim || prev.end_date,
+      previous_policy: conferida.renovacaoPolicyCorrespondente?.id || prev.previous_policy,
+      notes: notasCondutor
+        ? prev.notes
+          ? `${prev.notes}\n${notasCondutor}`
+          : notasCondutor
+        : prev.notes,
+    }))
+
+    toast({
+      title: 'Formulário pré-preenchido!',
+      description: 'Revise os dados importados antes de salvar.',
+    })
   }
 
   // Sugestão automática de modelo por Seguradora + Produto ao trocar
@@ -584,8 +662,28 @@ export function PolicyFormDialog({
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="sm:max-w-lg max-h-[90vh] overflow-y-auto">
         <DialogHeader>
-          <DialogTitle>{title}</DialogTitle>
+          <div className="flex items-center justify-between">
+            <DialogTitle>{title}</DialogTitle>
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              onClick={() => setIsImportarPropostaOpen(true)}
+              className="h-8 text-xs text-blue-600 hover:text-blue-700 hover:bg-blue-50 border-blue-200"
+            >
+              <FileText className="w-3.5 h-3.5 mr-1" />
+              Importar Proposta (PDF)
+            </Button>
+          </div>
         </DialogHeader>
+
+        {camposFaltantesDestaque.length > 0 && (
+          <div className="p-2.5 bg-amber-50 border border-amber-200 rounded-md text-xs text-amber-900">
+            <strong>Atenção:</strong> Alguns dados obrigatórios não estavam no PDF e precisam ser
+            revisados manualmente.
+          </div>
+        )}
+
         <form onSubmit={handleSubmit} className="space-y-3">
           <div>
             <div className="flex items-center justify-between mb-1">
@@ -1219,6 +1317,13 @@ export function PolicyFormDialog({
           </DialogFooter>
         </form>
       </DialogContent>
+
+      <ImportarPropostaPdfModal
+        open={isImportarPropostaOpen}
+        onOpenChange={setIsImportarPropostaOpen}
+        seguradoras={seguradoras}
+        onPropostaImportada={handlePropostaImportada}
+      />
 
       <ClientFormDialog
         open={isNewClientOpen}

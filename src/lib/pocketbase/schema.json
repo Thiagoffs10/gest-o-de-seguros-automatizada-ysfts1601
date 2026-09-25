@@ -1,5 +1,5 @@
 {
-  "generatedAt": "2026-09-24T00:40:59.427Z",
+  "generatedAt": "2026-09-25T15:59:20.263Z",
   "collections": [
     {
       "name": "users",
@@ -1960,6 +1960,423 @@
       "indexes": [
         "CREATE INDEX idx_endorsements_policy ON endorsements (policy)",
         "CREATE INDEX idx_endorsements_data ON endorsements (data_endosso)"
+      ]
+    },
+    {
+      "name": "import_lots",
+      "type": "base",
+      "apiRules": {
+        "list": "@request.auth.id != ''",
+        "view": "@request.auth.id != ''",
+        "create": "@request.auth.id != ''",
+        "update": "@request.auth.id != ''",
+        "delete": "@request.auth.id != ''"
+      },
+      "fields": [
+        {
+          "name": "tipo",
+          "type": "select",
+          "required": true,
+          "system": false,
+          "selectValues": ["EXTRATO_COMISSAO", "PROPOSTA_PDF"]
+        },
+        {
+          "name": "nome_arquivo",
+          "type": "text",
+          "required": true,
+          "system": false
+        },
+        {
+          "name": "formato_seguradora",
+          "type": "text",
+          "required": false,
+          "system": false
+        },
+        {
+          "name": "seguradora_id",
+          "type": "text",
+          "required": false,
+          "system": false
+        },
+        {
+          "name": "total_linhas",
+          "type": "number",
+          "required": false,
+          "system": false
+        },
+        {
+          "name": "total_sucesso",
+          "type": "number",
+          "required": false,
+          "system": false
+        },
+        {
+          "name": "total_divergencias",
+          "type": "number",
+          "required": false,
+          "system": false
+        },
+        {
+          "name": "total_sem_previsao",
+          "type": "number",
+          "required": false,
+          "system": false
+        },
+        {
+          "name": "total_bruto",
+          "type": "number",
+          "required": false,
+          "system": false
+        },
+        {
+          "name": "total_liquido",
+          "type": "number",
+          "required": false,
+          "system": false
+        },
+        {
+          "name": "checksum_esperado",
+          "type": "number",
+          "required": false,
+          "system": false
+        },
+        {
+          "name": "checksum_status",
+          "type": "select",
+          "required": false,
+          "system": false,
+          "selectValues": ["OK", "DIVERGENTE", "NAO_APLICAVEL"]
+        },
+        {
+          "name": "arquivo",
+          "type": "file",
+          "required": false,
+          "system": false
+        },
+        {
+          "name": "detalhes_json",
+          "type": "json",
+          "required": false,
+          "system": false
+        },
+        {
+          "name": "usuario_id",
+          "type": "text",
+          "required": false,
+          "system": false
+        },
+        {
+          "name": "usuario_nome",
+          "type": "text",
+          "required": false,
+          "system": false
+        },
+        {
+          "name": "created",
+          "type": "autodate",
+          "required": false,
+          "system": false,
+          "autodateTriggers": ["onCreate"]
+        },
+        {
+          "name": "updated",
+          "type": "autodate",
+          "required": false,
+          "system": false,
+          "autodateTriggers": ["onCreate", "onUpdate"]
+        }
+      ],
+      "indexes": [
+        "CREATE INDEX idx_import_lots_created ON import_lots (created DESC)",
+        "CREATE INDEX idx_import_lots_tipo ON import_lots (tipo)"
+      ]
+    },
+    {
+      "name": "import_rows",
+      "type": "base",
+      "apiRules": {
+        "list": "@request.auth.id != ''",
+        "view": "@request.auth.id != ''",
+        "create": "@request.auth.id != ''",
+        "update": "@request.auth.id != ''",
+        "delete": "@request.auth.id != ''"
+      },
+      "fields": [
+        {
+          "name": "lote",
+          "type": "relation",
+          "required": false,
+          "system": false,
+          "collectionRef": "import_lots"
+        },
+        {
+          "name": "seguradora_nome",
+          "type": "text",
+          "required": false,
+          "system": false
+        },
+        {
+          "name": "numero_extrato",
+          "type": "text",
+          "required": false,
+          "system": false
+        },
+        {
+          "name": "tipo_referencia",
+          "type": "select",
+          "required": false,
+          "system": false,
+          "selectValues": ["APOLICE", "PROPOSTA", "DOCUMENTO", "AMBOS"]
+        },
+        {
+          "name": "numero_apolice",
+          "type": "text",
+          "required": false,
+          "system": false
+        },
+        {
+          "name": "numero_proposta",
+          "type": "text",
+          "required": false,
+          "system": false
+        },
+        {
+          "name": "endosso",
+          "type": "text",
+          "required": false,
+          "system": false
+        },
+        {
+          "name": "parcela",
+          "type": "number",
+          "required": false,
+          "system": false
+        },
+        {
+          "name": "data_credito",
+          "type": "date",
+          "required": false,
+          "system": false
+        },
+        {
+          "name": "premio_liquido",
+          "type": "number",
+          "required": false,
+          "system": false
+        },
+        {
+          "name": "comissao_bruta",
+          "type": "number",
+          "required": false,
+          "system": false
+        },
+        {
+          "name": "impostos",
+          "type": "number",
+          "required": false,
+          "system": false
+        },
+        {
+          "name": "liquido_pago",
+          "type": "number",
+          "required": false,
+          "system": false
+        },
+        {
+          "name": "percentual_comissao",
+          "type": "number",
+          "required": false,
+          "system": false
+        },
+        {
+          "name": "segurado_nome",
+          "type": "text",
+          "required": false,
+          "system": false
+        },
+        {
+          "name": "ramo",
+          "type": "text",
+          "required": false,
+          "system": false
+        },
+        {
+          "name": "linha_bruta_json",
+          "type": "json",
+          "required": false,
+          "system": false
+        },
+        {
+          "name": "fila",
+          "type": "select",
+          "required": false,
+          "system": false,
+          "selectValues": ["APROVADO", "DIVERGENTE", "SEM_PREVISAO", "JA_BAIXADO", "IGNORADO"]
+        },
+        {
+          "name": "motivo_fila",
+          "type": "text",
+          "required": false,
+          "system": false
+        },
+        {
+          "name": "policy_id",
+          "type": "text",
+          "required": false,
+          "system": false
+        },
+        {
+          "name": "comissao_prevista_id",
+          "type": "text",
+          "required": false,
+          "system": false
+        },
+        {
+          "name": "recebimento_id",
+          "type": "text",
+          "required": false,
+          "system": false
+        },
+        {
+          "name": "baixado",
+          "type": "bool",
+          "required": false,
+          "system": false
+        },
+        {
+          "name": "idempotency_hash",
+          "type": "text",
+          "required": false,
+          "system": false
+        },
+        {
+          "name": "created",
+          "type": "autodate",
+          "required": false,
+          "system": false,
+          "autodateTriggers": ["onCreate"]
+        },
+        {
+          "name": "updated",
+          "type": "autodate",
+          "required": false,
+          "system": false,
+          "autodateTriggers": ["onCreate", "onUpdate"]
+        }
+      ],
+      "indexes": [
+        "CREATE INDEX idx_import_rows_lote ON import_rows (lote)",
+        "CREATE INDEX idx_import_rows_hash ON import_rows (idempotency_hash)",
+        "CREATE INDEX idx_import_rows_fila ON import_rows (fila)"
+      ]
+    },
+    {
+      "name": "sistema_alertas",
+      "type": "base",
+      "apiRules": {
+        "list": "@request.auth.id != ''",
+        "view": "@request.auth.id != ''",
+        "create": "@request.auth.id != ''",
+        "update": "@request.auth.id != ''",
+        "delete": "@request.auth.id != ''"
+      },
+      "fields": [
+        {
+          "name": "modulo",
+          "type": "select",
+          "required": true,
+          "system": false,
+          "selectValues": ["FINANCEIRO", "APOLICES", "CLIENTES", "EXTRATO"]
+        },
+        {
+          "name": "tipo",
+          "type": "select",
+          "required": true,
+          "system": false,
+          "selectValues": [
+            "COMISSAO_JA_BAIXADA",
+            "SEM_PREVISAO",
+            "VALOR_DIVERGENTE",
+            "CHECKSUM_DIVERGENTE",
+            "APOLICE_DUPLICADA",
+            "CLIENTE_DUPLICADO",
+            "OUTRO"
+          ]
+        },
+        {
+          "name": "nivel",
+          "type": "select",
+          "required": true,
+          "system": false,
+          "selectValues": ["INFO", "ALERTA", "CRITICO"]
+        },
+        {
+          "name": "titulo",
+          "type": "text",
+          "required": true,
+          "system": false
+        },
+        {
+          "name": "motivo",
+          "type": "text",
+          "required": true,
+          "system": false
+        },
+        {
+          "name": "acao_sugerida",
+          "type": "text",
+          "required": false,
+          "system": false
+        },
+        {
+          "name": "resolvido",
+          "type": "bool",
+          "required": false,
+          "system": false
+        },
+        {
+          "name": "data_resolucao",
+          "type": "date",
+          "required": false,
+          "system": false
+        },
+        {
+          "name": "resolvido_por",
+          "type": "text",
+          "required": false,
+          "system": false
+        },
+        {
+          "name": "referencia_id",
+          "type": "text",
+          "required": false,
+          "system": false
+        },
+        {
+          "name": "detalhes_json",
+          "type": "json",
+          "required": false,
+          "system": false
+        },
+        {
+          "name": "created",
+          "type": "autodate",
+          "required": false,
+          "system": false,
+          "autodateTriggers": ["onCreate"]
+        },
+        {
+          "name": "updated",
+          "type": "autodate",
+          "required": false,
+          "system": false,
+          "autodateTriggers": ["onCreate", "onUpdate"]
+        }
+      ],
+      "indexes": [
+        "CREATE INDEX idx_sistema_alertas_resolvido ON sistema_alertas (resolvido, created DESC)",
+        "CREATE INDEX idx_sistema_alertas_modulo ON sistema_alertas (modulo)",
+        "CREATE INDEX idx_sistema_alertas_tipo ON sistema_alertas (tipo)"
       ]
     }
   ]

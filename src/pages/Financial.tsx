@@ -98,6 +98,9 @@ import {
 } from '@/lib/financial-calcs'
 import { DevTrackingPanel } from '@/components/DevTrackingPanel'
 import { PortfolioExportButton } from '@/components/PortfolioExportButton'
+import { ImportarExtratoModal } from '@/components/ImportarExtratoModal'
+import { AlertasCentral } from '@/components/AlertasCentral'
+import { FileSpreadsheet } from 'lucide-react'
 import {
   Select,
   SelectContent,
@@ -188,6 +191,7 @@ export default function Financial() {
   const [produtos, setProdutos] = useState<Produto[]>([])
 
   // ETAPA 2B — ITEM 7: Sub-aba ou visão de comissões por competência/previsões com filtros server-side
+  const [isImportarExtratoOpen, setIsImportarExtratoOpen] = useState(false)
   const [commViewTab, setCommViewTab] = useState<'apolices' | 'competencias'>('apolices')
   const [prevStatusFilter, setPrevStatusFilter] = useState<string>('ALL')
   const [prevSeguradoraFilter, setPrevSeguradoraFilter] = useState<string>('ALL')
@@ -1388,8 +1392,23 @@ export default function Financial() {
             Gestão de comissões, repasses e performance financeira.
           </p>
         </div>
-        <PortfolioExportButton policies={tablePolicies} />
+        <div className="flex items-center gap-2">
+          <Button
+            onClick={() => setIsImportarExtratoOpen(true)}
+            className="bg-emerald-600 hover:bg-emerald-700 text-white text-xs h-9 shadow-xs"
+          >
+            <FileSpreadsheet className="h-4 w-4 mr-1.5" />
+            Importar Extrato
+          </Button>
+          <PortfolioExportButton policies={tablePolicies} />
+        </div>
       </div>
+
+      {/* PAINEL CENTRAL DE ALERTAS DE INCONSISTÊNCIA E DUPLICIDADE */}
+      <AlertasCentral
+        modulo="FINANCEIRO"
+        onVerApolice={(polId) => navigate(`/policies/${polId}`)}
+      />
 
       {/* 5 BLOCOS OPERACIONAIS REORGANIZADOS COM TODOS OS CARDS CLICÁVEIS */}
       <FinancialSummaryCards
@@ -2445,6 +2464,16 @@ export default function Financial() {
           loadData()
         }}
       />
+      {/* MODAL DE IMPORTAÇÃO DE EXTRATOS */}
+      <ImportarExtratoModal
+        open={isImportarExtratoOpen}
+        onOpenChange={setIsImportarExtratoOpen}
+        onSuccess={() => {
+          loadData()
+          loadPrevisoesServerSide()
+        }}
+      />
+
       {/* Modal para Gerenciar/Ver/Editar Recebimentos no Financeiro */}
       <Dialog open={!!historyPolicy} onOpenChange={(open) => !open && setHistoryPolicy(null)}>
         <DialogContent className="sm:max-w-2xl max-h-[85vh] overflow-y-auto">

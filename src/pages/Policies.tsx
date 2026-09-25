@@ -1,6 +1,20 @@
 import { useEffect, useState, useCallback, useMemo } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { Search, Plus, Download, Car, Pencil, RefreshCw, Trash2, X, Ban, User } from 'lucide-react'
+import {
+  Search,
+  Plus,
+  Download,
+  Car,
+  Pencil,
+  RefreshCw,
+  Trash2,
+  X,
+  Ban,
+  User,
+  FileText,
+} from 'lucide-react'
+import { ImportarPropostaPdfModal } from '@/components/ImportarPropostaPdfModal'
+import { PropostaImportadaConferida } from '@/services/importacao/proposta-service'
 import { useDebounce } from '@/hooks/use-debounce'
 import {
   getPolicies,
@@ -54,6 +68,9 @@ export default function Policies() {
   const [search, setSearch] = useState('')
   const [placaSearch, setPlacaSearch] = useState('')
   const [statusFilter, setStatusFilter] = useState('ALL')
+  const [isImportarPropostaOpen, setIsImportarPropostaOpen] = useState(false)
+  const [propostaImportadaPendente, setPropostaImportadaPendente] =
+    useState<Partial<Policy> | null>(null)
   const [periodStart, setPeriodStart] = useState('')
   const [periodEnd, setPeriodEnd] = useState('')
   const [totalActiveCount, setTotalActiveCount] = useState(0)
@@ -290,7 +307,7 @@ export default function Policies() {
       ? selectedPolicy
       : dialogMode === 'renew' && selectedPolicy
         ? prepareRenewalData(selectedPolicy, selectedEndorsements)
-        : undefined
+        : propostaImportadaPendente || undefined
 
   const dialogTitle =
     dialogMode === 'edit'
@@ -319,9 +336,19 @@ export default function Policies() {
           </Button>
           {can('policies', 'create') && (
             <Button
+              variant="outline"
+              className="text-blue-600 border-blue-200 hover:bg-blue-50"
+              onClick={() => setIsImportarPropostaOpen(true)}
+            >
+              <FileText className="w-4 h-4 mr-2" /> Importar Proposta (PDF)
+            </Button>
+          )}
+          {can('policies', 'create') && (
+            <Button
               className="bg-blue-600 hover:bg-blue-700"
               onClick={() => {
                 setSelectedPolicy(null)
+                setPropostaImportadaPendente(null)
                 setFieldErrors({})
                 setDialogMode('create')
               }}
@@ -622,10 +649,50 @@ export default function Policies() {
         </div>
       )}
 
+      <ImportarPropostaPdfModal
+        open={isImportarPropostaOpen}
+        onOpenChange={setIsImportarPropostaOpen}
+        seguradoras={seguradoras}
+        onPropostaImportada={(conferida: PropostaImportadaConferida) => {
+          const p = conferida.proposta
+          const clientId = conferida.clienteExistente?.id || ''
+          let notasCondutor = ''
+          if (!p.condutorPrincipal.mesmoQueSegurado && p.condutorPrincipal.nome) {
+            notasCondutor = `Condutor Principal: ${p.condutorPrincipal.nome} (CPF: ${p.condutorPrincipal.cpf || 'Não informado'})`
+          }
+
+          setPropostaImportadaPendente({
+            client: clientId,
+            seguradora: conferida.seguradoraIdCorrespondente || '',
+            numero_proposta: p.numeroProposta || '',
+            policy_number: '',
+            tipo_de_seguro: p.tipoSeguro || 'Auto',
+            placa: p.veiculo.placa || '',
+            chassi: p.veiculo.chassi || '',
+            modelo_veiculo: p.veiculo.marcaModelo || '',
+            valor_bruto: p.premioTotal || 0,
+            valor_liquido: p.premioLiquido || 0,
+            forma_pagamento: p.formaPagamento || '',
+            parcelas: p.quantidadeParcelas ? String(p.quantidadeParcelas) : '',
+            start_date: p.vigenciaInicio || '',
+            end_date: p.vigenciaFim || '',
+            previous_policy: conferida.renovacaoPolicyCorrespondente?.id || '',
+            notes: notasCondutor,
+          })
+
+          setSelectedPolicy(null)
+          setFieldErrors({})
+          setDialogMode('create')
+        }}
+      />
+
       <PolicyFormDialog
         open={dialogMode !== null}
         onOpenChange={(open) => {
-          if (!open) closeDialog()
+          if (!open) {
+            closeDialog()
+            setPropostaImportadaPendente(null)
+          }
         }}
         onSubmit={handleSubmit}
         clients={clients}
