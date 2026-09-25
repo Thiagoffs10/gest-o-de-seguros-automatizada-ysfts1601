@@ -24,6 +24,9 @@ import {
   Info,
   Check,
   ShieldCheck,
+  Archive,
+  ArrowUpDown,
+  History,
 } from 'lucide-react'
 import { useToast } from '@/hooks/use-toast'
 import { parseXlsxBuffer, parseCsvText } from '@/services/importacao/spreadsheet-reader'
@@ -34,6 +37,11 @@ import {
   ReconciliacaoExtratoLote,
   LinhaConferida,
 } from '@/services/importacao/extrato-service'
+import {
+  registrarRecebimentoLegado,
+  registrarLinhasComoLegadoEmLote,
+  RecebimentoLegado,
+} from '@/services/importacao/recebimentos-legados'
 import { formatCurrency, formatBRDate } from '@/lib/utils'
 
 interface ImportarExtratoModalProps {
@@ -54,18 +62,33 @@ export const ImportarExtratoModal: React.FC<ImportarExtratoModalProps> = ({
   const [carregando, setCarregando] = useState(false)
   const [loteReconciliado, setLoteReconciliado] = useState<ReconciliacaoExtratoLote | null>(null)
   const [activeTab, setActiveTab] = useState<
-    'aprovados' | 'divergentes' | 'semPrevisao' | 'outros'
+    'aprovados' | 'divergentes' | 'semPrevisao' | 'legadosResolvidos' | 'outros'
   >('aprovados')
   const [executandoBaixa, setExecutandoBaixa] = useState(false)
+  const [processandoLegado, setProcessandoLegado] = useState(false)
 
-  // Seleções do usuário para baixa
+  // Seleções do usuário para baixa (Aprovados e Divergentes)
   const [selecoes, setSelecoes] = useState<Record<string, boolean>>({})
+
+  // Seleções específicas para a fila Sem Previsão (para registrar como legado em lote)
+  const [selecoesSemPrevisao, setSelecoesSemPrevisao] = useState<Record<string, boolean>>({})
+
+  // Linhas resolvidas como legado durante a sessão atual
+  const [linhasResolvidasLegado, setLinhasResolvidasLegado] = useState<
+    Array<{ item: LinhaConferida; legado: RecebimentoLegado; dataHora: string }>
+  >([])
+
+  // ID do lote criado na sessão para vínculo das resoluções
+  const [lotePersistidoId, setLotePersistidoId] = useState<string | null>(null)
 
   const resetState = () => {
     setArquivo(null)
     setCarregando(false)
     setLoteReconciliado(null)
     setSelecoes({})
+    setSelecoesSemPrevisao({})
+    setLinhasResolvidasLegado([])
+    setLotePersistidoId(null)
     setActiveTab('aprovados')
     if (fileInputRef.current) fileInputRef.current.value = ''
   }
@@ -140,14 +163,171 @@ export const ImportarExtratoModal: React.FC<ImportarExtratoModalProps> = ({
     })
   }
 
+  const toggleSelecaoSemPrevisao = (linhaId: string) => {
+    setSelecoesSemPrevisao((prev) => ({
+      ...prev,
+      [linhaId]: !prev[linhaId],
+    }))
+  }
+
+  const selecionarTodosSemPrevisao = (linhas: LinhaConferida[], valor: boolean) => {
+    setSelecoesSemPrevisao((prev) => {
+      const next = { ...prev }
+      for (const l of linhas) {
+        next[l.linha.id] = valor
+      }
+      return next
+    })
+  }
+
+  // Ordenação decrescente por valor líquido (maior primeiro para resolver os grandes primeiro)
+  const getSemPrevisaoOrdenado = (): LinhaConferida[] => {
+    if (!loteReconciliado) return []
+    return [...loteReconciliado.filas.semPrevisao].sort(
+      (a, b) => (b.linha.liquidoPago || 0) - (a.linha.liquidoPago || 0),
+    )
+  }
+
+  const handleRegistrarLinhaComoLegado = async (item: LinhaConferida) => {
+    if (!loteReconciliado) return
+    setProcessandoLegado(true)
+    try {
+      const docRef =
+        item.linha.numeroExtrato || item.linha.numeroApolice || item.linha.numeroProposta || '-'
+      const rec = await registrarRecebimentoLegado({
+        seguradora_nome: item.linha.seguradoraNome || loteReconciliado.seguradoraNome,
+        data_credito: item.linha.dataCredito,
+        valor_liquido: item.linha.liquidoPago,
+        valor_bruto: item.linha.comissaoBruta,
+        impostos: item.linha.impostos,
+        numero_documento: item.linha.numeroExtrato || '',
+        numero_proposta: item.linha.numeroProposta || '',
+        numero_apolice: item.linha.numeroApolice || '',
+        parcela: item.linha.parcela || 1,
+        segurado_nome: item.linha.seguradoNome || '',
+        observacao: `[Registrado como Legado] Doc: ${docRef} | Seguradora: ${loteReconciliado.seguradoraNome}`,
+        idempotency_hash: item.idempotencyHash,
+        lote_id: lotePersistidoId || '',
+        lote_nome: loteReconciliado.arquivoNome,
+      })
+
+      // Remover da fila semPrevisao e mover para linhasResolvidasLegado
+      setLoteReconciliado((prev) => {
+        if (!prev) return null
+        return {
+          ...prev,
+          filas: {
+            ...prev.filas,
+            semPrevisao: prev.filas.semPrevisao.filter((i) => i.linha.id !== item.linha.id),
+          },
+        }
+      })
+
+      setLinhasResolvidasLegado((prev) => [
+        { item, legado: rec, dataHora: new Date().toLocaleTimeString('pt-BR') },
+        ...prev,
+      ])
+
+      setSelecoesSemPrevisao((prev) => {
+        const next = { ...prev }
+        delete next[item.linha.id]
+        return next
+      })
+
+      toast({
+        title: 'Registrado como legado!',
+        description: `${formatCurrency(item.linha.liquidoPago)} gravado na contabilidade sem vínculo a apólice.`,
+      })
+      onSuccess?.()
+    } catch (err: any) {
+      toast({
+        title: 'Erro ao registrar como legado',
+        description: err.message || 'Falha ao gravar lançamento legado.',
+        variant: 'destructive',
+      })
+    } finally {
+      setProcessandoLegado(false)
+    }
+  }
+
+  const handleRegistrarLoteComoLegado = async () => {
+    if (!loteReconciliado) return
+    const semPrevList = getSemPrevisaoOrdenado()
+    const selecionados = semPrevList.filter((item) => selecoesSemPrevisao[item.linha.id])
+    if (selecionados.length === 0) return
+
+    setProcessandoLegado(true)
+    try {
+      const res = await registrarLinhasComoLegadoEmLote(selecionados, {
+        loteId: lotePersistidoId || undefined,
+        loteNome: loteReconciliado.arquivoNome,
+        seguradoraNome: loteReconciliado.seguradoraNome,
+      })
+
+      const idsSucesso = new Set(
+        selecionados
+          .filter((s) => !res.falhas.some((f) => f.linhaId === s.linha.id))
+          .map((s) => s.linha.id),
+      )
+
+      // Remover da fila os que tiveram sucesso
+      setLoteReconciliado((prev) => {
+        if (!prev) return null
+        return {
+          ...prev,
+          filas: {
+            ...prev.filas,
+            semPrevisao: prev.filas.semPrevisao.filter((i) => !idsSucesso.has(i.linha.id)),
+          },
+        }
+      })
+
+      const novosResolvidos = selecionados
+        .filter((s) => idsSucesso.has(s.linha.id))
+        .map((s, idx) => ({
+          item: s,
+          legado: res.registros[idx] || ({} as RecebimentoLegado),
+          dataHora: new Date().toLocaleTimeString('pt-BR'),
+        }))
+
+      setLinhasResolvidasLegado((prev) => [...novosResolvidos, ...prev])
+
+      setSelecoesSemPrevisao((prev) => {
+        const next = { ...prev }
+        for (const id of idsSucesso) {
+          delete next[id]
+        }
+        return next
+      })
+
+      toast({
+        title: 'Lote registrado como legado!',
+        description: `${res.sucessos} recebimentos gravados (${formatCurrency(res.totalValor)}).`,
+      })
+
+      if (res.falhas.length > 0) {
+        toast({
+          title: 'Algumas linhas falharam',
+          description: `${res.falhas.length} lançamentos não puderam ser gravados.`,
+          variant: 'destructive',
+        })
+      }
+      onSuccess?.()
+    } catch (err: any) {
+      toast({
+        title: 'Erro ao registrar lote',
+        description: err.message || 'Falha ao processar registros legados.',
+        variant: 'destructive',
+      })
+    } finally {
+      setProcessandoLegado(false)
+    }
+  }
+
   // Contagem de itens selecionados para a baixa
   const getLinhasSelecionadas = (): LinhaConferida[] => {
     if (!loteReconciliado) return []
-    const all = [
-      ...loteReconciliado.filas.aprovados,
-      ...loteReconciliado.filas.divergentes,
-      ...loteReconciliado.filas.semPrevisao,
-    ]
+    const all = [...loteReconciliado.filas.aprovados, ...loteReconciliado.filas.divergentes]
     return all.filter((item) => selecoes[item.linha.id] && item.policyCorrespondente)
   }
 
@@ -320,22 +500,26 @@ export const ImportarExtratoModal: React.FC<ImportarExtratoModalProps> = ({
               onValueChange={(v: any) => setActiveTab(v)}
               className="flex-1 flex flex-col min-h-0"
             >
-              <TabsList className="grid grid-cols-4 h-9">
+              <TabsList className="grid grid-cols-5 h-9">
                 <TabsTrigger value="aprovados" className="text-xs">
-                  <CheckCircle2 className="h-3.5 w-3.5 text-emerald-600 mr-1.5" />
-                  Casamento Exato ({loteReconciliado.filas.aprovados.length})
+                  <CheckCircle2 className="h-3.5 w-3.5 text-emerald-600 mr-1" />
+                  Casamento ({loteReconciliado.filas.aprovados.length})
                 </TabsTrigger>
                 <TabsTrigger value="divergentes" className="text-xs">
-                  <AlertTriangle className="h-3.5 w-3.5 text-amber-500 mr-1.5" />
+                  <AlertTriangle className="h-3.5 w-3.5 text-amber-500 mr-1" />
                   Divergentes ({loteReconciliado.filas.divergentes.length})
                 </TabsTrigger>
                 <TabsTrigger value="semPrevisao" className="text-xs">
-                  <HelpCircle className="h-3.5 w-3.5 text-rose-500 mr-1.5" />
+                  <HelpCircle className="h-3.5 w-3.5 text-rose-500 mr-1" />
                   Sem Previsão ({loteReconciliado.filas.semPrevisao.length})
                 </TabsTrigger>
+                <TabsTrigger value="legadosResolvidos" className="text-xs">
+                  <Archive className="h-3.5 w-3.5 text-indigo-500 mr-1" />
+                  Legados ({linhasResolvidasLegado.length})
+                </TabsTrigger>
                 <TabsTrigger value="outros" className="text-xs">
-                  <FileX className="h-3.5 w-3.5 text-slate-400 mr-1.5" />
-                  Já Baixados / Info (
+                  <FileX className="h-3.5 w-3.5 text-slate-400 mr-1" />
+                  Outros (
                   {loteReconciliado.filas.jaBaixados.length +
                     loteReconciliado.filas.ignorados.length}
                   )
@@ -483,51 +667,299 @@ export const ImportarExtratoModal: React.FC<ImportarExtratoModalProps> = ({
                 )}
               </TabsContent>
 
-              {/* Aba 3: Sem Previsão */}
+              {/* Aba 3: Sem Previsão (Tornada 100% visível, ordenada por maior valor primeiro, com ação rápida de Registrar como Legado) */}
               <TabsContent
                 value="semPrevisao"
                 className="flex-1 overflow-y-auto mt-2 min-h-0 pr-1 space-y-2"
               >
-                <div className="p-2 text-xs bg-rose-50 dark:bg-rose-950/20 text-rose-800 dark:text-rose-200 rounded-md border border-rose-200">
-                  <Info className="h-3.5 w-3.5 inline mr-1" />
-                  Estes lançamentos não possuem contrato cadastrado correspondente. Você pode
-                  cadastrar a apólice depois ou ignorar com registro.
+                <div className="p-2.5 text-xs bg-rose-50 dark:bg-rose-950/20 text-rose-900 dark:text-rose-200 rounded-md border border-rose-200 flex flex-col gap-1.5">
+                  <div className="flex items-center gap-1.5 font-medium">
+                    <Info className="h-4 w-4 text-rose-600 shrink-0" />
+                    <span>
+                      Estes lançamentos constam no extrato bancário pago, mas sem apólice ativa no
+                      sistema.
+                    </span>
+                  </div>
+                  <div className="text-[11px] text-rose-700 dark:text-rose-300 pl-5">
+                    <strong>Decisão de produto:</strong> em vez de cadastrar apólices antigas do
+                    passado, registre como <strong>LEGADO</strong> com 1 clique (individual ou em
+                    lote). O dinheiro entra no caixa contábil sem vínculo com apólices, e a linha
+                    sai da fila de pendências.
+                  </div>
                 </div>
-                {loteReconciliado.filas.semPrevisao.length === 0 ? (
+
+                {getSemPrevisaoOrdenado().length > 0 && (
+                  <div className="flex flex-wrap items-center justify-between gap-2 p-2 bg-slate-50 dark:bg-slate-900/60 rounded-lg border text-xs">
+                    <div className="flex items-center gap-2">
+                      <Checkbox
+                        id="chk-sem-prev-all"
+                        checked={
+                          getSemPrevisaoOrdenado().length > 0 &&
+                          getSemPrevisaoOrdenado().every((i) => selecoesSemPrevisao[i.linha.id])
+                        }
+                        onCheckedChange={(c) =>
+                          selecionarTodosSemPrevisao(getSemPrevisaoOrdenado(), Boolean(c))
+                        }
+                      />
+                      <label
+                        htmlFor="chk-sem-prev-all"
+                        className="cursor-pointer font-medium text-slate-700 dark:text-slate-300"
+                      >
+                        Selecionar todos ({getSemPrevisaoOrdenado().length})
+                      </label>
+                      <span className="text-slate-400 text-[11px] flex items-center gap-1">
+                        <ArrowUpDown className="h-3 w-3" /> Ordenados do maior valor para o menor
+                      </span>
+                    </div>
+
+                    <div className="flex items-center gap-2">
+                      {Object.values(selecoesSemPrevisao).filter(Boolean).length > 0 && (
+                        <Button
+                          size="sm"
+                          variant="secondary"
+                          className="h-7 text-xs bg-indigo-100 hover:bg-indigo-200 text-indigo-800 dark:bg-indigo-950 dark:text-indigo-200 dark:hover:bg-indigo-900"
+                          disabled={processandoLegado}
+                          onClick={handleRegistrarLoteComoLegado}
+                        >
+                          {processandoLegado ? (
+                            <Loader2 className="h-3 w-3 animate-spin mr-1" />
+                          ) : (
+                            <Archive className="h-3 w-3 mr-1" />
+                          )}
+                          Registrar selecionados como Legado (
+                          {Object.values(selecoesSemPrevisao).filter(Boolean).length})
+                        </Button>
+                      )}
+                      <span className="text-slate-600 dark:text-slate-400 font-semibold">
+                        Total sem previsão:{' '}
+                        {formatCurrency(
+                          getSemPrevisaoOrdenado().reduce(
+                            (acc, it) => acc + (it.linha.liquidoPago || 0),
+                            0,
+                          ),
+                        )}
+                      </span>
+                    </div>
+                  </div>
+                )}
+
+                {getSemPrevisaoOrdenado().length === 0 ? (
                   <div className="p-8 text-center text-slate-500 text-xs">
-                    Todas as linhas do extrato possuem contratos correspondentes.
+                    {linhasResolvidasLegado.length > 0 ? (
+                      <div className="flex flex-col items-center gap-2 text-emerald-600 dark:text-emerald-400">
+                        <CheckCircle2 className="h-8 w-8 text-emerald-500" />
+                        <span className="font-medium">
+                          Todas as linhas sem previsão deste extrato foram resolvidas e registradas
+                          como legado!
+                        </span>
+                        <Button
+                          variant="link"
+                          size="sm"
+                          className="text-xs text-indigo-600 underline"
+                          onClick={() => setActiveTab('legadosResolvidos')}
+                        >
+                          Ver {linhasResolvidasLegado.length} registros arquivados na aba Legados
+                        </Button>
+                      </div>
+                    ) : (
+                      'Nenhum lançamento sem previsão neste extrato.'
+                    )}
                   </div>
                 ) : (
-                  loteReconciliado.filas.semPrevisao.map((item) => (
-                    <div
-                      key={item.linha.id}
-                      className="p-3 rounded-lg border bg-white dark:bg-slate-900 flex items-center justify-between gap-3 text-xs"
-                    >
-                      <div>
-                        <div className="font-semibold text-slate-800 dark:text-slate-200">
-                          {item.linha.seguradoNome || 'Segurado não identificado'}
+                  getSemPrevisaoOrdenado().map((item, index) => {
+                    const l = item.linha
+                    const docExibicao =
+                      l.numeroExtrato || l.numeroApolice || l.numeroProposta || '-'
+                    const seguradoraExibicao = l.seguradoraNome || loteReconciliado.seguradoraNome
+
+                    return (
+                      <div
+                        key={item.linha.id}
+                        className="p-3 rounded-lg border bg-white dark:bg-slate-900 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 text-xs hover:border-indigo-300 transition-colors"
+                      >
+                        <div className="flex items-start gap-3 flex-1 min-w-0">
+                          <Checkbox
+                            checked={Boolean(selecoesSemPrevisao[item.linha.id])}
+                            onCheckedChange={() => toggleSelecaoSemPrevisao(item.linha.id)}
+                            className="mt-0.5"
+                          />
+                          <div className="flex-1 min-w-0">
+                            <div className="flex items-center gap-2 flex-wrap">
+                              <span className="text-[10px] font-bold px-1.5 py-0.5 rounded bg-slate-100 dark:bg-slate-800 text-slate-600">
+                                #{index + 1}
+                              </span>
+                              <span className="font-semibold text-slate-800 dark:text-slate-200 truncate">
+                                {l.seguradoNome || 'Segurado não identificado'}
+                              </span>
+                              <Badge
+                                variant="outline"
+                                className="text-[10px] text-rose-600 border-rose-300"
+                              >
+                                ❌ Sem previsão
+                              </Badge>
+                            </div>
+
+                            {/* Detalhes completos lidos do extrato */}
+                            <div className="grid grid-cols-2 sm:grid-cols-4 gap-x-3 gap-y-1 mt-2 text-[11px] text-slate-600 dark:text-slate-400 bg-slate-50/70 dark:bg-slate-800/40 p-2 rounded">
+                              <div>
+                                <span className="text-slate-400 block text-[10px]">
+                                  Seguradora:
+                                </span>
+                                <span className="font-medium text-slate-700 dark:text-slate-300">
+                                  {seguradoraExibicao}
+                                </span>
+                              </div>
+                              <div>
+                                <span className="text-slate-400 block text-[10px]">
+                                  Nº Proposta / Apólice:
+                                </span>
+                                <span className="font-medium text-slate-700 dark:text-slate-300">
+                                  {docExibicao}
+                                </span>
+                              </div>
+                              <div>
+                                <span className="text-slate-400 block text-[10px]">Parcela:</span>
+                                <span className="font-medium text-slate-700 dark:text-slate-300">
+                                  {l.parcela || 1}
+                                </span>
+                              </div>
+                              <div>
+                                <span className="text-slate-400 block text-[10px]">
+                                  Data Crédito:
+                                </span>
+                                <span className="font-medium text-slate-700 dark:text-slate-300">
+                                  {formatBRDate(l.dataCredito)}
+                                </span>
+                              </div>
+                            </div>
+
+                            {/* Linha adicional com valores brutos e motivo */}
+                            <div className="flex items-center gap-3 mt-1.5 text-[10px] text-slate-400">
+                              <span>Bruto: {formatCurrency(l.comissaoBruta || l.liquidoPago)}</span>
+                              {Boolean(l.impostos) && (
+                                <span>Impostos: {formatCurrency(l.impostos)}</span>
+                              )}
+                              <span>•</span>
+                              <span className="text-rose-500">{item.motivoFila}</span>
+                            </div>
+                          </div>
                         </div>
-                        <div className="text-rose-600 dark:text-rose-400 text-[11px] mt-0.5">
-                          {item.motivoFila}
-                        </div>
-                        <div className="text-slate-500 text-[11px] mt-0.5">
-                          Extrato: {item.linha.numeroExtrato} | Data:{' '}
-                          {formatBRDate(item.linha.dataCredito)}
+
+                        {/* Valor e Ação rápida de resolução */}
+                        <div className="flex sm:flex-col items-center sm:items-end justify-between w-full sm:w-auto pt-2 sm:pt-0 border-t sm:border-t-0 gap-2 shrink-0">
+                          <div className="text-left sm:text-right">
+                            <div className="text-[10px] text-slate-400 sm:hidden">
+                              Líquido pago:
+                            </div>
+                            <div className="font-bold text-slate-900 dark:text-slate-100 text-base">
+                              {formatCurrency(l.liquidoPago)}
+                            </div>
+                          </div>
+
+                          <Button
+                            size="sm"
+                            variant="outline"
+                            className="h-7 text-xs bg-indigo-50 hover:bg-indigo-100 border-indigo-200 text-indigo-700 dark:bg-indigo-950/50 dark:hover:bg-indigo-900/60 dark:border-indigo-800 dark:text-indigo-300 flex items-center gap-1"
+                            disabled={processandoLegado}
+                            onClick={() => handleRegistrarLinhaComoLegado(item)}
+                            title="Lança contabilmente o valor recebido sem vínculo a nenhuma apólice"
+                          >
+                            <Archive className="h-3 w-3" />
+                            Registrar como legado
+                          </Button>
                         </div>
                       </div>
-                      <div className="text-right">
-                        <div className="font-bold text-slate-800 dark:text-slate-200 text-sm">
-                          {formatCurrency(item.linha.liquidoPago)}
-                        </div>
-                        <Badge
-                          variant="outline"
-                          className="text-[10px] text-rose-600 border-rose-300"
-                        >
-                          Sem cadastro
-                        </Badge>
-                      </div>
+                    )
+                  })
+                )}
+              </TabsContent>
+
+              {/* Aba 4: Legados já resolvidos na sessão (Preservados para auditoria) */}
+              <TabsContent
+                value="legadosResolvidos"
+                className="flex-1 overflow-y-auto mt-2 min-h-0 pr-1 space-y-2"
+              >
+                <div className="p-2.5 text-xs bg-indigo-50 dark:bg-indigo-950/20 text-indigo-900 dark:text-indigo-200 rounded-md border border-indigo-200 flex items-start gap-2">
+                  <Archive className="h-4 w-4 text-indigo-600 shrink-0 mt-0.5" />
+                  <div>
+                    <div className="font-semibold">Lançamentos Contábeis de Legado</div>
+                    <div className="text-[11px] text-indigo-700 dark:text-indigo-300">
+                      Estes valores já foram contabilizados no caixa da corretora sem vínculo com
+                      apólices. Preservados para conferência e auditoria.
                     </div>
-                  ))
+                  </div>
+                </div>
+
+                {linhasResolvidasLegado.length === 0 ? (
+                  <div className="p-8 text-center text-slate-500 text-xs">
+                    Nenhum recebimento registrado como legado nesta sessão de importação.
+                  </div>
+                ) : (
+                  <>
+                    <div className="flex items-center justify-between text-xs px-2 py-1 bg-slate-50 dark:bg-slate-900 rounded border">
+                      <span className="font-medium text-slate-700 dark:text-slate-300 flex items-center gap-1">
+                        <History className="h-3.5 w-3.5 text-indigo-600" />
+                        {linhasResolvidasLegado.length} lançamento(s) arquivado(s) como legado
+                      </span>
+                      <span className="font-bold text-indigo-600 dark:text-indigo-400">
+                        Total legado:{' '}
+                        {formatCurrency(
+                          linhasResolvidasLegado.reduce(
+                            (acc, it) => acc + it.item.linha.liquidoPago,
+                            0,
+                          ),
+                        )}
+                      </span>
+                    </div>
+
+                    {linhasResolvidasLegado.map(({ item, legado, dataHora }) => (
+                      <div
+                        key={item.linha.id}
+                        className="p-3 rounded-lg border bg-white dark:bg-slate-900 flex items-center justify-between gap-3 text-xs border-indigo-200/70"
+                      >
+                        <div>
+                          <div className="flex items-center gap-2">
+                            <span className="font-semibold text-slate-800 dark:text-slate-200">
+                              {item.linha.seguradoNome ||
+                                legado.segurado_nome ||
+                                'Segurado do Extrato'}
+                            </span>
+                            <Badge
+                              variant="outline"
+                              className="text-[10px] text-indigo-600 border-indigo-300 bg-indigo-50 dark:bg-indigo-950"
+                            >
+                              ✓ Contabilizado como Legado
+                            </Badge>
+                          </div>
+                          <div className="text-slate-500 text-[11px] flex items-center gap-2 mt-1">
+                            <span>
+                              Seguradora:{' '}
+                              {item.linha.seguradoraNome || loteReconciliado.seguradoraNome}
+                            </span>
+                            <span>•</span>
+                            <span>
+                              Doc: {item.linha.numeroExtrato || item.linha.numeroApolice || '-'}
+                            </span>
+                            <span>•</span>
+                            <span>Crédito: {formatBRDate(item.linha.dataCredito)}</span>
+                            <span>•</span>
+                            <span className="text-slate-400 text-[10px]">
+                              Registrado às {dataHora}
+                            </span>
+                          </div>
+                        </div>
+
+                        <div className="text-right">
+                          <div className="font-bold text-indigo-600 dark:text-indigo-400 text-sm">
+                            {formatCurrency(item.linha.liquidoPago)}
+                          </div>
+                          <span className="text-[10px] text-slate-400">
+                            Sem vínculo com apólice
+                          </span>
+                        </div>
+                      </div>
+                    ))}
+                  </>
                 )}
               </TabsContent>
 

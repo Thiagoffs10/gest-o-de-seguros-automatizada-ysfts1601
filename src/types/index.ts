@@ -487,6 +487,28 @@ export interface ParceiroPagamento {
   }
 }
 
+export interface RecebimentoLegado {
+  id: string
+  seguradora_nome: string
+  data_credito: string
+  valor_liquido: number
+  valor_bruto?: number
+  impostos?: number
+  numero_documento?: string
+  numero_proposta?: string
+  numero_apolice?: string
+  parcela?: number
+  segurado_nome?: string
+  observacao?: string
+  idempotency_hash?: string
+  lote_id?: string
+  lote_nome?: string
+  usuario_id?: string
+  usuario_nome?: string
+  created?: string
+  updated?: string
+}
+
 export interface FilterState {
   year?: string
   month?: string

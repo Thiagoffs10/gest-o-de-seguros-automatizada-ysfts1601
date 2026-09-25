@@ -89,11 +89,15 @@ export async function reconciliarExtratoComBanco(
   parseResult: ExtratoParseResult,
   nomeArquivo: string,
 ): Promise<ReconciliacaoExtratoLote> {
-  // 1. Carregar apólices, previsões e recebimentos para conferência em memória
-  const [policies, previsoes, recebimentos] = await Promise.all([
+  // 1. Carregar apólices, previsões, recebimentos e recebimentos legados para conferência em memória
+  const [policies, previsoes, recebimentos, legados] = await Promise.all([
     pb.collection('policies').getFullList<Policy>({ expand: 'client,seguradora' }),
     pb.collection('comissoes_previstas').getFullList<ComissaoPrevista>({ expand: 'policy' }),
     pb.collection('comissao_recebimentos').getFullList<ComissaoRecebimento>(),
+    pb
+      .collection('recebimentos_legados')
+      .getFullList<any>()
+      .catch(() => []),
   ])
 
   // Mapas para busca rápida
@@ -121,6 +125,12 @@ export async function reconciliarExtratoComBanco(
     }
     const valKey = `${r.policy}_${r.parcela || 1}_${r.data_recebimento?.substring(0, 10)}_${Math.round(r.valor_bruto * 100)}`
     recebimentosJaBaixadosSet.add(valKey)
+  }
+  // Adicionar idempotency_hash dos recebimentos legados já gravados
+  for (const leg of legados) {
+    if (leg.idempotency_hash) {
+      recebimentosJaBaixadosSet.add(leg.idempotency_hash)
+    }
   }
 
   const aprovados: LinhaConferida[] = []

@@ -1,5 +1,5 @@
 {
-  "generatedAt": "2026-09-25T15:59:20.263Z",
+  "generatedAt": "2026-09-25T16:34:58.044Z",
   "collections": [
     {
       "name": "users",
@@ -2377,6 +2377,134 @@
         "CREATE INDEX idx_sistema_alertas_resolvido ON sistema_alertas (resolvido, created DESC)",
         "CREATE INDEX idx_sistema_alertas_modulo ON sistema_alertas (modulo)",
         "CREATE INDEX idx_sistema_alertas_tipo ON sistema_alertas (tipo)"
+      ]
+    },
+    {
+      "name": "recebimentos_legados",
+      "type": "base",
+      "apiRules": {
+        "list": "@request.auth.id != ''",
+        "view": "@request.auth.id != ''",
+        "create": "@request.auth.id != ''",
+        "update": "@request.auth.id != ''",
+        "delete": "@request.auth.id != ''"
+      },
+      "fields": [
+        {
+          "name": "seguradora_nome",
+          "type": "text",
+          "required": true,
+          "system": false
+        },
+        {
+          "name": "data_credito",
+          "type": "date",
+          "required": true,
+          "system": false
+        },
+        {
+          "name": "valor_liquido",
+          "type": "number",
+          "required": true,
+          "system": false
+        },
+        {
+          "name": "valor_bruto",
+          "type": "number",
+          "required": false,
+          "system": false
+        },
+        {
+          "name": "impostos",
+          "type": "number",
+          "required": false,
+          "system": false
+        },
+        {
+          "name": "numero_documento",
+          "type": "text",
+          "required": false,
+          "system": false
+        },
+        {
+          "name": "numero_proposta",
+          "type": "text",
+          "required": false,
+          "system": false
+        },
+        {
+          "name": "numero_apolice",
+          "type": "text",
+          "required": false,
+          "system": false
+        },
+        {
+          "name": "parcela",
+          "type": "number",
+          "required": false,
+          "system": false
+        },
+        {
+          "name": "segurado_nome",
+          "type": "text",
+          "required": false,
+          "system": false
+        },
+        {
+          "name": "observacao",
+          "type": "text",
+          "required": false,
+          "system": false
+        },
+        {
+          "name": "idempotency_hash",
+          "type": "text",
+          "required": false,
+          "system": false
+        },
+        {
+          "name": "lote_id",
+          "type": "text",
+          "required": false,
+          "system": false
+        },
+        {
+          "name": "lote_nome",
+          "type": "text",
+          "required": false,
+          "system": false
+        },
+        {
+          "name": "usuario_id",
+          "type": "text",
+          "required": false,
+          "system": false
+        },
+        {
+          "name": "usuario_nome",
+          "type": "text",
+          "required": false,
+          "system": false
+        },
+        {
+          "name": "created",
+          "type": "autodate",
+          "required": false,
+          "system": false,
+          "autodateTriggers": ["onCreate"]
+        },
+        {
+          "name": "updated",
+          "type": "autodate",
+          "required": false,
+          "system": false,
+          "autodateTriggers": ["onCreate", "onUpdate"]
+        }
+      ],
+      "indexes": [
+        "CREATE INDEX idx_rec_legados_data ON recebimentos_legados (data_credito)",
+        "CREATE INDEX idx_rec_legados_seguradora ON recebimentos_legados (seguradora_nome)",
+        "CREATE UNIQUE INDEX idx_rec_legados_hash ON recebimentos_legados (idempotency_hash) WHERE idempotency_hash != \"\""
       ]
     }
   ]
