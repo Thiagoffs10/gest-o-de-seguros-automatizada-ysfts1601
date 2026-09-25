@@ -63,7 +63,7 @@ routerAdd('POST', '/backend/v1/auth/request-password-reset', (e) => {
   var rawSender =
     $secrets.get('VERIFIED_FROM_EMAIL') ||
     $secrets.get('SENDER_EMAIL') ||
-    'noreply@cred10mix.com.br'
+    'contato@cred10mix.com.br'
   var verifiedSender = 'CRED10MIX <' + rawSender.replace(/<|>/g, '').trim() + '>'
 
   if (apiKey) {

@@ -41,9 +41,9 @@ const STEPS = [
   },
   {
     icon: Mail,
-    title: 'Remetente padrão (CRED10MIX <noreply@cred10mix.com.br>)',
+    title: 'Remetente padrão (CRED10MIX <campanhas@cred10mix.com.br>)',
     description:
-      'Com o domínio cred10mix.com.br verificado no Resend, todos os e-mails são disparados através do remetente amigável oficial CRED10MIX <noreply@cred10mix.com.br> para máxima entregabilidade.',
+      'Com o domínio cred10mix.com.br verificado no Resend, todos os e-mails são disparados através do remetente amigável oficial CRED10MIX <campanhas@cred10mix.com.br> para máxima entregabilidade.',
   },
   {
     icon: Save,
@@ -149,7 +149,7 @@ export function SecretsGuideDialog({ trigger }: SecretsGuideDialogProps) {
                 <p className="text-xs text-emerald-800">
                   <strong>Value:</strong>{' '}
                   <code className="bg-emerald-100 px-1.5 py-0.5 rounded font-mono text-emerald-900">
-                    noreply@cred10mix.com.br
+                    campanhas@cred10mix.com.br
                   </code>
                 </p>
                 <p className="text-xs text-emerald-700 pt-1">

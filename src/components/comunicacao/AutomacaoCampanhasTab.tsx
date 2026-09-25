@@ -46,7 +46,9 @@ interface Props {
 
 export function AutomacaoCampanhasTab({ campaigns, queue, logs, onRefresh }: Props) {
   const { toast } = useToast()
-  const [subTab, setSubTab] = useState<'fila' | 'campanhas' | 'banco' | 'historico'>('fila')
+  const [subTab, setSubTab] = useState<
+    'fila' | 'campanhas' | 'banco' | 'historico' | 'programacao'
+  >('fila')
   const [preparing, setPreparing] = useState(false)
   const [dispatching, setDispatching] = useState(false)
   const [approvingAll, setApprovingAll] = useState(false)
@@ -407,6 +409,19 @@ export function AutomacaoCampanhasTab({ campaigns, queue, logs, onRefresh }: Pro
         >
           <CheckCircle className="w-3.5 h-3.5" />
           Histórico e Registro ({logs.length})
+        </button>
+
+        <button
+          type="button"
+          onClick={() => setSubTab('programacao')}
+          className={`px-4 py-2 text-xs font-semibold border-b-2 transition-colors flex items-center gap-1.5 ${
+            subTab === 'programacao'
+              ? 'border-blue-600 text-blue-600'
+              : 'border-transparent text-slate-500 hover:text-slate-800'
+          }`}
+        >
+          <Calendar className="w-3.5 h-3.5 text-blue-600" />
+          Como Funciona o Ciclo Automático
         </button>
       </div>
 
@@ -847,6 +862,96 @@ export function AutomacaoCampanhasTab({ campaigns, queue, logs, onRefresh }: Pro
             </div>
           </CardContent>
         </Card>
+      )}
+
+      {/* SUB-ABA 5: COMO FUNCIONA O CICLO AUTOMÁTICO */}
+      {subTab === 'programacao' && (
+        <div className="space-y-4">
+          <Card className="shadow-sm border">
+            <CardHeader className="pb-3">
+              <div className="flex items-center justify-between">
+                <CardTitle className="text-base font-bold text-slate-900 flex items-center gap-2">
+                  <Calendar className="w-5 h-5 text-blue-600" />
+                  Programação Contínua: Não precisa criar campanhas todo dia!
+                </CardTitle>
+                <Badge className="bg-emerald-600 text-white text-xs">
+                  Rotina Ativa (campaign_daily_pipeline)
+                </Badge>
+              </div>
+            </CardHeader>
+            <CardContent className="space-y-4 text-xs text-slate-700 leading-relaxed">
+              <div className="p-3 bg-blue-50/70 border border-blue-200 rounded-lg text-blue-900">
+                <p className="font-semibold text-sm">
+                  Como funciona o ciclo contínuo sem intervenção manual?
+                </p>
+                <p className="mt-1">
+                  As campanhas registradas (como a de{' '}
+                  <strong>Cross-sell Monoproduto Auto → Residencial</strong>) possuem um{' '}
+                  <strong>ciclo rotativo de passos</strong> e uma{' '}
+                  <strong>frequência definida</strong> (ex: a cada 20 ou 30 dias). Você{' '}
+                  <strong>NÃO precisa se preocupar em criar campanhas todo dia</strong>: o sistema
+                  cuida do ciclo sozinho.
+                </p>
+              </div>
+
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+                <div className="p-3 bg-slate-50 border rounded-lg space-y-1">
+                  <div className="flex items-center gap-1.5 text-blue-700 font-bold">
+                    <span>1.</span> Rotina Diária Automática
+                  </div>
+                  <p className="text-[11px] text-slate-600">
+                    Todos os dias às <strong>06:00 (horário de Brasília)</strong>, a rotina do
+                    backend analisa sua base inteira de clientes e apólices.
+                  </p>
+                </div>
+
+                <div className="p-3 bg-slate-50 border rounded-lg space-y-1">
+                  <div className="flex items-center gap-1.5 text-purple-700 font-bold">
+                    <span>2.</span> Agente IA Redige Personalizado
+                  </div>
+                  <p className="text-[11px] text-slate-600">
+                    O agente <strong>redator-campanhas</strong> redige cada e-mail com os dados do
+                    cliente, veículo segurado, oferta com 10% de desconto e WhatsApp do Thiago.
+                  </p>
+                </div>
+
+                <div className="p-3 bg-slate-50 border rounded-lg space-y-1">
+                  <div className="flex items-center gap-1.5 text-emerald-700 font-bold">
+                    <span>3.</span> Fila de Aprovação Segura
+                  </div>
+                  <p className="text-[11px] text-slate-600">
+                    Os e-mails entram na fila para você revisar e aprovar com 1 clique (individual
+                    ou &quot;Aprovar Todos&quot;), respeitando o teto de 100/dia e 3.000/mês.
+                  </p>
+                </div>
+              </div>
+
+              <div className="p-3 bg-slate-100/80 rounded-lg border space-y-2">
+                <p className="font-semibold text-slate-900">Configurações Técnicas Ativas:</p>
+                <ul className="list-disc pl-5 space-y-1 text-[11px] text-slate-600">
+                  <li>
+                    <strong>Remetente verificado:</strong> CRED10MIX
+                    &lt;campanhas@cred10mix.com.br&gt; (Domínio verificado cred10mix.com.br via
+                    Resend).
+                  </li>
+                  <li>
+                    <strong>Contato direto na campanha:</strong> WhatsApp 81 98865-3534 com Thiago
+                    Souza.
+                  </li>
+                  <li>
+                    <strong>Proteção anti-repetição:</strong> O sistema memoriza cada envio no
+                    histórico e nunca repete o mesmo passo para o mesmo cliente antes do intervalo
+                    da campanha.
+                  </li>
+                  <li>
+                    <strong>Fila de esgotamento:</strong> Se houver mais de 100 e-mails aprovados em
+                    um dia, os excedentes não são perdidos: vão em primeiro lugar no dia seguinte.
+                  </li>
+                </ul>
+              </div>
+            </CardContent>
+          </Card>
+        </div>
       )}
 
       {/* MODAL DE VISUALIZAÇÃO E APROVAÇÃO INDIVIDUAL */}

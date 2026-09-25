@@ -924,8 +924,9 @@ export default function RemindersPage() {
                       </p>
                     )}
                     <p className="text-[11px] text-amber-800 pt-1 border-t border-amber-200/60 mt-1">
-                      Remetente oficial: <strong>CRED10MIX &lt;noreply@cred10mix.com.br&gt;</strong>{' '}
-                      (com rodapé oficial e link do WhatsApp).
+                      Remetente oficial:{' '}
+                      <strong>CRED10MIX &lt;campanhas@cred10mix.com.br&gt;</strong> (com rodapé
+                      oficial e link do WhatsApp).
                     </p>
                   </div>
 

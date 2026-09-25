@@ -334,18 +334,20 @@ routerAdd(
         // Fallback robusto pré-escrito caso IA falhe ou não responda
         if (!finalSubject || !finalBody) {
           if (tipoMsg === 'oferta') {
-            finalSubject = clientFirstName + ', uma condição especial para proteger sua residência'
+            finalSubject =
+              clientFirstName +
+              ', garanta a proteção da sua residência com 10% de desconto exclusivo'
             finalBody =
               'Olá, ' +
               clientFirstName +
               '!\n\n' +
-              'Sabemos o quanto você preza pela proteção do seu ' +
+              'Sabemos o quanto você preza pela segurança do seu ' +
               (veiculoPrincipal ? 'veículo (' + veiculoPrincipal + ')' : 'patrimônio') +
               ' com a CRED10MIX.\n\n' +
-              'Você sabia que por uma fração do valor do seguro auto é possível blindar a sua casa ou apartamento contra danos elétricos, vazamentos, roubo e incêndio?\n\n' +
-              'Como cliente especial, preparamos uma condição com desconto exclusivo de cross-sell para a sua residência.\n\n' +
-              'Podemos lhe apresentar uma rápida simulação sem nenhum compromisso?\n\n' +
-              'Atenciosamente,\nEquipe CRED10MIX Corretora de Seguros'
+              'Que tal estender essa tranquilidade para a proteção da sua casa? O Seguro Residencial CRED10MIX protege o seu lar com coberturas completas contra incêndio, roubo/furto e assistências 24h emergenciais (chaveiro, eletricista, encanador e conserto de eletrodomésticos).\n\n' +
+              'Como você já é nosso cliente parceiro de seguro auto, você pode garantir a contratação agora com 10% de desconto especial exclusivo!\n\n' +
+              'Para aproveitar a condição e solicitar a sua cotação rápida, chame diretamente no WhatsApp 81 98865-3534 com Thiago.\n\n' +
+              'Atenciosamente,\nEquipe CRED10MIX Corretora de Seguros\nWhatsApp: 81 98865-3534 (Thiago)'
           } else {
             finalSubject = clientFirstName + ': ' + tema
             finalBody =

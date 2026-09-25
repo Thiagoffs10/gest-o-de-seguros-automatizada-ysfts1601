@@ -58,7 +58,7 @@ export function CampanhasTab({
   const [customBody, setCustomBody] = useState('')
   const [attachedImage, setAttachedImage] = useState<AttachedImage | null>(null)
   const [fromEmail, setFromEmail] = useState(
-    import.meta.env.VITE_SENDER_EMAIL || 'CRED10MIX <noreply@cred10mix.com.br>',
+    import.meta.env.VITE_SENDER_EMAIL || 'CRED10MIX <campanhas@cred10mix.com.br>',
   )
   const [selectedClientIds, setSelectedClientIds] = useState<string[]>([])
   // Armazena clientes desmarcados manualmente pelo usuário para preservar entre alterações de filtros
@@ -395,12 +395,13 @@ export function CampanhasTab({
               <Input
                 value={fromEmail}
                 onChange={(e) => setFromEmail(e.target.value)}
-                placeholder="CRED10MIX <noreply@cred10mix.com.br>"
-                className="mt-1 bg-white text-sm"
+                placeholder="CRED10MIX <campanhas@cred10mix.com.br>"
+                className="font-mono text-xs bg-slate-50"
               />
-              <p className="text-[11px] text-slate-500 mt-1">
-                Padrão oficial com alta entregabilidade: CRED10MIX &lt;noreply@cred10mix.com.br&gt;.
-              </p>
+              <p className="text-[11px] text-slate-500">
+                Padrão oficial com alta entregabilidade no domínio cred10mix.com.br: CRED10MIX
+                &lt;campanhas@cred10mix.com.br&gt;.
+              </p>{' '}
             </div>
 
             <div className="p-4 bg-slate-50 border rounded-lg space-y-2">

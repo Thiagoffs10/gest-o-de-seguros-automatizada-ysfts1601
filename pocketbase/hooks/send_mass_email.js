@@ -16,9 +16,9 @@ routerAdd(
       $os.getenv('VERIFIED_FROM_EMAIL') ||
       $secrets.get('SENDER_EMAIL') ||
       $os.getenv('SENDER_EMAIL')
-    var rawDefaultSender = verifiedEmailSecret || 'noreply@cred10mix.com.br'
+    var rawDefaultSender = verifiedEmailSecret || 'campanhas@cred10mix.com.br'
     var formatSender = function (sender) {
-      if (!sender) return 'CRED10MIX <noreply@cred10mix.com.br>'
+      if (!sender) return 'CRED10MIX <campanhas@cred10mix.com.br>'
       var trimmed = sender.trim()
       if (trimmed.indexOf('<') !== -1 && trimmed.indexOf('>') !== -1) {
         return trimmed

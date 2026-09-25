@@ -80,29 +80,31 @@ Equipe CRED10MIX Corretora de Seguros`,
   },
   {
     id: 'cross-auto-para-residencial',
-    tema: 'Oferta de Seguro Residencial para Clientes de Seguro Auto',
+    tema: 'Oferta de Seguro Residencial com 10% de desconto para Clientes Auto',
     tipo: 'oferta',
     ramo: 'Residencial',
-    titulo: 'Proteja seu Lar pelo Preço de um Cafezinho',
+    titulo: 'Proteção da Casa com 10% OFF, Coberturas de Incêndio/Roubo e Assistências 24h',
     objetivo:
-      'Cross-sell consultivo para quem tem auto mas não tem seguro residencial, destacando danos elétricos, vazamentos e roubo.',
+      'Oferecer o seguro residencial explicando os benefícios (proteção da casa, coberturas de incêndio/roubo/assistências 24h) e pedir para garantir agora com 10% de desconto. Pedir para solicitar a cotação pelo WhatsApp 81 98865-3534 com Thiago.',
     sugestaoAssunto:
-      '{nome_cliente}, seu carro já está seguro. Que tal proteger também o seu lar? 🏡',
+      '{nome_cliente}, garanta a proteção da sua residência com 10% de desconto exclusivo 🏡',
     sugestaoCorpo: `Olá, {nome_cliente}!
 
-Você já conta com a proteção do seu automóvel na CRED10MIX. Mas você sabia que o Seguro Residencial costuma custar menos de R$ 1,50 por dia?
+Sabemos o quanto você preza pela tranquilidade e segurança do seu patrimônio com a CRED10MIX.
 
-Vantagens que você pode ter no seu lar:
-• Danos elétricos: queima de geladeira, TV e ar-condicionado por oscilação de energia ou raios.
-• Assistência 24h residencial: chaveiro, encanador, eletricista e conserto de linha branca (máquina de lavar/fogão).
-• Cobertura completa contra incêndio, vendaval, vazamento de tubulações e roubo/furto.
+Que tal estender essa proteção para o seu lar? O Seguro Residencial oferece benefícios essenciais para o seu dia a dia:
+• Proteção da casa ou apartamento com coberturas completas de incêndio, queda de raio e explosão;
+• Cobertura contra roubo ou furto qualificado de bens no imóvel;
+• Assistências 24h emergenciais completas: chaveiro, encanador, eletricista e conserto de eletrodomésticos de linha branca.
 
-Como você já é nosso cliente parceiro, temos condições especiais de cross-sell com as melhores seguradoras do país.
+E o melhor: como você já conta com o seguro do seu veículo conosco, preparamos uma condição imperdível — você pode garantir a contratação agora com 10% de desconto especial!
 
-Gostaria de ver uma simulação rápida sem nenhum compromisso? Responda este e-mail ou chame no WhatsApp!
+Para solicitar a sua cotação rápida e sem compromisso, fale agora mesmo pelo WhatsApp:
+📲 WhatsApp: 81 98865-3534 (Thiago)
 
 Atenciosamente,
-Equipe CRED10MIX Corretora de Seguros`,
+Equipe CRED10MIX Corretora de Seguros
+www.cred10mix.com.br | WhatsApp: 81 98865-3534`,
   },
   {
     id: 'cross-vida-e-familia',
