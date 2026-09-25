@@ -1,5 +1,5 @@
 {
-  "generatedAt": "2026-09-25T16:34:58.044Z",
+  "generatedAt": "2026-09-25T17:09:20.034Z",
   "collections": [
     {
       "name": "users",
@@ -2505,6 +2505,328 @@
         "CREATE INDEX idx_rec_legados_data ON recebimentos_legados (data_credito)",
         "CREATE INDEX idx_rec_legados_seguradora ON recebimentos_legados (seguradora_nome)",
         "CREATE UNIQUE INDEX idx_rec_legados_hash ON recebimentos_legados (idempotency_hash) WHERE idempotency_hash != \"\""
+      ]
+    },
+    {
+      "name": "campaign_automations",
+      "type": "base",
+      "apiRules": {
+        "list": "@request.auth.id != ''",
+        "view": "@request.auth.id != ''",
+        "create": "@request.auth.id != ''",
+        "update": "@request.auth.id != ''",
+        "delete": "@request.auth.id != ''"
+      },
+      "fields": [
+        {
+          "name": "nome",
+          "type": "text",
+          "required": true,
+          "system": false
+        },
+        {
+          "name": "descricao",
+          "type": "text",
+          "required": false,
+          "system": false
+        },
+        {
+          "name": "tipo_publico",
+          "type": "select",
+          "required": true,
+          "system": false,
+          "selectValues": [
+            "MONO_AUTO",
+            "RENOVACOES_PROXIMAS",
+            "ENDOSSOS_RECENTES",
+            "SEM_APOLICE_ATIVA",
+            "GERAL_CARTEIRA"
+          ]
+        },
+        {
+          "name": "filtros_config",
+          "type": "json",
+          "required": false,
+          "system": false
+        },
+        {
+          "name": "frequencia_dias",
+          "type": "number",
+          "required": false,
+          "system": false
+        },
+        {
+          "name": "ciclo_passos",
+          "type": "json",
+          "required": false,
+          "system": false
+        },
+        {
+          "name": "ativo",
+          "type": "bool",
+          "required": false,
+          "system": false
+        },
+        {
+          "name": "total_preparados",
+          "type": "number",
+          "required": false,
+          "system": false
+        },
+        {
+          "name": "total_enviados",
+          "type": "number",
+          "required": false,
+          "system": false
+        },
+        {
+          "name": "created",
+          "type": "autodate",
+          "required": false,
+          "system": false,
+          "autodateTriggers": ["onCreate"]
+        },
+        {
+          "name": "updated",
+          "type": "autodate",
+          "required": false,
+          "system": false,
+          "autodateTriggers": ["onCreate", "onUpdate"]
+        }
+      ],
+      "indexes": [
+        "CREATE INDEX idx_campaign_automations_ativo ON campaign_automations (ativo)",
+        "CREATE INDEX idx_campaign_automations_tipo ON campaign_automations (tipo_publico)"
+      ]
+    },
+    {
+      "name": "campaign_queue",
+      "type": "base",
+      "apiRules": {
+        "list": "@request.auth.id != ''",
+        "view": "@request.auth.id != ''",
+        "create": "@request.auth.id != ''",
+        "update": "@request.auth.id != ''",
+        "delete": "@request.auth.id != ''"
+      },
+      "fields": [
+        {
+          "name": "campanha",
+          "type": "relation",
+          "required": true,
+          "system": false,
+          "collectionRef": "campaign_automations"
+        },
+        {
+          "name": "client",
+          "type": "relation",
+          "required": true,
+          "system": false,
+          "collectionRef": "clients"
+        },
+        {
+          "name": "passo_ordem",
+          "type": "number",
+          "required": false,
+          "system": false
+        },
+        {
+          "name": "tipo_mensagem",
+          "type": "select",
+          "required": false,
+          "system": false,
+          "selectValues": ["educativo", "oferta"]
+        },
+        {
+          "name": "tema",
+          "type": "text",
+          "required": false,
+          "system": false
+        },
+        {
+          "name": "assunto",
+          "type": "text",
+          "required": true,
+          "system": false
+        },
+        {
+          "name": "corpo",
+          "type": "text",
+          "required": true,
+          "system": false
+        },
+        {
+          "name": "status",
+          "type": "select",
+          "required": true,
+          "system": false,
+          "selectValues": [
+            "AGUARDANDO_APROVACAO",
+            "APROVADO",
+            "REJEITADO",
+            "ENVIADO",
+            "FALHOU",
+            "ESGOTAMENTO_ESPERA"
+          ]
+        },
+        {
+          "name": "data_programada",
+          "type": "date",
+          "required": false,
+          "system": false
+        },
+        {
+          "name": "data_envio",
+          "type": "date",
+          "required": false,
+          "system": false
+        },
+        {
+          "name": "prioridade",
+          "type": "number",
+          "required": false,
+          "system": false
+        },
+        {
+          "name": "tentativas",
+          "type": "number",
+          "required": false,
+          "system": false
+        },
+        {
+          "name": "erro_log",
+          "type": "text",
+          "required": false,
+          "system": false
+        },
+        {
+          "name": "dados_cliente_snapshot",
+          "type": "json",
+          "required": false,
+          "system": false
+        },
+        {
+          "name": "redigido_por_ia",
+          "type": "bool",
+          "required": false,
+          "system": false
+        },
+        {
+          "name": "created",
+          "type": "autodate",
+          "required": false,
+          "system": false,
+          "autodateTriggers": ["onCreate"]
+        },
+        {
+          "name": "updated",
+          "type": "autodate",
+          "required": false,
+          "system": false,
+          "autodateTriggers": ["onCreate", "onUpdate"]
+        }
+      ],
+      "indexes": [
+        "CREATE INDEX idx_campaign_queue_status ON campaign_queue (status)",
+        "CREATE INDEX idx_campaign_queue_client ON campaign_queue (client)",
+        "CREATE INDEX idx_campaign_queue_campanha ON campaign_queue (campanha)",
+        "CREATE INDEX idx_campaign_queue_data_prog ON campaign_queue (data_programada)"
+      ]
+    },
+    {
+      "name": "campaign_send_logs",
+      "type": "base",
+      "apiRules": {
+        "list": "@request.auth.id != ''",
+        "view": "@request.auth.id != ''",
+        "create": "@request.auth.id != ''",
+        "update": "@request.auth.id != ''",
+        "delete": "@request.auth.id != ''"
+      },
+      "fields": [
+        {
+          "name": "campanha",
+          "type": "relation",
+          "required": true,
+          "system": false,
+          "collectionRef": "campaign_automations"
+        },
+        {
+          "name": "client",
+          "type": "relation",
+          "required": true,
+          "system": false,
+          "collectionRef": "clients"
+        },
+        {
+          "name": "passo_ordem",
+          "type": "number",
+          "required": false,
+          "system": false
+        },
+        {
+          "name": "tipo_mensagem",
+          "type": "select",
+          "required": false,
+          "system": false,
+          "selectValues": ["educativo", "oferta"]
+        },
+        {
+          "name": "tema",
+          "type": "text",
+          "required": false,
+          "system": false
+        },
+        {
+          "name": "assunto",
+          "type": "text",
+          "required": false,
+          "system": false
+        },
+        {
+          "name": "recipient_email",
+          "type": "email",
+          "required": true,
+          "system": false
+        },
+        {
+          "name": "data_envio",
+          "type": "date",
+          "required": true,
+          "system": false
+        },
+        {
+          "name": "status_envio",
+          "type": "select",
+          "required": true,
+          "system": false,
+          "selectValues": ["ENVIADO", "FALHOU"]
+        },
+        {
+          "name": "resend_id",
+          "type": "text",
+          "required": false,
+          "system": false
+        },
+        {
+          "name": "created",
+          "type": "autodate",
+          "required": false,
+          "system": false,
+          "autodateTriggers": ["onCreate"]
+        },
+        {
+          "name": "updated",
+          "type": "autodate",
+          "required": false,
+          "system": false,
+          "autodateTriggers": ["onCreate", "onUpdate"]
+        }
+      ],
+      "indexes": [
+        "CREATE INDEX idx_campaign_send_logs_client ON campaign_send_logs (client)",
+        "CREATE INDEX idx_campaign_send_logs_campanha ON campaign_send_logs (campanha)",
+        "CREATE INDEX idx_campaign_send_logs_data ON campaign_send_logs (data_envio)"
       ]
     }
   ]

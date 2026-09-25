@@ -19,11 +19,21 @@ import {
 } from '@/types'
 import { Button } from '@/components/ui/button'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
+import { Badge } from '@/components/ui/badge'
 import { IndividualTab } from '@/components/comunicacao/IndividualTab'
 import { CampanhasTab } from '@/components/comunicacao/CampanhasTab'
+import { AutomacaoCampanhasTab } from '@/components/comunicacao/AutomacaoCampanhasTab'
 import { CommsHistory } from '@/components/comunicacao/CommsHistory'
 import { EmailTemplatesManager } from '@/components/comunicacao/EmailTemplatesManager'
 import { useRealtime } from '@/hooks/use-realtime'
+import {
+  CampaignAutomation,
+  CampaignQueueItem,
+  CampaignSendLog,
+  getCampaignAutomations,
+  getCampaignQueue,
+  getCampaignSendLogs,
+} from '@/services/campaigns'
 
 export default function Communication() {
   const location = useLocation()
@@ -35,7 +45,7 @@ export default function Communication() {
     | 'Email'
   const querySubject = searchParams.get('assunto') || (location.state as any)?.assunto || ''
   const queryBody = searchParams.get('corpo') || (location.state as any)?.corpo || ''
-  const initialTab = searchParams.get('tab') || (location.state as any)?.tab || 'individual'
+  const initialTab = searchParams.get('tab') || (location.state as any)?.tab || 'automacao'
 
   const [activeTab, setActiveTab] = useState(initialTab)
   const [clients, setClients] = useState<Client[]>([])
@@ -46,9 +56,14 @@ export default function Communication() {
   const [comms, setComms] = useState<CommType[]>([])
   const [templates, setTemplates] = useState<EmailTemplate[]>([])
 
+  // Estados de Automação de E-mail (Campanhas, Fila e Logs)
+  const [campaigns, setCampaigns] = useState<CampaignAutomation[]>([])
+  const [campaignQueue, setCampaignQueue] = useState<CampaignQueueItem[]>([])
+  const [campaignLogs, setCampaignLogs] = useState<CampaignSendLog[]>([])
+
   const loadData = useCallback(async () => {
     try {
-      const [cls, pols, segs, parcs, tipos, cms, tpls] = await Promise.all([
+      const [cls, pols, segs, parcs, tipos, cms, tpls, camps, queue, cLogs] = await Promise.all([
         getClients(),
         getPolicies(),
         getSeguradoras().catch(() => []),
@@ -56,6 +71,9 @@ export default function Communication() {
         getTiposSeguro().catch(() => []),
         getCommunications().catch(() => []),
         getEmailTemplates().catch(() => []),
+        getCampaignAutomations().catch(() => []),
+        getCampaignQueue().catch(() => []),
+        getCampaignSendLogs().catch(() => []),
       ])
       setClients(cls)
       setPolicies(pols)
@@ -64,6 +82,9 @@ export default function Communication() {
       setTiposSeguro(tipos)
       setComms(cms)
       setTemplates(tpls)
+      setCampaigns(camps)
+      setCampaignQueue(queue)
+      setCampaignLogs(cLogs)
     } catch {
       /* intentionally ignored */
     }
@@ -74,6 +95,13 @@ export default function Communication() {
   }, [loadData])
 
   useRealtime('email_templates', () => loadData())
+  useRealtime('campaign_automations', () => loadData())
+  useRealtime('campaign_queue', () => loadData())
+  useRealtime('campaign_send_logs', () => loadData())
+
+  const pendingApprovalCount = campaignQueue.filter(
+    (q) => q.status === 'AGUARDANDO_APROVACAO',
+  ).length
 
   const exportClientsCSV = () => {
     const headers = ['Nome,Email,Telefone,CPF,CNPJ,Aniversario\n']
@@ -104,12 +132,44 @@ export default function Communication() {
       </div>
 
       <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
-        <TabsList className="grid w-full max-w-lg grid-cols-3">
+        <TabsList className="grid w-full max-w-2xl grid-cols-4">
+          <TabsTrigger value="automacao" className="flex items-center gap-1.5">
+            <span>Automação & Fila</span>
+            {pendingApprovalCount > 0 && (
+              <Badge className="h-4 px-1 text-[10px] bg-amber-500 text-white">
+                {pendingApprovalCount}
+              </Badge>
+            )}
+          </TabsTrigger>
+          <TabsTrigger value="campanhas">Disparo em Massa</TabsTrigger>
           <TabsTrigger value="individual">Comunicação Individual</TabsTrigger>
-          <TabsTrigger value="campanhas">Campanhas</TabsTrigger>
           <TabsTrigger value="templates">Modelos de E-mail</TabsTrigger>
         </TabsList>
 
+        {/* 1. NOVA ÁREA DE AUTOMAÇÃO (Campanhas Educativas + Ofertas, Fila de Aprovação, Teto 100/dia e 3.000/mês) */}
+        <TabsContent value="automacao" className="mt-4">
+          <AutomacaoCampanhasTab
+            campaigns={campaigns}
+            queue={campaignQueue}
+            logs={campaignLogs}
+            onRefresh={loadData}
+          />
+        </TabsContent>
+
+        {/* 2. DISPARO EM MASSA ATUAL (100% mantido e funcionando) */}
+        <TabsContent value="campanhas" className="mt-4">
+          <CampanhasTab
+            clients={clients}
+            policies={policies}
+            seguradoras={seguradoras}
+            parceiros={parceiros}
+            tiposSeguro={tiposSeguro}
+            templates={templates}
+            onSuccess={loadData}
+          />
+        </TabsContent>
+
+        {/* 3. COMUNICAÇÃO INDIVIDUAL ATUAL (100% mantida e funcionando) */}
         <TabsContent value="individual" className="mt-4">
           <IndividualTab
             clients={clients}
@@ -123,18 +183,7 @@ export default function Communication() {
           />
         </TabsContent>
 
-        <TabsContent value="campanhas" className="mt-4">
-          <CampanhasTab
-            clients={clients}
-            policies={policies}
-            seguradoras={seguradoras}
-            parceiros={parceiros}
-            tiposSeguro={tiposSeguro}
-            templates={templates}
-            onSuccess={loadData}
-          />
-        </TabsContent>
-
+        {/* 4. MODELOS DE E-MAIL */}
         <TabsContent value="templates" className="mt-4">
           <EmailTemplatesManager templates={templates} onTemplatesChange={loadData} />
         </TabsContent>
