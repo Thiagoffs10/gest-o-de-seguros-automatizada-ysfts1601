@@ -53,6 +53,7 @@ export interface Produto {
   codigo_comercial?: string
   descricao?: string
   ativo: boolean
+  resend_id?: string
   created: string
   updated: string
   expand?: {
@@ -188,6 +189,7 @@ export interface Communication {
   recipient_phone?: string
   status: 'Rascunho' | 'Enviado' | 'Falhou'
   sent_date?: string
+  resend_id?: string
   created: string
   updated: string
 }

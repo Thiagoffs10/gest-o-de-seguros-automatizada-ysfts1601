@@ -7,6 +7,8 @@ export interface ConciliacaoReportData {
   comissaoPrevista: number
   comissaoRecebida: number
   comissaoPendente: number
+  comissaoFuturaPrevista?: number
+  comissaoVencidaPendente?: number
   repassesPagos: number
   repassesPendentes: number
   custosPagos: number
@@ -186,9 +188,17 @@ table.data-table tr:nth-child(even){background:#f8fafc}
           <td class="val" style="color:#16a34a">R$ ${fmt(data.comissaoRecebida)}</td>
         </tr>
         <tr>
-          <td class="label">Total Comissões Pendentes do Mês:</td>
-          <td class="val" style="color:${data.comissaoPendente > 0 ? '#d97706' : '#64748b'}">R$ ${fmt(data.comissaoPendente)}</td>
+          <td class="label">Total Comissões Vencidas s/ Baixa (Mês Fechado):</td>
+          <td class="val" style="color:${(data.comissaoVencidaPendente ?? data.comissaoPendente) > 0 ? '#dc2626' : '#16a34a'}">R$ ${fmt(data.comissaoVencidaPendente ?? data.comissaoPendente)}</td>
         </tr>
+        ${
+          (data.comissaoFuturaPrevista || 0) > 0
+            ? `<tr>
+          <td class="label" style="color:#2563eb">Comissões Previstas Futuras (Próximas Parcelas):</td>
+          <td class="val" style="color:#2563eb">R$ ${fmt(data.comissaoFuturaPrevista || 0)}</td>
+        </tr>`
+            : ''
+        }
         <tr>
           <td class="label">(-) Repasses Pagos a Parceiros:</td>
           <td class="val" style="color:#dc2626">- R$ ${fmt(data.repassesPagos)}</td>

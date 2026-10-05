@@ -86,12 +86,13 @@ export function CommsHistory({ communications }: Props) {
               <th className="p-3">Assunto / Prévia</th>
               <th className="p-3">Data / Hora</th>
               <th className="p-3">Status</th>
+              <th className="p-3">Message ID (Resend)</th>
             </tr>
           </thead>
           <tbody className="divide-y divide-slate-100">
             {filtered.length === 0 ? (
               <tr>
-                <td colSpan={5} className="text-center p-6 text-slate-500">
+                <td colSpan={6} className="text-center p-6 text-slate-500">
                   Nenhuma comunicação registrada no histórico.
                 </td>
               </tr>
@@ -106,14 +107,26 @@ export function CommsHistory({ communications }: Props) {
                       'Campanha'}
                   </td>
                   <td className="p-3 max-w-xs truncate text-slate-600">{cm.subject || cm.body}</td>
-                  <td className="p-3">{formatDateTimeDisplay(cm.created)}</td>
+                  <td className="p-3 whitespace-nowrap">{formatDateTimeDisplay(cm.created)}</td>
                   <td className="p-3">
                     <Badge
                       variant={cm.status === 'Enviado' ? 'default' : 'outline'}
-                      className={cm.status === 'Enviado' ? 'bg-emerald-600' : ''}
+                      className={cm.status === 'Enviado' ? 'bg-emerald-600 text-white' : ''}
                     >
                       {cm.status}
                     </Badge>
+                  </td>
+                  <td className="p-3 font-mono text-[11px] text-slate-500">
+                    {cm.resend_id ? (
+                      <span
+                        className="bg-slate-100 px-1.5 py-0.5 rounded border border-slate-200 select-all"
+                        title={cm.resend_id}
+                      >
+                        {cm.resend_id}
+                      </span>
+                    ) : (
+                      <span className="text-slate-400">—</span>
+                    )}
                   </td>
                 </tr>
               ))

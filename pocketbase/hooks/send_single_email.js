@@ -146,6 +146,7 @@ routerAdd(
     }
 
     var nowDateStr = new Date().toISOString().split('T')[0]
+    var resendIdExtracted = res && res.json && res.json.id ? String(res.json.id) : ''
 
     try {
       var commsCol = $app.findCollectionByNameOrId('communications')
@@ -160,6 +161,11 @@ routerAdd(
       comm.set('status', emailOk ? 'Enviado' : 'Falhou')
       if (emailOk) {
         comm.set('sent_date', nowDateStr)
+      }
+      if (resendIdExtracted) {
+        try {
+          comm.set('resend_id', resendIdExtracted)
+        } catch (_ignoreField) {}
       }
       $app.saveNoValidate(comm)
     } catch (logErr) {

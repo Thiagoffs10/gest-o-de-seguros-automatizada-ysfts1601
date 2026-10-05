@@ -376,15 +376,26 @@ export function ClientFormDialog({
 
           {isPF && (
             <div>
-              <Label className="text-xs font-semibold">Data de Nascimento</Label>
+              <div className="flex items-center justify-between">
+                <Label className="text-xs font-semibold">Data de Nascimento</Label>
+                {!form.birth_date && (
+                  <span className="text-[10px] text-amber-700 bg-amber-50 border border-amber-200 px-1.5 py-0.2 rounded font-medium">
+                    Ausente no PDF — complete se souber
+                  </span>
+                )}
+              </div>
               <Input
                 type="date"
                 value={form.birth_date}
                 onChange={(e) => set('birth_date', e.target.value)}
+                className={
+                  !form.birth_date
+                    ? 'border-amber-400 bg-amber-50/40 focus-visible:ring-amber-400'
+                    : ''
+                }
               />
             </div>
           )}
-
           <div>
             <Label className="text-xs font-semibold">Observações</Label>
             <Textarea value={form.notes} onChange={(e) => set('notes', e.target.value)} />

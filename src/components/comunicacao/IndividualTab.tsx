@@ -1,9 +1,18 @@
 import { useState, useMemo } from 'react'
-import { Send, Mail, MessageSquare, FileText, Cake, RefreshCw, Loader2 } from 'lucide-react'
+import {
+  Send,
+  Mail,
+  MessageSquare,
+  FileText,
+  Cake,
+  RefreshCw,
+  Loader2,
+  Sparkles,
+} from 'lucide-react'
 import { Client, Policy, EmailTemplate } from '@/types'
 import { createCommunication, sendSingleEmail } from '@/services/communications'
+import { BANCO_MENSAGENS_EDUCATIVAS_E_OFERTAS } from '@/services/campanhas-educativas-banco'
 import { formatClientDocument } from '@/lib/document-validators'
-import { personalizeTemplate } from '@/lib/constants'
 import { ImageUploadField, AttachedImage } from './ImageUploadField'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
@@ -13,7 +22,9 @@ import { Label } from '@/components/ui/label'
 import {
   Select,
   SelectContent,
+  SelectGroup,
   SelectItem,
+  SelectLabel,
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select'
@@ -92,86 +103,81 @@ export function IndividualTab({
     const clientPols = policies.filter((p) => p.client === clientId)
     const activePol = clientPols.find((p) => p.status === 'Ativa')
     const lastPol = activePol || clientPols[0]
+    const fullName = client?.name || ''
+    const firstName = fullName.split(' ')[0] || ''
 
     return {
-      nome_cliente: client?.name || '[Nome do Cliente]',
-      numero_apolice: lastPol?.policy_number || '[Número da Apólice]',
+      nome: fullName || '[Nome do Cliente]',
+      primeiro_nome: firstName || '[Primeiro Nome]',
+      nome_cliente: fullName || '[Nome do Cliente]',
+      tipo_seguro: lastPol?.tipo_de_seguro || lastPol?.coverage_type || 'Seguro',
+      numero_apolice: lastPol?.policy_number || lastPol?.numero_proposta || '[Número da Apólice]',
       seguradora: lastPol?.expand?.seguradora?.nome || lastPol?.insurance_company || '[Seguradora]',
+      email: client?.email || '',
+      telefone: client?.phone || '',
     }
   }
 
-  const renderContentForClient = (
-    rawSubject: string,
-    rawBody: string,
-    clientId: string,
-    prevClientId?: string,
-  ) => {
-    const currentVars = getClientVars(clientId)
-
-    // Se temos o cliente anterior e estamos no modo customizado ou template alterado,
-    // substituímos os valores antigos pelos novos caso o usuário tenha trocado o cliente
-    let newSubject = rawSubject
-    let newBody = rawBody
-
-    if (prevClientId && prevClientId !== clientId) {
-      const prevVars = getClientVars(prevClientId)
-
-      // Substituir dados do cliente anterior pelos dados do novo cliente
-      if (prevVars.nome_cliente && prevVars.nome_cliente !== '[Nome do Cliente]') {
-        newSubject = newSubject.split(prevVars.nome_cliente).join(currentVars.nome_cliente)
-        newBody = newBody.split(prevVars.nome_cliente).join(currentVars.nome_cliente)
-      }
-      if (prevVars.numero_apolice && prevVars.numero_apolice !== '[Número da Apólice]') {
-        newSubject = newSubject.split(prevVars.numero_apolice).join(currentVars.numero_apolice)
-        newBody = newBody.split(prevVars.numero_apolice).join(currentVars.numero_apolice)
-      }
-      if (prevVars.seguradora && prevVars.seguradora !== '[Seguradora]') {
-        newSubject = newSubject.split(prevVars.seguradora).join(currentVars.seguradora)
-        newBody = newBody.split(prevVars.seguradora).join(currentVars.seguradora)
-      }
-    }
-
-    // Também aplicar interpolação de tags {nome_cliente}, {numero_apolice}, {seguradora} etc.
-    newSubject = personalizeTemplate(newSubject, currentVars)
-    newBody = personalizeTemplate(newBody, currentVars)
-
-    return { subject: newSubject, body: newBody }
+  const applyVarsToText = (rawText: string, vars: Record<string, string>): string => {
+    if (!rawText) return ''
+    let text = rawText
+    Object.entries(vars).forEach(([k, v]) => {
+      const reBraces = new RegExp(`\\{${k}\\}`, 'gi')
+      const reDollarBraces = new RegExp(`\\$\\{${k}\\}`, 'gi')
+      text = text.replace(reDollarBraces, v || '').replace(reBraces, v || '')
+    })
+    return text
   }
 
   const handleClientChange = (newClientId: string) => {
-    const prevClientId = selectedClientId
     setSelectedClientId(newClientId)
-
     if (!newClientId) return
 
-    if (selectedTemplateId !== 'custom') {
-      const t = templates.find((item) => item.id === selectedTemplateId)
+    // Se houver um modelo selecionado no dropdown, re-aplica para o novo cliente
+    if (selectedTemplateId && selectedTemplateId !== 'custom') {
+      applyTemplateById(selectedTemplateId, newClientId)
+    }
+  }
+
+  const applyTemplateById = (templateKey: string, clientId?: string) => {
+    setSelectedTemplateId(templateKey)
+    if (templateKey === 'custom') return
+
+    const targetId = clientId !== undefined ? clientId : selectedClientId
+    const vars = getClientVars(targetId)
+
+    // Verificar se é modelo de email_templates
+    if (templateKey.startsWith('db_')) {
+      const dbId = templateKey.replace('db_', '')
+      const t = templates.find((item) => item.id === dbId)
       if (t) {
-        const vars = getClientVars(newClientId)
-        setSubject(personalizeTemplate(t.subject, vars))
-        setBody(personalizeTemplate(t.body, vars))
+        setSubject(applyVarsToText(t.subject || '', vars))
+        setBody(applyVarsToText(t.body || '', vars))
         return
       }
     }
 
-    // Se é texto customizado ou modelo modificado, recalcula/substitui os dados do cliente anterior para o novo
-    const updated = renderContentForClient(subject, body, newClientId, prevClientId)
-    setSubject(updated.subject)
-    setBody(updated.body)
+    // Verificar se é modelo do banco educativo
+    if (templateKey.startsWith('banco_')) {
+      const bancoId = templateKey.replace('banco_', '')
+      const m = BANCO_MENSAGENS_EDUCATIVAS_E_OFERTAS.find((item) => item.id === bancoId)
+      if (m) {
+        setSubject(applyVarsToText(m.assunto_padrao || m.titulo, vars))
+        setBody(applyVarsToText(m.corpo_template || '', vars))
+        return
+      }
+    }
+
+    // Fallback legado direto por id de template
+    const legacyT = templates.find((item) => item.id === templateKey)
+    if (legacyT) {
+      setSubject(applyVarsToText(legacyT.subject || '', vars))
+      setBody(applyVarsToText(legacyT.body || '', vars))
+    }
   }
 
   const handleTemplateChange = (templateId: string) => {
-    setSelectedTemplateId(templateId)
-    if (templateId === 'custom') {
-      return
-    }
-
-    const t = templates.find((item) => item.id === templateId)
-    if (!t) return
-
-    const vars = getClientVars(selectedClientId)
-    setSubject(personalizeTemplate(t.subject, vars))
-    setBody(personalizeTemplate(t.body, vars))
+    applyTemplateById(templateId)
   }
 
   const handleSend = async () => {
@@ -197,8 +203,8 @@ export function IndividualTab({
     // aplicando apenas substituição de variáveis explícitas ainda presentes como {nome_cliente} etc.,
     // SEM NUNCA resetar para o t.subject ou t.body original do modelo!
     const vars = getClientVars(selectedClientId)
-    const finalSubject = personalizeTemplate(subject, vars)
-    const finalBody = personalizeTemplate(body, vars)
+    const finalSubject = applyVarsToText(subject, vars)
+    const finalBody = applyVarsToText(body, vars)
 
     // Manter a tela sincronizada com o texto final revisado
     setSubject(finalSubject)
@@ -290,6 +296,60 @@ export function IndividualTab({
             </Button>
           </div>
 
+          {/* Item 1: Dropdown Modelo de Mensagem (Opcional) no topo do formulário */}
+          <div className="p-3 bg-slate-50 border border-slate-200 rounded-lg space-y-1.5">
+            <div className="flex items-center justify-between">
+              <Label className="text-xs font-bold text-slate-800 flex items-center gap-1.5">
+                <Sparkles className="w-3.5 h-3.5 text-blue-600" />
+                Modelo de Mensagem (Opcional)
+              </Label>
+              {selectedTemplateId !== 'custom' && (
+                <span className="text-[11px] text-emerald-700 font-semibold bg-emerald-50 px-2 py-0.5 rounded border border-emerald-200">
+                  Modelo aplicado • Texto 100% editável
+                </span>
+              )}
+            </div>
+            <Select value={selectedTemplateId} onValueChange={handleTemplateChange}>
+              <SelectTrigger className="h-9 text-xs bg-white">
+                <SelectValue placeholder="Selecione um modelo para preencher Assunto e Mensagem..." />
+              </SelectTrigger>
+              <SelectContent className="max-h-[320px]">
+                <SelectItem value="custom" className="text-xs font-medium text-slate-600">
+                  — Nenhum modelo selecionado (digitação livre) —
+                </SelectItem>
+                {templates.length > 0 && (
+                  <SelectGroup>
+                    <SelectLabel className="text-[10px] font-bold uppercase text-slate-500 tracking-wider">
+                      Modelos de E-mail Salvos ({templates.length})
+                    </SelectLabel>
+                    {templates.map((tpl) => (
+                      <SelectItem key={tpl.id} value={`db_${tpl.id}`} className="text-xs">
+                        {tpl.name} {tpl.type ? `(${tpl.type})` : ''}
+                      </SelectItem>
+                    ))}
+                  </SelectGroup>
+                )}
+                <SelectGroup>
+                  <SelectLabel className="text-[10px] font-bold uppercase text-slate-500 tracking-wider">
+                    Banco de Mensagens e Campanhas ({BANCO_MENSAGENS_EDUCATIVAS_E_OFERTAS.length})
+                  </SelectLabel>
+                  {BANCO_MENSAGENS_EDUCATIVAS_E_OFERTAS.map((m) => (
+                    <SelectItem key={m.id} value={`banco_${m.id}`} className="text-xs">
+                      {m.titulo} • {m.ramo}
+                    </SelectItem>
+                  ))}
+                </SelectGroup>
+              </SelectContent>
+            </Select>
+            <p className="text-[11px] text-slate-500">
+              Ao escolher um modelo, Assunto e Mensagem são preenchidos substituindo variáveis como{' '}
+              <code className="text-blue-700 bg-white px-1 rounded">{'{nome}'}</code>,{' '}
+              <code className="text-blue-700 bg-white px-1 rounded">{'{primeiro_nome}'}</code> e{' '}
+              <code className="text-blue-700 bg-white px-1 rounded">{'{tipo_seguro}'}</code> pelos
+              dados do cliente.
+            </p>
+          </div>
+
           <div>
             <Label className="text-xs font-semibold">Buscar e Selecionar Cliente</Label>
             <div className="space-y-2 mt-1">
@@ -325,24 +385,35 @@ export function IndividualTab({
             <ClientProfileCard client={selectedClient} policies={policies} type={type} />
           )}
 
+          {/* Atalhos rápidos de modelos (mantém compatibilidade com botões rápidos) */}
           <div>
-            <Label className="block mb-1 text-xs font-semibold">Modelo de Mensagem Salvo</Label>
+            <Label className="block mb-1 text-xs font-semibold text-slate-600">
+              Atalhos Rápidos de Modelos
+            </Label>
             <div className="flex flex-wrap gap-2">
               {templates.map((tpl) => (
                 <Button
                   key={tpl.id}
                   type="button"
-                  variant={selectedTemplateId === tpl.id ? 'default' : 'outline'}
+                  variant={
+                    selectedTemplateId === `db_${tpl.id}` || selectedTemplateId === tpl.id
+                      ? 'default'
+                      : 'outline'
+                  }
                   size="sm"
-                  className={selectedTemplateId === tpl.id ? 'bg-blue-600 hover:bg-blue-700' : ''}
-                  onClick={() => handleTemplateChange(tpl.id)}
+                  className={
+                    selectedTemplateId === `db_${tpl.id}` || selectedTemplateId === tpl.id
+                      ? 'bg-blue-600 hover:bg-blue-700 text-xs h-7'
+                      : 'text-xs h-7'
+                  }
+                  onClick={() => handleTemplateChange(`db_${tpl.id}`)}
                 >
                   {tpl.type === 'Aniversário' ? (
-                    <Cake className="w-3.5 h-3.5 mr-1" />
+                    <Cake className="w-3 h-3 mr-1" />
                   ) : tpl.type === 'Renovação' ? (
-                    <RefreshCw className="w-3.5 h-3.5 mr-1" />
+                    <RefreshCw className="w-3 h-3 mr-1" />
                   ) : (
-                    <FileText className="w-3.5 h-3.5 mr-1" />
+                    <FileText className="w-3 h-3 mr-1" />
                   )}
                   {tpl.name}
                 </Button>
@@ -351,10 +422,14 @@ export function IndividualTab({
                 type="button"
                 variant={selectedTemplateId === 'custom' ? 'default' : 'outline'}
                 size="sm"
-                className={selectedTemplateId === 'custom' ? 'bg-slate-800 hover:bg-slate-900' : ''}
+                className={
+                  selectedTemplateId === 'custom'
+                    ? 'bg-slate-800 hover:bg-slate-900 text-xs h-7'
+                    : 'text-xs h-7'
+                }
                 onClick={() => handleTemplateChange('custom')}
               >
-                <FileText className="w-3.5 h-3.5 mr-1" /> Personalizado / Livre
+                <FileText className="w-3 h-3 mr-1" /> Personalizado / Livre
               </Button>
             </div>
           </div>
@@ -381,10 +456,12 @@ export function IndividualTab({
               className="mt-1 bg-white text-xs"
             />
             <p className="text-[11px] text-slate-500 mt-1">
-              Variáveis disponíveis:{' '}
-              <code className="bg-slate-200 px-1 rounded">{'{nome_cliente}'}</code>,{' '}
-              <code className="bg-slate-200 px-1 rounded">{'{numero_apolice}'}</code>,{' '}
-              <code className="bg-slate-200 px-1 rounded">{'{seguradora}'}</code>
+              Variáveis dinâmicas suportadas:{' '}
+              <code className="bg-slate-200 px-1 rounded">{'{nome}'}</code>,{' '}
+              <code className="bg-slate-200 px-1 rounded">{'{primeiro_nome}'}</code>,{' '}
+              <code className="bg-slate-200 px-1 rounded">{'{tipo_seguro}'}</code>,{' '}
+              <code className="bg-slate-200 px-1 rounded">{'{seguradora}'}</code>,{' '}
+              <code className="bg-slate-200 px-1 rounded">{'{numero_apolice}'}</code>
             </p>
           </div>
 

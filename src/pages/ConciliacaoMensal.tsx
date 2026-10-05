@@ -186,6 +186,75 @@ export default function ConciliacaoMensal() {
       }
     }
 
+    // -------------------------------------------------------------
+    // Item 3: SEPARAR COMISSÕES PREVISTAS FUTURAS DE COMISSÕES VENCIDAS
+    // (a) Futuras: vencimento/previsão em competência POSTERIOR ao mês fechado (parcelamento normal/esgotamento)
+    //     -> informativo, sem pop-up nem crítica de fechamento
+    // (b) Vencidas sem baixa: data prevista já passou dentro do mês fechado (<= fim do mês fechado)
+    //     -> único caso que dispara alerta/pop-up de pendência
+    // -------------------------------------------------------------
+    const endOfPeriodStr = `${ano}-${String(mes).padStart(2, '0')}-31`
+
+    // Mapa de previsões ativas por apólice
+    const previsoesByPolicy = new Map<string, typeof comissoesPrevistas>()
+    for (const cp of comissoesPrevistas) {
+      if (cp.status === 'Cancelada' || cp.status === 'Recebida') continue
+      const list = previsoesByPolicy.get(cp.policy) || []
+      list.push(cp)
+      previsoesByPolicy.set(cp.policy, list)
+    }
+
+    // Mapa de recebimentos brutos por apólice
+    const recBrutoMap = new Map<string, number>()
+    for (const r of recebimentos) {
+      recBrutoMap.set(r.policy, (recBrutoMap.get(r.policy) || 0) + (Number(r.valor_bruto) || 0))
+    }
+
+    let comissaoVencidaValor = 0
+    let comissaoFuturaValor = 0
+    const apolicesComissaoVencida: Policy[] = []
+    const apolicesComissaoFutura: Policy[] = []
+
+    for (const p of periodPolicies) {
+      if (p.comissao_recebida) continue
+      const previstoBruto = getPolicyExpectedCommission(p)
+      const recBruto = recBrutoMap.get(p.id) || 0
+      const saldo = Math.max(0, Math.round((previstoBruto - recBruto) * 100) / 100)
+      if (saldo <= 0) continue
+
+      const pPrevisoes = previsoesByPolicy.get(p.id) || []
+      // Se possui parcelas futuras cadastradas
+      const futurePrevs = pPrevisoes.filter((cp) => {
+        const d = (cp.data_prevista || '').split('T')[0].split(' ')[0]
+        if (d && d > endOfPeriodStr) return true
+        if (cp.competencia) {
+          const [mPart, yPart] = cp.competencia.split('/')
+          if (mPart && yPart) {
+            const compNum = Number(yPart) * 100 + Number(mPart)
+            const currentPeriodNum = ano * 100 + mes
+            return compNum > currentPeriodNum
+          }
+        }
+        return false
+      })
+
+      // Se todas as previsões pendentes forem futuras (ou se o modelo for parcelado/esgotamento com parcelas posteriores)
+      const isParceladaFutura =
+        futurePrevs.length > 0 ||
+        p.modelo_comissao_snapshot?.tipo_modelo === 'POR_ESGOTAMENTO' ||
+        (p.parcelas && p.parcelas > 1)
+
+      if (isParceladaFutura && futurePrevs.length > 0) {
+        // Tem parcelas futuras
+        comissaoFuturaValor = Math.round((comissaoFuturaValor + saldo) * 100) / 100
+        apolicesComissaoFutura.push(p)
+      } else {
+        // Vencida no mês ou sem parcelamento futuro definido
+        comissaoVencidaValor = Math.round((comissaoVencidaValor + saldo) * 100) / 100
+        apolicesComissaoVencida.push(p)
+      }
+    }
+
     // Repasses pagos: data de pagamento do repasse no período
     const paidRepasses = computePaidRepasses(policies, period)
 
@@ -208,9 +277,15 @@ export default function ConciliacaoMensal() {
     const lucroPrevisto = expectedComm - expectedRepasses - totalCustos
     const lucroReal = receivedComm - paidRepasses - paidCustos
 
+    // PENDÊNCIAS QUE DISPARAM ALERTA E POP-UP:
+    // Apenas comissões VENCIDAS sem baixa geram pendência e alerta no fechamento!
+    // Comissões futuras são fluxo normal e NÃO disparam pop-up.
     const pendencias: string[] = []
-    const pendCommCount = periodPolicies.filter((p) => !p.comissao_recebida).length
-    if (pendCommCount > 0) pendencias.push(`${pendCommCount} comissão(ões) pendente(s)`)
+    if (apolicesComissaoVencida.length > 0) {
+      pendencias.push(
+        `${apolicesComissaoVencida.length} comissão(ões) vencida(s) no mês (R$ ${fmt(comissaoVencidaValor)})`,
+      )
+    }
     const pendRepCount = periodPolicies.filter(
       (p) =>
         p.tipo_de_venda === 'Parceiro' &&
@@ -230,6 +305,10 @@ export default function ConciliacaoMensal() {
       expectedComm,
       receivedComm,
       pendingComm,
+      comissaoFuturaValor,
+      comissaoVencidaValor,
+      apolicesComissaoVencida,
+      apolicesComissaoFutura,
       paidRepasses,
       pendingRepasses,
       paidCustos,
@@ -238,8 +317,7 @@ export default function ConciliacaoMensal() {
       lucroReal,
       pendencias,
     }
-  }, [policies, custos, period, recebimentos, comissoesPrevistas])
-
+  }, [policies, custos, period, recebimentos, comissoesPrevistas, ano, mes])
   const isClosed = !!conciliacao
 
   const canEditFinancial = can('policies', 'update') && !isClosed
@@ -531,6 +609,8 @@ export default function ConciliacaoMensal() {
       comissaoPrevista: m.expectedComm,
       comissaoRecebida: m.receivedComm,
       comissaoPendente: m.pendingComm,
+      comissaoFuturaPrevista: m.comissaoFuturaValor,
+      comissaoVencidaPendente: m.comissaoVencidaValor,
       repassesPagos: m.paidRepasses,
       repassesPendentes: m.pendingRepasses,
       custosPagos: m.paidCustos,
@@ -701,19 +781,28 @@ export default function ConciliacaoMensal() {
             onClick={() => setDetailModalType('comissoes-recebidas')}
           />
           <Row
-            label="Pendentes"
-            value={`R$ ${fmt(m.pendingComm)}`}
-            amber
-            highlight={m.pendingComm > 0}
+            label="Pendentes (Vencidas no Mês)"
+            value={`R$ ${fmt(m.comissaoVencidaValor)}`}
+            amber={m.comissaoVencidaValor > 0}
+            highlight={m.comissaoVencidaValor > 0}
             clickable
             badgeText={
-              policies.filter((p) => isDateInPeriod(period, p.start_date) && !p.comissao_recebida)
-                .length > 0
-                ? `${policies.filter((p) => isDateInPeriod(period, p.start_date) && !p.comissao_recebida).length} apólice(s)`
+              m.apolicesComissaoVencida.length > 0
+                ? `${m.apolicesComissaoVencida.length} vencida(s)`
                 : undefined
             }
             onClick={() => setDetailModalType('comissoes-pendentes')}
           />
+          {m.comissaoFuturaValor > 0 && (
+            <Row
+              label="Previstas Futuras (Próximas Parcelas / Esgotamento)"
+              value={`R$ ${fmt(m.comissaoFuturaValor)}`}
+              blue
+              badgeText={`${m.apolicesComissaoFutura.length} apólice(s)`}
+              clickable
+              onClick={() => setDetailModalType('comissoes-previstas')}
+            />
+          )}
         </>
       ),
     },
@@ -787,8 +876,14 @@ export default function ConciliacaoMensal() {
             onClick={() => setDetailModalType('custos-pagos')}
           />
           <Row label="= Lucro Real" value={`R$ ${fmt(m.lucroReal)}`} blue bold />
-          <div className="mt-3 pt-3 border-t">
+          <div className="mt-3 pt-3 border-t space-y-1">
             <Row label="Lucro Previsto" value={`R$ ${fmt(m.lucroPrevisto)}`} bold />
+            {m.comissaoFuturaValor > 0 && (
+              <div className="text-xs text-blue-700 bg-blue-50 border border-blue-200 rounded p-2 flex items-center justify-between">
+                <span>Fluxo normal: Comissões a receber nas próximas parcelas:</span>
+                <span className="font-bold">R$ {fmt(m.comissaoFuturaValor)}</span>
+              </div>
+            )}
           </div>
         </>
       ),

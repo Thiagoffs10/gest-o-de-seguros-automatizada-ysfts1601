@@ -1,5 +1,15 @@
 import { useEffect, useState, useCallback, useMemo, useRef } from 'react'
-import { Plus, UserCheck, Search, UserPlus, X, Download, User, Sparkles } from 'lucide-react'
+import {
+  Plus,
+  UserCheck,
+  Search,
+  UserPlus,
+  X,
+  Download,
+  User,
+  Sparkles,
+  FileUp,
+} from 'lucide-react'
 import { useDebounce } from '@/hooks/use-debounce'
 import { getClients } from '@/services/clients'
 import { getPolicies } from '@/services/policies'
@@ -10,13 +20,15 @@ import { Input } from '@/components/ui/input'
 import { ClientCard } from '@/components/ClientCard'
 import { ClientFormDialog } from '@/components/ClientFormDialog'
 import { DeleteClientDialog } from '@/components/DeleteClientDialog'
+import { ImportarPropostaPdfModal } from '@/components/ImportarPropostaPdfModal'
+import { PropostaImportadaConferida } from '@/services/importacao/proposta-service'
 import { GlobalFilters } from '@/components/GlobalFilters'
 import { buildFilterString } from '@/lib/constants'
 import { usePermissions } from '@/hooks/use-permissions'
 import { useRealtime } from '@/hooks/use-realtime'
 import { downloadXlsx } from '@/lib/excel-export'
 import { useToast } from '@/hooks/use-toast'
-import { createClient, updateClient, deleteClient } from '@/services/clients'
+import { createClient, updateClient, deleteClient, findClientByDocument } from '@/services/clients'
 import { extractFieldErrors, getErrorMessage } from '@/lib/pocketbase/errors'
 
 const ITEMS_PER_PAGE = 10
@@ -32,6 +44,7 @@ export default function Clients() {
   const [editingClient, setEditingClient] = useState<Client | null>(null)
   const [deleteTarget, setDeleteTarget] = useState<Client | null>(null)
   const [deleteLoading, setDeleteLoading] = useState(false)
+  const [isImportModalOpen, setIsImportModalOpen] = useState(false)
   const [loading, setLoading] = useState(true)
   const [page, setPage] = useState(1)
   const [filters, setFilters] = useState<FilterState>({})
@@ -119,6 +132,82 @@ export default function Clients() {
     return clients.filter((c) => clientsWithActivePolicies.has(c.id)).length
   }, [clients, policies])
 
+  const handlePropostaImportada = async (conferida: PropostaImportadaConferida) => {
+    try {
+      const doc = conferida.cliente.cpf_cnpj?.replace(/\D/g, '') || ''
+      let clienteExistente: Client | null = null
+
+      if (doc) {
+        clienteExistente = await findClientByDocument(doc)
+      }
+      if (!clienteExistente && conferida.cliente.nome) {
+        const porNome = clients.find(
+          (c) => c.name?.toLowerCase().trim() === conferida.cliente.nome.toLowerCase().trim(),
+        )
+        if (porNome) clienteExistente = porNome
+      }
+
+      if (clienteExistente) {
+        toast({
+          title: 'Cliente já cadastrado',
+          description: `O segurado ${clienteExistente.name} já existe na sua base de clientes. Abrindo para conferência...`,
+        })
+        setEditingClient(clienteExistente)
+        setIsModalOpen(true)
+        return
+      }
+
+      // Cliente novo: abrir formulário pré-preenchido com todos os dados extraídos da proposta
+      // Segurado e condutor permanecem separados conforme as diretrizes do sistema
+      const tipoPessoa: 'PF' | 'PJ' = doc.length > 11 ? 'PJ' : 'PF'
+      const notasAdicionais: string[] = []
+      if (conferida.condutor?.nome) {
+        notasAdicionais.push(
+          `Condutor Principal extraído do PDF: ${conferida.condutor.nome}${conferida.condutor.cpf ? ` (CPF: ${conferida.condutor.cpf})` : ''}`,
+        )
+      }
+      if (conferida.apolice?.proposta_numero) {
+        notasAdicionais.push(
+          `Proposta de origem: nº ${conferida.apolice.proposta_numero} (${conferida.apolice.seguradora_sugerida || 'Seguradora'})`,
+        )
+      }
+
+      const clientDraft: Partial<Client> = {
+        name: conferida.cliente.nome || '',
+        tipo_pessoa: tipoPessoa,
+        cpf: tipoPessoa === 'PF' ? conferida.cliente.cpf_cnpj || '' : '',
+        cnpj: tipoPessoa === 'PJ' ? conferida.cliente.cpf_cnpj || '' : '',
+        email: conferida.cliente.email || '',
+        phone: conferida.cliente.telefone || '',
+        cep: conferida.cliente.cep || '',
+        rua: conferida.cliente.endereco || '',
+        numero: conferida.cliente.numero || '',
+        bairro: conferida.cliente.bairro || '',
+        cidade: conferida.cliente.cidade || '',
+        estado: conferida.cliente.estado || '',
+        birth_date: conferida.cliente.data_nascimento || '',
+        notes: notasAdicionais.join('\n'),
+      }
+
+      setEditingClient(clientDraft as Client)
+      setIsModalOpen(true)
+
+      const faltaNascimento = tipoPessoa === 'PF' && !conferida.cliente.data_nascimento
+      toast({
+        title: 'Dados extraídos do PDF!',
+        description: faltaNascimento
+          ? 'Formulário pré-preenchido! Complete a data de nascimento (destacada em âmbar) caso possua.'
+          : 'Formulário pré-preenchido com os dados extraídos. Basta conferir e salvar.',
+      })
+    } catch (err: any) {
+      toast({
+        title: 'Erro ao processar dados da proposta',
+        description: getErrorMessage(err),
+        variant: 'destructive',
+      })
+    }
+  }
+
   const exportAllClients = async () => {
     try {
       const exportClients = await getClients(search, undefined, nameSearch)
@@ -186,15 +275,24 @@ export default function Clients() {
             <Download className="w-4 h-4 mr-2" /> Exportar Lista
           </Button>
           {can('clients', 'create') && (
-            <Button
-              className="bg-blue-600 hover:bg-blue-700"
-              onClick={() => {
-                setEditingClient(null)
-                setIsModalOpen(true)
-              }}
-            >
-              <Plus className="w-4 h-4 mr-2" /> Novo Cliente
-            </Button>
+            <>
+              <Button
+                variant="outline"
+                className="border-blue-300 text-blue-700 hover:bg-blue-50"
+                onClick={() => setIsImportModalOpen(true)}
+              >
+                <FileUp className="w-4 h-4 mr-2 text-blue-600" /> Importar Proposta (PDF)
+              </Button>
+              <Button
+                className="bg-blue-600 hover:bg-blue-700"
+                onClick={() => {
+                  setEditingClient(null)
+                  setIsModalOpen(true)
+                }}
+              >
+                <Plus className="w-4 h-4 mr-2" /> Novo Cliente
+              </Button>
+            </>
           )}
         </div>
       </div>
@@ -369,6 +467,13 @@ export default function Clients() {
             throw err
           }
         }}
+      />
+
+      {/* Modal de Importação de Proposta (PDF) na Carteira de Clientes */}
+      <ImportarPropostaPdfModal
+        open={isImportModalOpen}
+        onOpenChange={setIsImportModalOpen}
+        onPropostaImportada={handlePropostaImportada}
       />
 
       <DeleteClientDialog
