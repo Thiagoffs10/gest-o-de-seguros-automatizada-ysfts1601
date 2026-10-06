@@ -241,12 +241,17 @@ export const sortPoliciesPrioritized = (policies: Policy[]): Policy[] => {
     const prioB = getStatusPriority(b.status)
     if (prioA !== prioB) return prioA - prioB
 
-    // Dentro do mesmo grupo de status, ordenar cronologicamente decrescente (mais recentes / data fim mais recente primeiro)
-    const dateA = a.end_date || a.start_date || a.created || ''
-    const dateB = b.end_date || b.start_date || b.created || ''
+    // Dentro do mesmo grupo de status, ordenar por código decrescente (mais recente cadastrada primeiro)
+    const codeA = Number(a.policy_code) || 0
+    const codeB = Number(b.policy_code) || 0
+    if (codeA !== codeB) return codeB - codeA
+
+    // Fallback estável por data de início de vigência / criação
+    const dateA = a.start_date || a.created || ''
+    const dateB = b.start_date || b.created || ''
     if (dateA !== dateB) return dateB.localeCompare(dateA)
 
-    return (b.policy_code || 0) - (a.policy_code || 0)
+    return (b.id || '').localeCompare(a.id || '')
   })
 }
 

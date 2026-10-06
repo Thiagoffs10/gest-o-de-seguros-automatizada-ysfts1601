@@ -510,39 +510,58 @@ export default function Financial() {
 
   const tablePolicies = useMemo(
     () =>
-      allPolicies.filter((p) => {
-        // Se o usuário digitou uma busca específica de apólice/cliente ou CPF/CNPJ, priorizar exibição
-        const isTargetedSearch = Boolean(
-          debouncedPolicySearchFilter.trim() || debouncedCpfCnpjFilter.trim(),
-        )
+      allPolicies
+        .filter((p) => {
+          // Se o usuário digitou uma busca específica de apólice/cliente ou CPF/CNPJ, priorizar exibição
+          const isTargetedSearch = Boolean(
+            debouncedPolicySearchFilter.trim() || debouncedCpfCnpjFilter.trim(),
+          )
 
-        // Se filtro de comissão for 'received', incluir apólices cuja comissão foi recebida no período selecionado
-        if (commFilter === 'received') {
+          // Se filtro de comissão for 'received', incluir apólices cuja comissão foi recebida no período selecionado
+          if (commFilter === 'received') {
+            if (!applyFilters(p, false)) return false
+            if (isTargetedSearch) return true
+            const hasRecInPeriod = recsInPeriodByPolicy.has(p.id)
+            const hasLegacyInPeriod =
+              p.comissao_recebida === true &&
+              Boolean(p.data_recebimento_comissao) &&
+              isDateInPeriod(period, p.data_recebimento_comissao)
+            return hasRecInPeriod || hasLegacyInPeriod
+          }
+          // Se filtro de comissão for 'pending'
+          if (commFilter === 'pending') {
+            if (!applyFilters(p, !isTargetedSearch)) return false
+            return !isPolicyCommissionSettled(p)
+          }
+          // Se 'ALL', apólices iniciadas no período OU comissão recebida no período (ou achadas pela busca direta)
           if (!applyFilters(p, false)) return false
           if (isTargetedSearch) return true
-          const hasRecInPeriod = recsInPeriodByPolicy.has(p.id)
-          const hasLegacyInPeriod =
-            p.comissao_recebida === true &&
-            Boolean(p.data_recebimento_comissao) &&
-            isDateInPeriod(period, p.data_recebimento_comissao)
-          return hasRecInPeriod || hasLegacyInPeriod
-        }
-        // Se filtro de comissão for 'pending'
-        if (commFilter === 'pending') {
-          if (!applyFilters(p, !isTargetedSearch)) return false
-          return !isPolicyCommissionSettled(p)
-        }
-        // Se 'ALL', apólices iniciadas no período OU comissão recebida no período (ou achadas pela busca direta)
-        if (!applyFilters(p, false)) return false
-        if (isTargetedSearch) return true
-        const inStart = isDateInPeriod(period, p.start_date)
-        const inReceived =
-          recsInPeriodByPolicy.has(p.id) ||
-          (p.comissao_recebida === true &&
-            Boolean(p.data_recebimento_comissao) &&
-            isDateInPeriod(period, p.data_recebimento_comissao))
-        return inStart || inReceived || policiesWithActiveEndorsementInPeriod.has(p.id)
-      }),
+          const inStart = isDateInPeriod(period, p.start_date)
+          const inReceived =
+            recsInPeriodByPolicy.has(p.id) ||
+            (p.comissao_recebida === true &&
+              Boolean(p.data_recebimento_comissao) &&
+              isDateInPeriod(period, p.data_recebimento_comissao))
+          return inStart || inReceived || policiesWithActiveEndorsementInPeriod.has(p.id)
+        })
+        .sort((a, b) => {
+          // 1. Prioridade operacional: apólices pendentes (com saldo a receber > 0) antes das quitadas
+          const settledA = isPolicyCommissionSettled(a) ? 1 : 0
+          const settledB = isPolicyCommissionSettled(b) ? 1 : 0
+          if (settledA !== settledB) return settledA - settledB
+
+          // 2. Apólices mais recentes cadastradas primeiro (por policy_code decrescente)
+          const codeA = Number(a.policy_code) || 0
+          const codeB = Number(b.policy_code) || 0
+          if (codeA !== codeB) return codeB - codeA
+
+          // 3. Fallback por data de vigência / criação
+          const dateA = a.start_date || a.created || ''
+          const dateB = b.start_date || b.created || ''
+          if (dateA !== dateB) return dateB.localeCompare(dateA)
+
+          return (b.id || '').localeCompare(a.id || '')
+        }),
     [
       allPolicies,
       applyFilters,
