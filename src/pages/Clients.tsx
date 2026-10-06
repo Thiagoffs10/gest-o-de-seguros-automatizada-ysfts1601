@@ -1,4 +1,5 @@
 import { useEffect, useState, useCallback, useMemo, useRef } from 'react'
+import { useNavigate } from 'react-router-dom'
 import {
   Plus,
   UserCheck,
@@ -9,6 +10,8 @@ import {
   User,
   Sparkles,
   FileUp,
+  FileText,
+  ArrowRight,
 } from 'lucide-react'
 import { useDebounce } from '@/hooks/use-debounce'
 import { getClients } from '@/services/clients'
@@ -35,6 +38,7 @@ import { extractFieldErrors, getErrorMessage } from '@/lib/pocketbase/errors'
 const ITEMS_PER_PAGE = 10
 
 export default function Clients() {
+  const navigate = useNavigate()
   const { toast } = useToast()
   const { can } = usePermissions()
   const [clients, setClients] = useState<Client[]>([])
@@ -51,6 +55,10 @@ export default function Clients() {
   const [page, setPage] = useState(1)
   const [filters, setFilters] = useState<FilterState>({})
   const [onlyWithOpportunities, setOnlyWithOpportunities] = useState(false)
+
+  // Armazena a proposta conferida durante o fluxo de importação para encadeamento em Apólices
+  const [propostaOrigemImportada, setPropostaOrigemImportada] =
+    useState<PropostaImportadaConferida | null>(null)
 
   // Debounce de 300ms nas buscas de texto
   const debouncedSearch = useDebounce(search, 300)
@@ -198,6 +206,8 @@ export default function Clients() {
         notes: notasAdicionais.join('\n'),
       }
 
+      // Armazena a proposta conferida para encadeamento com Apólices após salvar
+      setPropostaOrigemImportada(conferida)
       setEditingClient(clientDraft as Client)
       setIsModalOpen(true)
 
@@ -453,20 +463,72 @@ export default function Clients() {
           if (!open) setEditingClient(null)
         }}
         initialData={editingClient || undefined}
-        title={editingClient ? 'Editar Cliente' : 'Adicionar Novo Cliente'}
+        title={
+          editingClient?.id
+            ? 'Editar Cliente'
+            : propostaOrigemImportada
+              ? 'Conferir e Cadastrar Cliente da Proposta'
+              : 'Adicionar Novo Cliente'
+        }
         onSubmit={async (formData) => {
           try {
-            if (editingClient) {
-              await updateClient(editingClient.id, formData)
+            let savedClient: Client
+            if (editingClient?.id) {
+              savedClient = await updateClient(editingClient.id, formData)
               toast({ title: 'Cliente atualizado com sucesso!' })
             } else {
-              await createClient(formData)
+              savedClient = await createClient(formData)
               toast({ title: 'Cliente cadastrado com sucesso!' })
             }
             setIsModalOpen(false)
             setEditingClient(null)
             loadClients()
             loadPolicies()
+
+            // Encadeamento inteligente: se veio de proposta importada, encaminhar para apólice
+            if (propostaOrigemImportada) {
+              const p = propostaOrigemImportada.proposta
+              const policyPayload: Partial<Policy> = {
+                client: savedClient.id,
+                seguradora: propostaOrigemImportada.seguradoraIdCorrespondente || '',
+                numero_proposta: p.numeroProposta || '',
+                policy_number: '',
+                tipo_de_seguro: (p.tipoSeguro as any) || 'Auto',
+                placa: p.veiculo.placa || '',
+                chassi: p.veiculo.chassi || '',
+                modelo_veiculo: p.veiculo.marcaModelo || '',
+                valor_bruto: p.premioTotal || 0,
+                valor_liquido: p.premioLiquido || 0,
+                forma_pagamento: (p.formaPagamento as any) || '',
+                parcelas: p.quantidadeParcelas != null ? p.quantidadeParcelas : undefined,
+                start_date: p.vigenciaInicio || '',
+                end_date: p.vigenciaFim || '',
+                previous_policy: propostaOrigemImportada.renovacaoPolicyCorrespondente?.id || '',
+                notes:
+                  !p.condutorPrincipal.mesmoQueSegurado && p.condutorPrincipal.nome
+                    ? `Condutor Principal: ${p.condutorPrincipal.nome}${p.condutorPrincipal.cpf ? ` (CPF: ${p.condutorPrincipal.cpf})` : ''}`
+                    : '',
+              }
+
+              // Salva em sessionStorage por segurança e passa via state
+              try {
+                sessionStorage.setItem('proposta_pendente_apolice', JSON.stringify(policyPayload))
+              } catch {
+                /* ignore storage error */
+              }
+
+              // Limpa estado de proposta deste fluxo em clientes
+              setPropostaOrigemImportada(null)
+
+              toast({
+                title: 'Cliente salvo com sucesso!',
+                description: 'Abrindo o cadastro da apólice com os dados da proposta...',
+              })
+
+              navigate('/apolices', {
+                state: { propostaPreenchida: policyPayload },
+              })
+            }
           } catch (err) {
             toast({
               title: 'Erro ao salvar cliente',

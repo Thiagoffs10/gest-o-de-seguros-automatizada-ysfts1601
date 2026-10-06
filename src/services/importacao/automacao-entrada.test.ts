@@ -237,10 +237,11 @@ Prêmio Total: R$ 2.990,00
     })
 
     it('(b.2) Allianz: detecta variante Condomínio (Pessoa Jurídica) com endereço enriquecido e parcelas', () => {
+      // Simula documento real com artefatos "|" ou "||" gerados por quebras de tabela do conversor PDF
       const textCondominio = `
 Condomínio
 Allianz
-Página 1 de 4 Nº Proposta: 141234945
+Página 1 de 4 Nº Proposta: 141234945|
 PROPOSTA CORRETORA
 CRED10MIX CORRETORA DE SEGUROS LTDA
 Tel: 8134939966 Cel: 81988653534
@@ -248,16 +249,16 @@ E-mail:thiago@cred10mix.com.br
 SUSEP: 202062795 Código: 2820088 Filial: 2P
 Nº. da Proposta: 141234945 Emissão: 14/10/2026
 
-CONDOMINIO RESIDENCIAL DO EDIFICIO BOSQUE OURO PRETO
+CONDOMINIO RESIDENCIAL DO EDIFICIO BOSQUE OURO PRETO|
 Essa é a proposta do seu seguro Allianz Condomínio, confira:
 
 SUAS INFORMAÇÕES
 Nome: CONDOMINIO RESIDENCIAL DO EDIFICIO BOSQUE
-OUR
+OUR|
 CNPJ: 62.806.783/0001-52
 E-mail: administrativo@peradministradora.com.br Tel: 986708849
-Endereço de correspondência: R. CAMOMILA
-Bairro: OURO PRETO
+Endereço de correspondência: R. CAMOMILA||
+Bairro: OURO PRETO|
 Cidade/UF: OLINDA/PE CEP: 53370-450
 
 INFORMAÇÕES DO SEGURO
@@ -284,14 +285,16 @@ Nº. de Parcelas: 10 Valor da Parcela: 233,50 Total a Pagar: R$ 2.334,89
       expect(res.numeroProposta).toBe('141234945')
       expect(res.seguradoraNome).toBe('Allianz')
 
-      // Segurado PJ
+      // Segurado PJ e limpeza de pipes (|)
       expect(res.segurado.tipoPessoa).toBe('PJ')
       expect(res.segurado.cpfCnpj).toBe('62806783000152')
       expect(res.segurado.nome).toBe('CONDOMINIO RESIDENCIAL DO EDIFICIO BOSQUE OURO PRETO')
+      expect(res.segurado.nome.includes('|')).toBe(false)
       expect(res.segurado.email).toBe('administrativo@peradministradora.com.br')
       expect(res.segurado.telefone).toBe('(81) 98670-8849')
       expect(res.segurado.cep).toBe('53370-450')
       expect(res.segurado.rua).toBe('RUA CAMOMILA')
+      expect(res.segurado.rua?.includes('|')).toBe(false)
       expect(res.segurado.numero).toBe('55')
       expect(res.segurado.bairro).toBe('OURO PRETO')
       expect(res.segurado.cidade).toBe('OLINDA')

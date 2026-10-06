@@ -23,6 +23,26 @@ import { parseDataFlexivel, parseMoeda } from './extrato-types'
 import { isValidCpf } from '@/lib/document-validators'
 
 /**
+ * Sanitiza valores de texto extraídos de PDFs (remove artefatos como '|', barras repetidas,
+ * colapsa quebras de linha e múltiplos espaços, e executa trim).
+ */
+export function sanitizarTextoExtraido(val?: string | null): string {
+  if (!val) return ''
+  return (
+    val
+      // Colapsar quebras de linha e tabs em espaço
+      .replace(/[\r\n\t]+/g, ' ')
+      // Remover barras verticais e barras repetidas no início/fim ou isoladas
+      .replace(/\|+/g, ' ')
+      // Colapsar múltiplos espaços
+      .replace(/\s+/g, ' ')
+      // Limpeza de pontuação solta ou pipes residuais nas extremidades
+      .replace(/^[\s|/\\,-]+|[\s|/\\,-]+$/g, '')
+      .trim()
+  )
+}
+
+/**
  * Detecta a seguradora a partir do texto extraído
  */
 export function detectarFormatoProposta(
@@ -124,10 +144,48 @@ export function parsePropostaTexto(text: string, nomeArquivo: string = ''): Prop
 
   const tipoSeguro = extrairTipoSeguro(text)
 
+  // Sanitizar todos os campos textuais do segurado
+  const seguradoSanitizado: PropostaClienteExtraido = {
+    ...segurado,
+    nome: sanitizarTextoExtraido(segurado.nome),
+    rua: sanitizarTextoExtraido(segurado.rua) || undefined,
+    numero: sanitizarTextoExtraido(segurado.numero) || undefined,
+    bairro: sanitizarTextoExtraido(segurado.bairro) || undefined,
+    cidade: sanitizarTextoExtraido(segurado.cidade) || undefined,
+    estado: sanitizarTextoExtraido(segurado.estado)?.toUpperCase() || undefined,
+    cep: sanitizarTextoExtraido(segurado.cep) || undefined,
+    email: sanitizarTextoExtraido(segurado.email) || undefined,
+    telefone: sanitizarTextoExtraido(segurado.telefone) || undefined,
+  }
+
+  // Sanitizar condutor
+  const condutorSanitizado: PropostaCondutorExtraido = {
+    ...condutor,
+    nome: sanitizarTextoExtraido(condutor.nome),
+    parentesco: sanitizarTextoExtraido(condutor.parentesco) || undefined,
+  }
+
+  // Sanitizar veículo
+  const veiculoSanitizado: PropostaVeiculoExtraido = {
+    ...veiculo,
+    marcaModelo: sanitizarTextoExtraido(veiculo.marcaModelo),
+    placa: sanitizarTextoExtraido(veiculo.placa).toUpperCase(),
+    chassi: sanitizarTextoExtraido(veiculo.chassi).toUpperCase(),
+    codigoFipe: sanitizarTextoExtraido(veiculo.codigoFipe),
+  }
+
+  // Sanitizar renovação
+  const renovacaoSanitizada: PropostaRenovacaoExtraida = {
+    ...renovacao,
+    apoliceAnterior: sanitizarTextoExtraido(renovacao.apoliceAnterior) || undefined,
+    seguradoraAnterior: sanitizarTextoExtraido(renovacao.seguradoraAnterior) || undefined,
+    classeBonus: sanitizarTextoExtraido(renovacao.classeBonus) || undefined,
+  }
+
   return {
     formato,
     seguradoraNome,
-    numeroProposta,
+    numeroProposta: sanitizarTextoExtraido(numeroProposta),
     numeroApolice: '', // No momento da proposta fica vazia aguardando emissão
     tipoSeguro,
     vigenciaInicio: vigencias.inicio,
@@ -137,11 +195,11 @@ export function parsePropostaTexto(text: string, nomeArquivo: string = ''): Prop
     premioTotal: premios.total,
     formaPagamento: parcelamento.forma,
     quantidadeParcelas: parcelamento.parcelas,
-    parcelamentoDescricao: parcelamento.descricao,
-    segurado,
-    condutorPrincipal: condutor,
-    veiculo,
-    renovacao,
+    parcelamentoDescricao: sanitizarTextoExtraido(parcelamento.descricao),
+    segurado: seguradoSanitizado,
+    condutorPrincipal: condutorSanitizado,
+    veiculo: veiculoSanitizado,
+    renovacao: renovacaoSanitizada,
     camposFaltantes,
     textoBrutoOriginal: text.substring(0, 5000),
   }
@@ -591,13 +649,13 @@ function extrairSegurado(
 
   // 7. Endereço:
   // No PDF Allianz Condomínio temos:
-  // - "Endereço de correspondência: R. CAMOMILA"
+  // - "Endereço de correspondência: R. CAMOMILA" (pode vir com "|", "||" no final)
   // - "Bairro: OURO PRETO"
   // - "Cidade/UF: OLINDA/PE CEP: 53370-450"
   // - "Endereço do local segurado: RUA CAMOMILA, 55 - OURO PRETO - 53370-450 - OLINDA/PE"
 
   // Tentar primeiro extrair endereço de correspondência
-  const endCorrespMatch = /endere[çc]o\s+de\s+correspond[êe]ncia[:\s]+([^\n]+)/i.exec(text)
+  const endCorrespMatch = /endere[çc]o\s+de\s+correspond[êe]ncia[:\s]+([^\n|]+)/i.exec(text)
   if (endCorrespMatch) {
     rua = endCorrespMatch[1].trim()
   }

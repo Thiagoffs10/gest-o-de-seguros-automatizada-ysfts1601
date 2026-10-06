@@ -1,5 +1,5 @@
 import { useEffect, useState, useCallback, useMemo } from 'react'
-import { useNavigate } from 'react-router-dom'
+import { useNavigate, useLocation } from 'react-router-dom'
 import {
   Search,
   Plus,
@@ -59,8 +59,9 @@ type DialogMode = 'create' | 'edit' | 'renew' | null
 
 export default function Policies() {
   const navigate = useNavigate()
-  const { toast } = useToast()
+  const location = useLocation()
   const { can } = usePermissions()
+  const { toast } = useToast()
   const [policies, setPolicies] = useState<Policy[]>([])
   const [clients, setClients] = useState<Client[]>([])
   const [seguradoras, setSeguradoras] = useState<Seguradora[]>([])
@@ -108,6 +109,38 @@ export default function Policies() {
   useEffect(() => {
     loadAuxData()
   }, [loadAuxData])
+
+  // Recebe proposta vinda do encadeamento natural de Clientes (ou sessionStorage)
+  useEffect(() => {
+    const stateData = (location.state as any)?.propostaPreenchida
+    let pendente: any = stateData
+
+    if (!pendente) {
+      try {
+        const stored = sessionStorage.getItem('proposta_pendente_apolice')
+        if (stored) {
+          pendente = JSON.parse(stored)
+          sessionStorage.removeItem('proposta_pendente_apolice')
+        }
+      } catch {
+        /* ignore storage error */
+      }
+    }
+
+    if (pendente) {
+      setPropostaImportadaPendente(pendente)
+      setSelectedPolicy(null)
+      setFieldErrors({})
+      setDialogMode('create')
+      toast({
+        title: 'Proposta carregada!',
+        description:
+          'Dados da proposta vinculados ao cliente cadastrado. Revise e salve a apólice.',
+      })
+      // Limpa state do react-router para não reabrir em refreshes/navegações posteriores
+      navigate(location.pathname, { replace: true, state: {} })
+    }
+  }, [location, navigate, toast])
 
   const loadData = useCallback(async () => {
     try {
