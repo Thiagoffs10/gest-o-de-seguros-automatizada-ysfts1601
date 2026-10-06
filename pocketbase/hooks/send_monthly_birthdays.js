@@ -171,8 +171,8 @@ routerAdd(
       }
     }
 
-    // Se houver um lembrete vinculado, marcar como concluído após o disparo
-    if (reminderId) {
+    // Se houver um lembrete vinculado e ao menos um e-mail foi enviado com sucesso, marcar como concluído
+    if (reminderId && sent > 0) {
       try {
         var remRecord = $app.findRecordById('reminders', reminderId)
         remRecord.set('sent', true)

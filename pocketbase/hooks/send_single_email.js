@@ -12,6 +12,7 @@ routerAdd(
     const body = e.requestInfo().body || {}
     const to = body.to
     const clientId = body.client_id || ''
+    const reminderId = body.reminder_id || ''
     const subject = body.subject || ''
     const emailBody = body.body || ''
 
@@ -173,6 +174,25 @@ routerAdd(
     }
 
     if (emailOk) {
+      // Se houver lembrete vinculado, marcar como concluído após envio confirmado
+      if (reminderId) {
+        try {
+          var remRecord = $app.findRecordById('reminders', reminderId)
+          remRecord.set('sent', true)
+          $app.save(remRecord)
+        } catch (remErr) {
+          $app
+            .logger()
+            .error(
+              'failed to update reminder status after single email send',
+              'id',
+              reminderId,
+              'error',
+              String(remErr),
+            )
+        }
+      }
+
       return e.json(200, {
         success: true,
         status: 'Enviado',

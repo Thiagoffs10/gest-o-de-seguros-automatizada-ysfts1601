@@ -41,6 +41,7 @@ export interface SingleEmailResult {
 export const sendSingleEmail = async (data: {
   to: string
   client_id?: string
+  reminder_id?: string
   subject: string
   body: string
   from?: string

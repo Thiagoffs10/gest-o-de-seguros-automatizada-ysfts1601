@@ -20,6 +20,7 @@ import {
   deleteReminder,
   deleteRemindersBatch,
   completeAllPendingReminders,
+  completeReminder,
 } from '@/services/reminders'
 import { Checkbox } from '@/components/ui/checkbox'
 import { getClients } from '@/services/clients'
@@ -75,7 +76,7 @@ export default function RemindersPage() {
   const [loading, setLoading] = useState(true)
   const [sendingEmailId, setSendingEmailId] = useState<string | null>(null)
   const [search, setSearch] = useState('')
-  const [statusFilter, setStatusFilter] = useState<'ALL' | 'pending' | 'completed'>('ALL')
+  const [statusFilter, setStatusFilter] = useState<'ALL' | 'pending' | 'completed'>('pending')
   const [typeFilter, setTypeFilter] = useState<string>('ALL')
   const [page, setPage] = useState(1)
   const PAGE_SIZE = 10
@@ -284,9 +285,16 @@ export default function RemindersPage() {
       })
 
       if (res.success) {
+        // Garantir baixa no frontend caso o hook backend porventura não tenha baixado
+        try {
+          await completeReminder(rem.id)
+        } catch (_) {
+          /* se já foi atualizado pelo backend, prossegue */
+        }
+
         toast({
           title: 'E-mails de aniversário enviados!',
-          description: res.message,
+          description: `${res.message} Lembrete marcado como concluído.`,
         })
         setGroupBirthdayModalReminder(null)
         loadData()
@@ -319,14 +327,22 @@ export default function RemindersPage() {
       const res = await sendSingleEmail({
         to: client.email,
         client_id: client.id,
+        reminder_id: rem.id,
         subject: emailSubject || 'Lembrete CRED10MIX',
         body: emailBody || rem.message || '',
       })
 
       if (res.success) {
+        // Garantir baixa no frontend caso o hook backend porventura não tenha baixado
+        try {
+          await completeReminder(rem.id)
+        } catch (_) {
+          /* se já foi atualizado pelo backend, prossegue */
+        }
+
         toast({
           title: 'E-mail enviado com sucesso!',
-          description: `Enviado para ${client.email}`,
+          description: `Enviado para ${client.email}. Lembrete marcado como concluído.`,
         })
         setEmailModalReminder(null)
         loadData()
@@ -525,9 +541,9 @@ export default function RemindersPage() {
             <SelectValue placeholder="Status" />
           </SelectTrigger>
           <SelectContent>
-            <SelectItem value="ALL">Todos os status</SelectItem>
             <SelectItem value="pending">Pendentes</SelectItem>
             <SelectItem value="completed">Concluídos</SelectItem>
+            <SelectItem value="ALL">Todos os status</SelectItem>
           </SelectContent>
         </Select>
         <Select
