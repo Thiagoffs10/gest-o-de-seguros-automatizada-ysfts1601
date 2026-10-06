@@ -77,12 +77,13 @@ export async function extrairPropostaDeArquivoPdf(
   let clienteDuplicadoMotivo: string | undefined
 
   if (proposta.segurado.cpfCnpj) {
-    const cpfLimpo = proposta.segurado.cpfCnpj.replace(/\D/g, '')
-    if (cpfLimpo) {
-      const matchCpf = await getClients('', `cpf = "${cpfLimpo}" || cnpj = "${cpfLimpo}"`)
-      if (matchCpf && matchCpf.length > 0) {
-        clienteExistente = matchCpf[0]
-        clienteDuplicadoMotivo = `Cliente já cadastrado com o CPF/CNPJ ${proposta.segurado.cpfCnpj} (${clienteExistente.name}).`
+    const docLimpo = proposta.segurado.cpfCnpj.replace(/\D/g, '')
+    if (docLimpo) {
+      const matchDoc = await getClients(docLimpo)
+      if (matchDoc && matchDoc.length > 0) {
+        clienteExistente = matchDoc[0]
+        const docLabel = proposta.segurado.tipoPessoa === 'PJ' ? 'CNPJ' : 'CPF'
+        clienteDuplicadoMotivo = `Cliente já cadastrado com o ${docLabel} ${proposta.segurado.cpfCnpj} (${clienteExistente.name}).`
       }
     }
   }

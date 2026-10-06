@@ -470,15 +470,24 @@ export function PolicyFormDialog({
     // Se achou cliente existente, usa ele
     if (conferida.clienteExistente) {
       clientId = conferida.clienteExistente.id
-    } else if (p.segurado.nome) {
-      // Cria cliente automaticamente ou pré-preenche
+    } else if (p.segurado.nome && p.segurado.cpfCnpj) {
+      // Cria cliente automaticamente ou pré-preenche respeitando PF/PJ
       try {
+        const isPJ = p.segurado.tipoPessoa === 'PJ'
         const novoCli = await createClient({
           name: p.segurado.nome,
-          cpf: p.segurado.cpfCnpj || undefined,
-          birth_date: p.segurado.dataNascimento || undefined,
+          tipo_pessoa: isPJ ? 'PJ' : 'PF',
+          cpf: !isPJ ? p.segurado.cpfCnpj : undefined,
+          cnpj: isPJ ? p.segurado.cpfCnpj : undefined,
+          birth_date: !isPJ ? p.segurado.dataNascimento || undefined : undefined,
           email: p.segurado.email || undefined,
           phone: p.segurado.telefone || undefined,
+          cep: p.segurado.cep || undefined,
+          rua: p.segurado.rua || undefined,
+          numero: p.segurado.numero || undefined,
+          bairro: p.segurado.bairro || undefined,
+          cidade: p.segurado.cidade || undefined,
+          estado: p.segurado.estado || undefined,
           notes:
             !p.condutorPrincipal.mesmoQueSegurado && p.condutorPrincipal.nome
               ? `[Condutor Principal: ${p.condutorPrincipal.nome}]`
@@ -488,7 +497,7 @@ export function PolicyFormDialog({
         clientId = novoCli.id
         toast({
           title: 'Cliente pré-cadastrado!',
-          description: `${novoCli.name} cadastrado a partir dos dados do PDF.`,
+          description: `${novoCli.name} (${isPJ ? 'Pessoa Jurídica' : 'Pessoa Física'}) cadastrado a partir dos dados do PDF.`,
         })
       } catch (errCli) {
         console.warn('Erro ao auto-cadastrar cliente da proposta:', errCli)

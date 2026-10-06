@@ -208,7 +208,7 @@ Parcelas: 4x de R$ 859,20
       expect(res.camposFaltantes.some((c) => c.campo === 'birth_date')).toBe(false)
     })
 
-    it('(b) Allianz: NÃO traz data de nascimento e destaca campo faltante obrigatório', () => {
+    it('(b) Allianz: NÃO traz data de nascimento e destaca campo faltante obrigatório (Variante Auto / PF)', () => {
       const text = `
 ALLIANZ SEGUROS
 Número da Proposta: 26-130288
@@ -225,12 +225,93 @@ Prêmio Total: R$ 2.990,00
       const res = parsePropostaTexto(text, 'proposta-26-e1302.pdf')
 
       expect(res.formato).toBe('ALLIANZ')
+      expect(res.tipoSeguro).toBe('Auto')
       expect(res.segurado.nome).toBe('BEATRIZ CARVALHO MENEZES')
+      expect(res.segurado.tipoPessoa).toBe('PF')
+      expect(res.segurado.cpfCnpj).toBe('22233344455')
       expect(res.segurado.dataNascimento).toBeUndefined()
-      // Destaque explícito de campo faltante obrigatório
+      // Destaque explícito de campo faltante obrigatório para PF
       const faltaNasc = res.camposFaltantes.find((c) => c.campo === 'birth_date')
       expect(faltaNasc).toBeDefined()
       expect(faltaNasc?.motivo).toContain('Allianz não inclui a data de nascimento')
+    })
+
+    it('(b.2) Allianz: detecta variante Condomínio (Pessoa Jurídica) com endereço enriquecido e parcelas', () => {
+      const textCondominio = `
+Condomínio
+Allianz
+Página 1 de 4 Nº Proposta: 141234945
+PROPOSTA CORRETORA
+CRED10MIX CORRETORA DE SEGUROS LTDA
+Tel: 8134939966 Cel: 81988653534
+E-mail:thiago@cred10mix.com.br
+SUSEP: 202062795 Código: 2820088 Filial: 2P
+Nº. da Proposta: 141234945 Emissão: 14/10/2026
+
+CONDOMINIO RESIDENCIAL DO EDIFICIO BOSQUE OURO PRETO
+Essa é a proposta do seu seguro Allianz Condomínio, confira:
+
+SUAS INFORMAÇÕES
+Nome: CONDOMINIO RESIDENCIAL DO EDIFICIO BOSQUE
+OUR
+CNPJ: 62.806.783/0001-52
+E-mail: administrativo@peradministradora.com.br Tel: 986708849
+Endereço de correspondência: R. CAMOMILA
+Bairro: OURO PRETO
+Cidade/UF: OLINDA/PE CEP: 53370-450
+
+INFORMAÇÕES DO SEGURO
+Endereço do local segurado: RUA CAMOMILA, 55 - OURO PRETO - 53370-450 - OLINDA/PE
+Categoria de Risco: Apenas Residencial Tipo de Seguro: Renovação Allianz
+Produto | Ramo: 16 - Condomínio - Modalidade: Simples
+Vigência: das 24H de 14/10/2026 às 24H de 14/10/2027
+
+COBERTURAS
+Básica Simples R$ 13.000.000,00 R$ 574,52
+Danos Elétricos R$ 20.000,00 R$ 643,53
+Prêmio Líquido R$ 1.950,65
+
+INFORMAÇÕES DE PAGAMENTO
+Forma de Pagamento: Boleto Bancário Vencimento: 10
+Prêmio Líquido: R$ 1.950,65 IOF: R$ 160,47
+Nº. de Parcelas: 10 Valor da Parcela: 233,50 Total a Pagar: R$ 2.334,89
+      `
+
+      const res = parsePropostaTexto(textCondominio, 'proposta-26-78a46.pdf')
+
+      expect(res.formato).toBe('ALLIANZ')
+      expect(res.tipoSeguro).toBe('Condomínio')
+      expect(res.numeroProposta).toBe('141234945')
+      expect(res.seguradoraNome).toBe('Allianz')
+
+      // Segurado PJ
+      expect(res.segurado.tipoPessoa).toBe('PJ')
+      expect(res.segurado.cpfCnpj).toBe('62806783000152')
+      expect(res.segurado.nome).toBe('CONDOMINIO RESIDENCIAL DO EDIFICIO BOSQUE OURO PRETO')
+      expect(res.segurado.email).toBe('administrativo@peradministradora.com.br')
+      expect(res.segurado.telefone).toBe('(81) 98670-8849')
+      expect(res.segurado.cep).toBe('53370-450')
+      expect(res.segurado.rua).toBe('RUA CAMOMILA')
+      expect(res.segurado.numero).toBe('55')
+      expect(res.segurado.bairro).toBe('OURO PRETO')
+      expect(res.segurado.cidade).toBe('OLINDA')
+      expect(res.segurado.estado).toBe('PE')
+
+      // PJ não deve ter birth_date nos campos faltantes
+      const faltaNasc = res.camposFaltantes.find((c) => c.campo === 'birth_date')
+      expect(faltaNasc).toBeUndefined()
+
+      // Vigências
+      expect(res.vigenciaInicio).toBe('2026-10-14')
+      expect(res.vigenciaFim).toBe('2027-10-14')
+
+      // Prêmios e Parcelas
+      expect(res.premioLiquido).toBe(1950.65)
+      expect(res.iof).toBe(160.47)
+      expect(res.premioTotal).toBe(2334.89)
+      expect(res.formaPagamento).toBe('Boleto')
+      expect(res.quantidadeParcelas).toBe(10)
+      expect(res.parcelamentoDescricao).toContain('10x de R$ 233,50')
     })
 
     it('(c) Bradesco: separa Segurado de Condutor Principal diferente', () => {

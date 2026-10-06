@@ -239,17 +239,39 @@ export const ImportarPropostaPdfModal: React.FC<ImportarPropostaPdfModalProps> =
               <Card>
                 <CardContent className="p-3 space-y-1">
                   <div className="font-semibold text-slate-700 flex items-center gap-1">
-                    <Car className="h-3.5 w-3.5" /> Veículo & Vigência
+                    <Car className="h-3.5 w-3.5" /> Ramo & Objeto Segurado
                   </div>
                   <div>
-                    <span className="text-slate-500">Modelo:</span>{' '}
-                    {conferida.proposta.veiculo.marcaModelo || '-'}
+                    <span className="text-slate-500">Ramo:</span>{' '}
+                    <Badge
+                      variant="outline"
+                      className="text-[10px] font-semibold text-blue-700 bg-blue-50"
+                    >
+                      {conferida.proposta.tipoSeguro || 'Auto'}
+                    </Badge>
                   </div>
-                  <div>
-                    <span className="text-slate-500">Placa / Chassi:</span>{' '}
-                    <strong>{conferida.proposta.veiculo.placa || '-'}</strong> •{' '}
-                    {conferida.proposta.veiculo.chassi || '-'}
-                  </div>
+                  {conferida.proposta.tipoSeguro === 'Auto' ? (
+                    <>
+                      <div>
+                        <span className="text-slate-500">Modelo:</span>{' '}
+                        {conferida.proposta.veiculo.marcaModelo || '-'}
+                      </div>
+                      <div>
+                        <span className="text-slate-500">Placa / Chassi:</span>{' '}
+                        <strong>{conferida.proposta.veiculo.placa || '-'}</strong> •{' '}
+                        {conferida.proposta.veiculo.chassi || '-'}
+                      </div>
+                    </>
+                  ) : (
+                    <div>
+                      <span className="text-slate-500">Local de Risco / Endereço:</span>{' '}
+                      <strong>
+                        {conferida.proposta.segurado.rua
+                          ? `${conferida.proposta.segurado.rua}${conferida.proposta.segurado.numero ? `, ${conferida.proposta.segurado.numero}` : ''} - ${conferida.proposta.segurado.bairro || ''} (${conferida.proposta.segurado.cidade || ''}/${conferida.proposta.segurado.estado || ''})`
+                          : 'Conforme proposta'}
+                      </strong>
+                    </div>
+                  )}
                   <div>
                     <span className="text-slate-500">Vigência:</span>{' '}
                     {formatBRDate(conferida.proposta.vigenciaInicio)} até{' '}

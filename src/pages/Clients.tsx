@@ -165,9 +165,12 @@ export default function Clients() {
 
       // Cliente novo: abrir formulário pré-preenchido com todos os dados extraídos da proposta
       // Segurado e condutor permanecem separados conforme as diretrizes do sistema
-      const tipoPessoa: 'PF' | 'PJ' = doc.length > 11 ? 'PJ' : 'PF'
+      const tipoPessoa: 'PF' | 'PJ' = segurado.tipoPessoa || (doc.length > 11 ? 'PJ' : 'PF')
       const notasAdicionais: string[] = []
-      if (conferida.proposta.condutorPrincipal?.nome) {
+      if (
+        conferida.proposta.condutorPrincipal?.nome &&
+        !conferida.proposta.condutorPrincipal.mesmoQueSegurado
+      ) {
         notasAdicionais.push(
           `Condutor Principal extraído do PDF: ${conferida.proposta.condutorPrincipal.nome}${conferida.proposta.condutorPrincipal.cpf ? ` (CPF: ${conferida.proposta.condutorPrincipal.cpf})` : ''}`,
         )
