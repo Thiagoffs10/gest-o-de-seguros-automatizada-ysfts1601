@@ -13,7 +13,8 @@ import {
 import { useDebounce } from '@/hooks/use-debounce'
 import { getClients } from '@/services/clients'
 import { getPolicies } from '@/services/policies'
-import { Client, Policy, FilterState } from '@/types'
+import { getSeguradoras } from '@/services/seguradoras'
+import { Client, Policy, FilterState, Seguradora } from '@/types'
 import { evaluateClientCrossSell } from '@/services/cross-sell'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -41,6 +42,7 @@ export default function Clients() {
   const [search, setSearch] = useState('')
   const [nameSearch, setNameSearch] = useState('')
   const [isModalOpen, setIsModalOpen] = useState(false)
+  const [seguradoras, setSeguradoras] = useState<Seguradora[]>([])
   const [editingClient, setEditingClient] = useState<Client | null>(null)
   const [deleteTarget, setDeleteTarget] = useState<Client | null>(null)
   const [deleteLoading, setDeleteLoading] = useState(false)
@@ -91,6 +93,9 @@ export default function Clients() {
     setPage(1)
     setLoading(true)
     loadClients()
+    getSeguradoras()
+      .then(setSeguradoras)
+      .catch(() => [])
   }, [loadClients])
 
   useRealtime('clients', () => loadClients())
@@ -134,15 +139,16 @@ export default function Clients() {
 
   const handlePropostaImportada = async (conferida: PropostaImportadaConferida) => {
     try {
-      const doc = conferida.cliente.cpf_cnpj?.replace(/\D/g, '') || ''
-      let clienteExistente: Client | null = null
+      const segurado = conferida.proposta.segurado
+      const doc = (segurado.cpfCnpj || '').replace(/\D/g, '')
+      let clienteExistente: Client | null = conferida.clienteExistente || null
 
-      if (doc) {
+      if (!clienteExistente && doc) {
         clienteExistente = await findClientByDocument(doc)
       }
-      if (!clienteExistente && conferida.cliente.nome) {
+      if (!clienteExistente && segurado.nome) {
         const porNome = clients.find(
-          (c) => c.name?.toLowerCase().trim() === conferida.cliente.nome.toLowerCase().trim(),
+          (c) => c.name?.toLowerCase().trim() === segurado.nome.toLowerCase().trim(),
         )
         if (porNome) clienteExistente = porNome
       }
@@ -161,38 +167,38 @@ export default function Clients() {
       // Segurado e condutor permanecem separados conforme as diretrizes do sistema
       const tipoPessoa: 'PF' | 'PJ' = doc.length > 11 ? 'PJ' : 'PF'
       const notasAdicionais: string[] = []
-      if (conferida.condutor?.nome) {
+      if (conferida.proposta.condutorPrincipal?.nome) {
         notasAdicionais.push(
-          `Condutor Principal extraído do PDF: ${conferida.condutor.nome}${conferida.condutor.cpf ? ` (CPF: ${conferida.condutor.cpf})` : ''}`,
+          `Condutor Principal extraído do PDF: ${conferida.proposta.condutorPrincipal.nome}${conferida.proposta.condutorPrincipal.cpf ? ` (CPF: ${conferida.proposta.condutorPrincipal.cpf})` : ''}`,
         )
       }
-      if (conferida.apolice?.proposta_numero) {
+      if (conferida.proposta.numeroProposta) {
         notasAdicionais.push(
-          `Proposta de origem: nº ${conferida.apolice.proposta_numero} (${conferida.apolice.seguradora_sugerida || 'Seguradora'})`,
+          `Proposta de origem: nº ${conferida.proposta.numeroProposta} (${conferida.proposta.seguradoraNome || 'Seguradora'})`,
         )
       }
 
       const clientDraft: Partial<Client> = {
-        name: conferida.cliente.nome || '',
+        name: segurado.nome || '',
         tipo_pessoa: tipoPessoa,
-        cpf: tipoPessoa === 'PF' ? conferida.cliente.cpf_cnpj || '' : '',
-        cnpj: tipoPessoa === 'PJ' ? conferida.cliente.cpf_cnpj || '' : '',
-        email: conferida.cliente.email || '',
-        phone: conferida.cliente.telefone || '',
-        cep: conferida.cliente.cep || '',
-        rua: conferida.cliente.endereco || '',
-        numero: conferida.cliente.numero || '',
-        bairro: conferida.cliente.bairro || '',
-        cidade: conferida.cliente.cidade || '',
-        estado: conferida.cliente.estado || '',
-        birth_date: conferida.cliente.data_nascimento || '',
+        cpf: tipoPessoa === 'PF' ? segurado.cpfCnpj || '' : '',
+        cnpj: tipoPessoa === 'PJ' ? segurado.cpfCnpj || '' : '',
+        email: segurado.email || '',
+        phone: segurado.telefone || '',
+        cep: segurado.cep || '',
+        rua: segurado.rua || '',
+        numero: segurado.numero || '',
+        bairro: segurado.bairro || '',
+        cidade: segurado.cidade || '',
+        estado: segurado.estado || '',
+        birth_date: segurado.dataNascimento || '',
         notes: notasAdicionais.join('\n'),
       }
 
       setEditingClient(clientDraft as Client)
       setIsModalOpen(true)
 
-      const faltaNascimento = tipoPessoa === 'PF' && !conferida.cliente.data_nascimento
+      const faltaNascimento = tipoPessoa === 'PF' && !segurado.dataNascimento
       toast({
         title: 'Dados extraídos do PDF!',
         description: faltaNascimento
@@ -473,6 +479,7 @@ export default function Clients() {
       <ImportarPropostaPdfModal
         open={isImportModalOpen}
         onOpenChange={setIsImportModalOpen}
+        seguradoras={seguradoras}
         onPropostaImportada={handlePropostaImportada}
       />
 

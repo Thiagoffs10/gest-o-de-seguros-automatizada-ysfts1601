@@ -42,9 +42,18 @@ interface Props {
   queue: CampaignQueueItem[]
   logs: CampaignSendLog[]
   onRefresh: () => void
+  onApproveAllDirect?: () => Promise<void>
+  approvingAllExternal?: boolean
 }
 
-export function AutomacaoCampanhasTab({ campaigns, queue, logs, onRefresh }: Props) {
+export function AutomacaoCampanhasTab({
+  campaigns,
+  queue,
+  logs,
+  onRefresh,
+  onApproveAllDirect,
+  approvingAllExternal,
+}: Props) {
   const { toast } = useToast()
   const [subTab, setSubTab] = useState<
     'fila' | 'campanhas' | 'banco' | 'historico' | 'programacao'
@@ -78,6 +87,15 @@ export function AutomacaoCampanhasTab({ campaigns, queue, logs, onRefresh }: Pro
     (q) => q.status === 'APROVADO' || q.status === 'ESGOTAMENTO_ESPERA',
   )
   const emEsperaEsgotamento = queue.filter((q) => q.status === 'ESGOTAMENTO_ESPERA')
+
+  const scrollToQueue = () => {
+    setSubTab('fila')
+    setStatusFilter('AGUARDANDO')
+    const el = document.getElementById('secao-fila-aprovacao')
+    if (el) {
+      el.scrollIntoView({ behavior: 'smooth', block: 'start' })
+    }
+  }
 
   const filteredQueue = queue.filter((item) => {
     if (statusFilter === 'AGUARDANDO') return item.status === 'AGUARDANDO_APROVACAO'
@@ -144,6 +162,10 @@ export function AutomacaoCampanhasTab({ campaigns, queue, logs, onRefresh }: Pro
 
   const handleApproveAll = async () => {
     if (aguardandoAprovacao.length === 0) return
+    if (onApproveAllDirect) {
+      await onApproveAllDirect()
+      return
+    }
     setApprovingAll(true)
     try {
       const ids = aguardandoAprovacao.map((q) => q.id)
@@ -163,6 +185,8 @@ export function AutomacaoCampanhasTab({ campaigns, queue, logs, onRefresh }: Pro
       setApprovingAll(false)
     }
   }
+
+  const isApprovingAllActive = approvingAll || !!approvingAllExternal
 
   const handleDispatchQueue = async () => {
     setDispatching(true)
@@ -194,6 +218,77 @@ export function AutomacaoCampanhasTab({ campaigns, queue, logs, onRefresh }: Pro
 
   return (
     <div className="space-y-6">
+      {/* AVISO VISUAL GRANDE: Fila de Aprovação Pendente (impossível de ignorar) */}
+      {aguardandoAprovacao.length > 0 && (
+        <div
+          role="alert"
+          aria-live="polite"
+          className="relative overflow-hidden rounded-xl border-2 border-amber-400 bg-gradient-to-r from-amber-500/15 via-amber-50 to-orange-50/40 p-5 shadow-md transition-all animate-in fade-in slide-in-from-top-2 duration-300"
+        >
+          <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4">
+            <div className="flex items-start gap-3.5">
+              <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-amber-500 text-white shadow-sm ring-4 ring-amber-200">
+                <AlertTriangle className="h-6 w-6 text-white stroke-[2.5]" />
+              </div>
+              <div className="space-y-1">
+                <div className="flex flex-wrap items-center gap-2">
+                  <h3 className="text-base font-bold text-amber-950 tracking-tight flex items-center gap-2">
+                    Há {aguardandoAprovacao.length}{' '}
+                    {aguardandoAprovacao.length === 1 ? 'e-mail aguardando' : 'e-mails aguardando'}{' '}
+                    sua aprovação
+                  </h3>
+                  <Badge className="bg-amber-600 text-white hover:bg-amber-700 text-xs font-semibold px-2">
+                    Ação necessária
+                  </Badge>
+                </div>
+                <p className="text-xs sm:text-sm font-medium text-amber-900 leading-snug">
+                  <strong className="underline decoration-amber-500 underline-offset-2">
+                    Nada será enviado até você aprovar.
+                  </strong>{' '}
+                  A rotina diária redigiu as mensagens personalizadas com dados reais dos segurados,
+                  mas o envio é semiautomático e exige sua validação para sair da fila.
+                </p>
+                <p className="text-[11px] text-amber-800/90 flex items-center gap-1.5 pt-0.5">
+                  <ShieldCheck className="h-3.5 w-3.5 text-amber-700 shrink-0" />
+                  <span>
+                    Respeita automaticamente os tetos de 100/dia e 3.000/mês através da fila de
+                    esgotamento prioritária.
+                  </span>
+                </p>
+              </div>
+            </div>
+
+            <div className="flex flex-wrap items-center gap-2.5 pt-2 lg:pt-0 shrink-0">
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                onClick={scrollToQueue}
+                className="bg-white hover:bg-amber-50 border-amber-300 text-amber-950 font-semibold text-xs h-9 shadow-xs"
+              >
+                <Eye className="w-3.5 h-3.5 mr-1.5 text-amber-700" />
+                Revisar na Fila ({aguardandoAprovacao.length})
+              </Button>
+
+              <Button
+                type="button"
+                size="sm"
+                onClick={handleApproveAll}
+                disabled={isApprovingAllActive}
+                className="bg-amber-600 hover:bg-amber-700 text-white font-bold text-xs h-9 px-4 shadow-sm hover:shadow"
+              >
+                {isApprovingAllActive ? (
+                  <Loader2 className="w-3.5 h-3.5 mr-1.5 animate-spin" />
+                ) : (
+                  <CheckCircle className="w-3.5 h-3.5 mr-1.5" />
+                )}
+                Aprovar Todos ({aguardandoAprovacao.length})
+              </Button>
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* BARRA SUPERIOR: Painel de Controle de Tetos (100/dia e 3.000/mês) e Fila de Esgotamento */}
       <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
         <Card className="bg-gradient-to-br from-blue-50 to-indigo-50/40 border-blue-200 shadow-sm">
@@ -329,13 +424,13 @@ export function AutomacaoCampanhasTab({ campaigns, queue, logs, onRefresh }: Pro
               variant="outline"
               size="sm"
               onClick={handleApproveAll}
-              disabled={approvingAll}
-              className="text-xs bg-emerald-50 text-emerald-800 border-emerald-300 hover:bg-emerald-100"
+              disabled={isApprovingAllActive}
+              className="text-xs bg-amber-500 text-white border-amber-600 hover:bg-amber-600 font-semibold shadow-xs"
             >
-              {approvingAll ? (
+              {isApprovingAllActive ? (
                 <Loader2 className="w-3.5 h-3.5 mr-1.5 animate-spin" />
               ) : (
-                <CheckCircle className="w-3.5 h-3.5 mr-1.5 text-emerald-600" />
+                <CheckCircle className="w-3.5 h-3.5 mr-1.5" />
               )}
               Aprovar Todos ({aguardandoAprovacao.length})
             </Button>
@@ -427,7 +522,7 @@ export function AutomacaoCampanhasTab({ campaigns, queue, logs, onRefresh }: Pro
 
       {/* SUB-ABA 1: FILA DE APROVAÇÃO */}
       {subTab === 'fila' && (
-        <div className="space-y-4">
+        <div id="secao-fila-aprovacao" className="space-y-4 scroll-mt-6">
           <div className="flex flex-wrap items-center justify-between gap-2">
             <div className="flex items-center gap-1 text-xs">
               <span className="text-slate-500 mr-1">Filtrar status:</span>

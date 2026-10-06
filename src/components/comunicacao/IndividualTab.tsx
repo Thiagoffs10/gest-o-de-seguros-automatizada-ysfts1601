@@ -162,8 +162,8 @@ export function IndividualTab({
       const bancoId = templateKey.replace('banco_', '')
       const m = BANCO_MENSAGENS_EDUCATIVAS_E_OFERTAS.find((item) => item.id === bancoId)
       if (m) {
-        setSubject(applyVarsToText(m.assunto_padrao || m.titulo, vars))
-        setBody(applyVarsToText(m.corpo_template || '', vars))
+        setSubject(applyVarsToText(m.sugestaoAssunto || m.titulo, vars))
+        setBody(applyVarsToText(m.sugestaoCorpo || '', vars))
         return
       }
     }

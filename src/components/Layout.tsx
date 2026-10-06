@@ -28,6 +28,7 @@ import { useRealtime } from '@/hooks/use-realtime'
 import { usePermissions } from '@/hooks/use-permissions'
 import { canAccessMassSend } from '@/lib/permissions'
 import { getReminders, updateReminder } from '@/services/reminders'
+import { getCampaignQueue } from '@/services/campaigns'
 import { Reminder } from '@/types'
 import { formatDateDisplay, todayLocalDate } from '@/lib/utils'
 import { Avatar, AvatarFallback } from '@/components/ui/avatar'
@@ -38,11 +39,12 @@ import { FloatingActions } from '@/components/FloatingActions'
 
 export default function Layout() {
   const { user, signOut } = useAuth()
+  const { can } = usePermissions()
   const location = useLocation()
   const navigate = useNavigate()
   const [isMobileOpen, setIsMobileOpen] = useState(false)
   const [reminders, setReminders] = useState<Reminder[]>([])
-  const { can } = usePermissions()
+  const [pendingCommsApproval, setPendingCommsApproval] = useState(0)
 
   const fetchPendingReminders = async () => {
     try {
@@ -58,8 +60,26 @@ export default function Layout() {
     fetchPendingReminders()
   }, [])
 
+  const fetchPendingQueue = async () => {
+    try {
+      const queue = await getCampaignQueue()
+      const pending = queue.filter((q) => q.status === 'AGUARDANDO_APROVACAO').length
+      setPendingCommsApproval(pending)
+    } catch {
+      /* intentionally ignored */
+    }
+  }
+
+  useEffect(() => {
+    fetchPendingQueue()
+  }, [])
+
   useRealtime('reminders', () => {
     fetchPendingReminders()
+  })
+
+  useRealtime('campaign_queue', () => {
+    fetchPendingQueue()
   })
 
   const handleMarkAsSent = async (id: string) => {
@@ -85,7 +105,12 @@ export default function Layout() {
       ? [{ title: 'Custos', path: '/custos-fixos', icon: Receipt }]
       : []),
     { title: 'Lembretes', path: '/lembretes', icon: Bell, badge: reminders.length },
-    { title: 'Central de Comunicação', path: '/comunicacao', icon: Send },
+    {
+      title: 'Central de Comunicação',
+      path: '/comunicacao',
+      icon: Send,
+      badge: pendingCommsApproval,
+    },
     ...(isAdmin ? [{ title: 'Usuários', path: '/usuarios', icon: UserCog }] : []),
     ...(isAdmin ? [{ title: 'Backup', path: '/backup', icon: Database }] : []),
     { title: 'Configurações', path: '/configuracoes', icon: Settings },
