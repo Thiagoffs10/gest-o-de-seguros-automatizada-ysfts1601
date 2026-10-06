@@ -1,4 +1,4 @@
-import { useEffect, useState, useCallback, useMemo, useRef } from 'react'
+import React, { useEffect, useState, useCallback, useMemo, useRef } from 'react'
 import { useSearchParams, useNavigate } from 'react-router-dom'
 import { useDebounce } from '@/hooks/use-debounce'
 import {
@@ -11,7 +11,6 @@ import {
   Pencil,
   AlertTriangle,
   Building2,
-  ChevronRight,
   ArrowLeft,
   AlertCircle,
 } from 'lucide-react'
@@ -83,6 +82,7 @@ import { todayLocalDate, formatDateDisplay } from '@/lib/utils'
 import { computePeriodFromFilters, isDateInPeriod, isCompetenciaInPeriod } from '@/lib/date-filter'
 import {
   calcNetCommission,
+  computePendenciasComissao60,
   computeReceivedCommissions,
   computePendingRepasses,
   computePaidRepasses,
@@ -100,7 +100,7 @@ import { DevTrackingPanel } from '@/components/DevTrackingPanel'
 import { PortfolioExportButton } from '@/components/PortfolioExportButton'
 import { ImportarExtratoModal } from '@/components/ImportarExtratoModal'
 import { AlertasCentral } from '@/components/AlertasCentral'
-import { FileSpreadsheet } from 'lucide-react'
+import { FileSpreadsheet, ChevronDown, ChevronRight, SlidersHorizontal } from 'lucide-react'
 import {
   Select,
   SelectContent,
@@ -130,6 +130,20 @@ export default function Financial() {
   const [commFilter, setCommFilter] = useState('ALL')
   const [cpfCnpjFilter, setCpfCnpjFilter] = useState('')
   const [policySearchFilter, setPolicySearchFilter] = useState('')
+  const [showMoreFilters, setShowMoreFilters] = useState(false)
+  const [expandedPolicyIds, setExpandedPolicyIds] = useState<Set<string>>(new Set())
+
+  const togglePolicyExpanded = (id: string) => {
+    setExpandedPolicyIds((prev) => {
+      const next = new Set(prev)
+      if (next.has(id)) {
+        next.delete(id)
+      } else {
+        next.add(id)
+      }
+      return next
+    })
+  }
 
   // Debounce de 300ms nos campos de busca de apólice/cliente e CPF/CNPJ
   const debouncedCpfCnpjFilter = useDebounce(cpfCnpjFilter, 300)
@@ -322,6 +336,12 @@ export default function Financial() {
   })
 
   const period = useMemo(() => computePeriodFromFilters(filters), [filters])
+
+  // Cálculo das comissões sem baixa há mais de 60 dias corridos (Regra do Alerta do topo)
+  const pendencias60 = useMemo(
+    () => computePendenciasComissao60(allPolicies, recebimentos, allComissoesPrevistasList),
+    [allPolicies, recebimentos, allComissoesPrevistasList],
+  )
 
   // Mapa de total BRUTO recebido histórico por apólice (Regra: Já recebido = soma dos valores BRUTOS)
   const receivedGrossByPolicy = useMemo(() => {
@@ -1464,10 +1484,14 @@ export default function Financial() {
         </div>
       </div>
 
-      {/* PAINEL CENTRAL DE ALERTAS DE INCONSISTÊNCIA E DUPLICIDADE */}
+      {/* PAINEL CENTRAL DE ALERTAS DE INCONSISTÊNCIA E DUPLICIDADE + PENDÊNCIAS 60+ DIAS */}
       <AlertasCentral
         modulo="FINANCEIRO"
         onVerApolice={(polId) => navigate(`/policies/${polId}`)}
+        pendencias60={pendencias60}
+        onRegistrarRecebimento={(policy, comp, prevId, saldo) =>
+          handleOpenRegistrarRecebimento(policy, comp, prevId, saldo)
+        }
       />
 
       {/* 5 BLOCOS OPERACIONAIS REORGANIZADOS COM TODOS OS CARDS CLICÁVEIS */}
@@ -1538,69 +1562,207 @@ export default function Financial() {
         totalReceitas={metrics.receivedCommissions}
       />
 
-      <div className="flex flex-wrap items-center justify-between gap-2">
-        <GlobalFilters
-          filters={filters}
-          onFilterChange={setFilters}
-          showPartnerFilter
-          parceiros={parceiros}
-          showSeguradoraFilter
-          seguradoras={seguradoras}
-          showTipoSeguroFilter
-        />
-        <div className="flex flex-wrap items-center gap-2">
-          <Input
-            placeholder="Buscar por Proposta / Cliente"
-            value={policySearchFilter}
-            onChange={(e) => setPolicySearchFilter(e.target.value)}
-            className="w-[200px] text-xs h-9 bg-white"
-          />
-          <Input
-            placeholder="Filtrar por CPF/CNPJ"
-            value={cpfCnpjFilter}
-            onChange={(e) => setCpfCnpjFilter(e.target.value)}
-            className="w-[160px] text-xs h-9 bg-white"
-          />
-          <Select value={statusFilter} onValueChange={setStatusFilter}>
-            <SelectTrigger className="w-[160px]">
-              <SelectValue placeholder="Status" />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="ALL">Todos os Status</SelectItem>
-              <SelectItem value="Ativa">Ativa</SelectItem>
-              <SelectItem value="Renovação Pendente">Renovação Pendente</SelectItem>
-              <SelectItem value="Vencida">Vencida</SelectItem>
-              <SelectItem value="Expirada">Expirada</SelectItem>
-              <SelectItem value="Cancelada">Cancelada</SelectItem>
-            </SelectContent>
-          </Select>
-          <Select value={commFilter} onValueChange={setCommFilter}>
-            <SelectTrigger className="w-[160px]">
-              <SelectValue placeholder="Comissão" />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="ALL">Todas as Comissões</SelectItem>
-              <SelectItem value="received">Recebidas</SelectItem>
-              <SelectItem value="pending">Pendentes</SelectItem>
-            </SelectContent>
-          </Select>
-          <Button
-            variant="outline"
-            size="sm"
-            onClick={() => {
-              setFilters({
-                year: String(new Date().getFullYear()),
-                month: String(new Date().getMonth() + 1),
-              })
-              setStatusFilter('ALL')
-              setCommFilter('ALL')
-              setCpfCnpjFilter('')
-              setPolicySearchFilter('')
-            }}
-          >
-            Limpar Filtros
-          </Button>
+      {/* BARRA DE FILTROS: PRINCIPAIS EM DESTAQUE E MENOS USADOS EM 'MAIS FILTROS' */}
+      <div className="space-y-2 bg-slate-50/70 p-3 rounded-lg border">
+        <div className="flex flex-wrap items-center justify-between gap-2.5">
+          {/* Filtros Principais: Período (Ano/Mês), Seguradora e Status */}
+          <div className="flex flex-wrap items-center gap-2">
+            <div>
+              <Select
+                value={filters.year || 'ALL'}
+                onValueChange={(v) => setFilters((prev) => ({ ...prev, year: v }))}
+              >
+                <SelectTrigger className="w-[105px] h-9 text-xs bg-white">
+                  <SelectValue placeholder="Ano" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="ALL">Todos os anos</SelectItem>
+                  {['2024', '2025', '2026', '2027'].map((y) => (
+                    <SelectItem key={y} value={y}>
+                      {y}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+            <div>
+              <Select
+                value={filters.month || 'ALL'}
+                onValueChange={(v) => setFilters((prev) => ({ ...prev, month: v }))}
+              >
+                <SelectTrigger className="w-[130px] h-9 text-xs bg-white">
+                  <SelectValue placeholder="Mês" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="ALL">Todos os meses</SelectItem>
+                  <SelectItem value="1">Janeiro</SelectItem>
+                  <SelectItem value="2">Fevereiro</SelectItem>
+                  <SelectItem value="3">Março</SelectItem>
+                  <SelectItem value="4">Abril</SelectItem>
+                  <SelectItem value="5">Maio</SelectItem>
+                  <SelectItem value="6">Junho</SelectItem>
+                  <SelectItem value="7">Julho</SelectItem>
+                  <SelectItem value="8">Agosto</SelectItem>
+                  <SelectItem value="9">Setembro</SelectItem>
+                  <SelectItem value="10">Outubro</SelectItem>
+                  <SelectItem value="11">Novembro</SelectItem>
+                  <SelectItem value="12">Dezembro</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+            <div>
+              <Select
+                value={filters.seguradoraId || 'ALL'}
+                onValueChange={(v) =>
+                  setFilters((prev) => ({ ...prev, seguradoraId: v === 'ALL' ? undefined : v }))
+                }
+              >
+                <SelectTrigger className="w-[170px] h-9 text-xs bg-white">
+                  <SelectValue placeholder="Seguradora" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="ALL">Todas Seguradoras</SelectItem>
+                  {seguradoras.map((s) => (
+                    <SelectItem key={s.id} value={s.id}>
+                      {s.nome}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+            <div>
+              <Select value={statusFilter} onValueChange={setStatusFilter}>
+                <SelectTrigger className="w-[150px] h-9 text-xs bg-white">
+                  <SelectValue placeholder="Status" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="ALL">Todos os Status</SelectItem>
+                  <SelectItem value="Ativa">Ativa</SelectItem>
+                  <SelectItem value="Renovação Pendente">Renovação Pendente</SelectItem>
+                  <SelectItem value="Vencida">Vencida</SelectItem>
+                  <SelectItem value="Expirada">Expirada</SelectItem>
+                  <SelectItem value="Cancelada">Cancelada</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+          </div>
+
+          <div className="flex flex-wrap items-center gap-2">
+            <Input
+              placeholder="Buscar por Proposta / Cliente"
+              value={policySearchFilter}
+              onChange={(e) => setPolicySearchFilter(e.target.value)}
+              className="w-[190px] text-xs h-9 bg-white"
+            />
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => setShowMoreFilters((prev) => !prev)}
+              className={`h-9 text-xs gap-1.5 ${
+                showMoreFilters ||
+                filters.partnerId ||
+                filters.tipoSeguro ||
+                commFilter !== 'ALL' ||
+                filters.dateFrom ||
+                filters.dateTo ||
+                cpfCnpjFilter
+                  ? 'border-blue-500 text-blue-700 bg-blue-50/50'
+                  : 'bg-white'
+              }`}
+            >
+              <SlidersHorizontal className="h-3.5 w-3.5" />
+              <span>Mais filtros</span>
+              {showMoreFilters ? (
+                <ChevronDown className="h-3.5 w-3.5 rotate-180 transition-transform" />
+              ) : (
+                <ChevronDown className="h-3.5 w-3.5 transition-transform" />
+              )}
+            </Button>
+            <Button
+              variant="ghost"
+              size="sm"
+              className="h-9 text-xs text-slate-500 hover:text-slate-800"
+              onClick={() => {
+                setFilters({
+                  year: String(new Date().getFullYear()),
+                  month: String(new Date().getMonth() + 1),
+                })
+                setStatusFilter('ALL')
+                setCommFilter('ALL')
+                setCpfCnpjFilter('')
+                setPolicySearchFilter('')
+              }}
+            >
+              Limpar
+            </Button>
+          </div>
         </div>
+
+        {/* Filtros Secundários recolhidos em "Mais filtros" */}
+        {showMoreFilters && (
+          <div className="pt-2.5 mt-2 border-t border-slate-200 flex flex-wrap items-center gap-2.5 text-xs">
+            <div>
+              <Select value={commFilter} onValueChange={setCommFilter}>
+                <SelectTrigger className="w-[160px] h-8 text-xs bg-white">
+                  <SelectValue placeholder="Comissão" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="ALL">Todas as Comissões</SelectItem>
+                  <SelectItem value="received">Recebidas</SelectItem>
+                  <SelectItem value="pending">Pendentes</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+            <div>
+              <Select
+                value={filters.partnerId || 'ALL'}
+                onValueChange={(v) =>
+                  setFilters((prev) => ({ ...prev, partnerId: v === 'ALL' ? undefined : v }))
+                }
+              >
+                <SelectTrigger className="w-[160px] h-8 text-xs bg-white">
+                  <SelectValue placeholder="Parceiro" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="ALL">Todos os Parceiros</SelectItem>
+                  {parceiros.map((p) => (
+                    <SelectItem key={p.id} value={p.id}>
+                      {p.nome}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+            <div>
+              <Input
+                placeholder="Filtrar por CPF/CNPJ"
+                value={cpfCnpjFilter}
+                onChange={(e) => setCpfCnpjFilter(e.target.value)}
+                className="w-[160px] text-xs h-8 bg-white"
+              />
+            </div>
+            <div className="flex items-center gap-1.5">
+              <span className="text-[11px] text-slate-500">De:</span>
+              <Input
+                type="date"
+                value={filters.dateFrom || ''}
+                onChange={(e) =>
+                  setFilters((prev) => ({ ...prev, dateFrom: e.target.value || undefined }))
+                }
+                className="w-[130px] text-xs h-8 bg-white"
+              />
+              <span className="text-[11px] text-slate-500">Até:</span>
+              <Input
+                type="date"
+                value={filters.dateTo || ''}
+                onChange={(e) =>
+                  setFilters((prev) => ({ ...prev, dateTo: e.target.value || undefined }))
+                }
+                className="w-[130px] text-xs h-8 bg-white"
+              />
+            </div>
+          </div>
+        )}
       </div>
 
       {/* ETAPA 2B — ITEM 7: GESTÃO E VISÃO GERAL DE COMISSÕES */}
@@ -1909,13 +2071,11 @@ export default function Financial() {
           <>
             <div className="overflow-x-auto">
               <table className="w-full text-left text-sm text-slate-700">
-                <thead className="bg-slate-100 text-slate-600 font-semibold border-b">
+                <thead className="bg-slate-100 text-slate-600 font-semibold border-b text-xs">
                   <tr>
-                    <th className="p-3">Proposta</th>
-                    <th className="p-3">Cliente</th>
+                    <th className="p-3 w-8"></th>
+                    <th className="p-3">Apólice / Cliente</th>
                     <th className="p-3">Seguradora</th>
-                    <th className="p-3">Tipo</th>
-                    <th className="p-3 text-right">Prêmio Líq.</th>
                     <th className="p-3 text-right">Comissão Prevista</th>
                     <th className="p-3 text-right">Já Recebido</th>
                     <th className="p-3 text-right">Saldo a Receber</th>
@@ -1926,7 +2086,7 @@ export default function Financial() {
                 <tbody className="divide-y divide-slate-100">
                   {tablePolicies.length === 0 ? (
                     <tr>
-                      <td colSpan={10} className="text-center p-6 text-slate-500">
+                      <td colSpan={8} className="text-center p-6 text-slate-500">
                         Nenhuma apólice encontrada.
                       </td>
                     </tr>
@@ -1936,6 +2096,7 @@ export default function Financial() {
                       const policyPrevisoes = allComissoesPrevistasList.filter(
                         (prev) => prev.policy === p.id && prev.status !== 'Cancelada',
                       )
+                      const isExpanded = expandedPolicyIds.has(p.id)
 
                       // Fallback padrão se não houver previsões cadastradas
                       const fallbackPrevisto =
@@ -1953,8 +2114,6 @@ export default function Financial() {
                       )
 
                       // 1. Previsto consolidado da apólice:
-                      // Se houver previsões em comissoes_previstas (status !== 'Cancelada'), previsto = soma(valor_previsto).
-                      // Fallback (sem previsões): max(0, comissão bruta - iss).
                       let previsto = 0
                       let saldo = 0
 
@@ -1980,7 +2139,6 @@ export default function Financial() {
                       }
 
                       // 3. Já Recebido: conta cada comissao_recebimento UMA única vez
-                      // (receivedGrossByPolicy já agrega todas as baixas da apólice, inclusive de endossos)
                       const hasRawGross = receivedGrossByPolicy.has(p.id)
                       const rawRecBruto = receivedGrossByPolicy.get(p.id) || 0
                       const recBrutoTotal = hasRawGross
@@ -2003,15 +2161,9 @@ export default function Financial() {
                       }
 
                       // 4. Status:
-                      // quitada = saldo <= 0,009 && (recebido > 0 || comissao_recebida);
-                      // parcial = !quitada && recebido > 0;
-                      // "Acima" somente se quitada && previsto > 0 && recBrutoTotal > previsto + 0.01 (excedente REAL, não por dupla contagem ou dedução de imposto)
                       const quitada =
                         saldo <= 0.009 && (recBrutoTotal > 0.009 || Boolean(p.comissao_recebida))
                       const parcial = !quitada && recBrutoTotal > 0.009
-                      // Se a apólice possui previsão de comissão líquida (valor_previsto = bruto - iss),
-                      // o valor bruto recebido pode ser maior que o previsto líquido exatamente pelo imposto (ex.: ISS 9,90).
-                      // Um excedente real ocorre quando recBrutoTotal supera a comissão bruta esperada (ou previsto + iss + 0.01).
                       const totalBrutoEsperado = Math.max(
                         previsto + Number(p.iss || 0),
                         fallbackPrevisto,
@@ -2019,150 +2171,372 @@ export default function Financial() {
                       const acima =
                         quitada && previsto > 0 && recBrutoTotal > totalBrutoEsperado + 0.01
                       const policyRecCount = recebimentos.filter((r) => r.policy === p.id).length
+                      const clientName = p.expand?.client?.name || 'Cliente não identificado'
+                      const docNumber = p.numero_proposta || p.policy_number || '-'
+                      const segNome = p.expand?.seguradora?.nome || p.insurance_company || '-'
+                      const tipoSeguro = p.tipo_de_seguro || p.coverage_type || '-'
 
                       return (
-                        <tr key={p.id} className="hover:bg-slate-50/80">
-                          <td
-                            className="p-3 font-bold text-slate-900"
-                            title={p.policy_number ? `Apólice: ${p.policy_number}` : undefined}
+                        <React.Fragment key={p.id}>
+                          {/* LINHA PRINCIPAL ESSENCIAL */}
+                          <tr
+                            className={`hover:bg-slate-50/80 transition-colors cursor-pointer ${
+                              isExpanded ? 'bg-slate-50/60' : ''
+                            }`}
+                            onClick={() => togglePolicyExpanded(p.id)}
                           >
-                            <div className="flex items-center gap-1.5 flex-wrap">
-                              <span>{p.numero_proposta || '-'}</span>
-                              {hasActiveEndorsement && (
-                                <Badge className="bg-blue-600 hover:bg-blue-600 text-white text-[10px] px-1.5 py-0 font-medium">
-                                  Inclui Endosso
+                            <td className="p-3 text-center text-slate-400">
+                              <button
+                                type="button"
+                                className="p-1 hover:text-slate-800 rounded transition-colors"
+                                onClick={(e) => {
+                                  e.stopPropagation()
+                                  togglePolicyExpanded(p.id)
+                                }}
+                                title={isExpanded ? 'Recolher detalhes' : 'Expandir detalhes'}
+                              >
+                                {isExpanded ? (
+                                  <ChevronDown className="w-4 h-4 text-blue-600" />
+                                ) : (
+                                  <ChevronRight className="w-4 h-4" />
+                                )}
+                              </button>
+                            </td>
+                            <td className="p-3">
+                              <div className="flex flex-col">
+                                <span className="font-bold text-slate-900">{clientName}</span>
+                                <div className="flex items-center gap-1.5 flex-wrap text-xs text-slate-500">
+                                  <span>Doc: {docNumber}</span>
+                                  {p.policy_number &&
+                                    p.numero_proposta &&
+                                    p.policy_number !== p.numero_proposta && (
+                                      <span className="text-[10px] text-slate-400">
+                                        (Apólice: {p.policy_number})
+                                      </span>
+                                    )}
+                                  {hasActiveEndorsement && (
+                                    <Badge className="bg-blue-600 hover:bg-blue-600 text-white text-[10px] px-1 py-0 font-medium">
+                                      Endosso
+                                    </Badge>
+                                  )}
+                                </div>
+                              </div>
+                            </td>
+                            <td className="p-3 font-medium text-slate-800">{segNome}</td>
+                            <td className="p-3 text-right font-bold text-slate-900">
+                              R$ {fmtMoney(previsto)}
+                            </td>
+                            <td className="p-3 text-right">
+                              <span className="font-semibold text-emerald-700 block">
+                                R$ {fmtMoney(recBrutoTotal)}
+                              </span>
+                              {recLiquidoTotal > 0 && (
+                                <span
+                                  className="text-[11px] text-blue-600 block"
+                                  title="Receita líquida creditada"
+                                >
+                                  Líq: R$ {fmtMoney(recLiquidoTotal)}
+                                </span>
+                              )}
+                            </td>
+                            <td className="p-3 text-right font-bold text-amber-700">
+                              R$ {fmtMoney(saldo)}
+                            </td>
+                            <td className="p-3 text-center">
+                              {quitada ? (
+                                <Badge className="bg-emerald-600 hover:bg-emerald-600 text-white font-medium">
+                                  {acima ? 'Recebida (Acima)' : 'Recebida'}
+                                </Badge>
+                              ) : parcial ? (
+                                <Badge className="bg-blue-600 hover:bg-blue-600 text-white font-medium">
+                                  Parcial
+                                </Badge>
+                              ) : (
+                                <Badge className="bg-amber-500 hover:bg-amber-500 text-white font-medium">
+                                  Pendente
                                 </Badge>
                               )}
-                            </div>
-                          </td>
-                          <td className="p-3">{p.expand?.client?.name || '-'}</td>
-                          <td className="p-3">
-                            {p.expand?.seguradora?.nome || p.insurance_company || '-'}
-                          </td>
-                          <td className="p-3">{p.tipo_de_seguro || p.coverage_type}</td>
-                          <td className="p-3 text-right font-medium">
-                            R$ {fmtMoney(p.valor_liquido || p.premium_amount || 0)}
-                          </td>
-                          <td className="p-3 text-right font-bold text-slate-900">
-                            R$ {fmtMoney(previsto)}
-                          </td>
-                          <td className="p-3 text-right">
-                            <span className="font-semibold text-emerald-700 block">
-                              R$ {fmtMoney(recBrutoTotal)}
-                            </span>
-                            {recLiquidoTotal > 0 && (
-                              <span
-                                className="text-[11px] text-blue-600 block"
-                                title="Receita líquida creditada"
-                              >
-                                Líq: R$ {fmtMoney(recLiquidoTotal)}
-                              </span>
-                            )}
-                          </td>
-                          <td className="p-3 text-right font-bold text-amber-700">
-                            R$ {fmtMoney(saldo)}
-                          </td>
-                          <td className="p-3 text-center">
-                            {quitada ? (
-                              <Badge className="bg-emerald-600 hover:bg-emerald-600 text-white font-medium">
-                                {acima ? 'Recebida (Acima)' : 'Recebida'}
-                              </Badge>
-                            ) : parcial ? (
-                              <Badge className="bg-blue-600 hover:bg-blue-600 text-white font-medium">
-                                Parcial
-                              </Badge>
-                            ) : (
-                              <Badge className="bg-amber-500 hover:bg-amber-500 text-white font-medium">
-                                Pendente
-                              </Badge>
-                            )}
-                          </td>
-                          <td className="p-3 text-right">
-                            <div className="flex items-center justify-end gap-1">
-                              {can('policies', 'update') && (
-                                <Button
-                                  size="sm"
-                                  className={
-                                    quitada
-                                      ? 'bg-slate-100 hover:bg-slate-200 text-slate-700 border text-xs h-8 px-2'
-                                      : 'bg-emerald-600 hover:bg-emerald-700 text-white text-xs h-8 px-2 shadow-sm'
-                                  }
-                                  title="Registrar recebimento de comissão"
-                                  onClick={() => {
-                                    // Se houver previsão de endosso pendente no período, priorizar preenchimento
-                                    if (hasActiveEndorsement) {
-                                      const activeEndorsementPrev = allComissoesPrevistasList.find(
-                                        (prev) => {
-                                          if (
-                                            prev.policy !== p.id ||
-                                            !prev.endorsement ||
-                                            prev.status === 'Cancelada'
-                                          )
-                                            return false
-                                          if (
-                                            !isCompetenciaInPeriod(
-                                              period,
-                                              prev.competencia,
-                                              prev.data_prevista,
+                            </td>
+                            <td className="p-3 text-right" onClick={(e) => e.stopPropagation()}>
+                              <div className="flex items-center justify-end gap-1">
+                                {can('policies', 'update') && (
+                                  <Button
+                                    size="sm"
+                                    className={
+                                      quitada
+                                        ? 'bg-slate-100 hover:bg-slate-200 text-slate-700 border text-xs h-8 px-2'
+                                        : 'bg-emerald-600 hover:bg-emerald-700 text-white text-xs h-8 px-2 shadow-xs'
+                                    }
+                                    title="Registrar recebimento de comissão"
+                                    onClick={() => {
+                                      // Se houver previsão de endosso pendente no período, priorizar preenchimento
+                                      if (hasActiveEndorsement) {
+                                        const activeEndorsementPrev =
+                                          allComissoesPrevistasList.find((prev) => {
+                                            if (
+                                              prev.policy !== p.id ||
+                                              !prev.endorsement ||
+                                              prev.status === 'Cancelada'
                                             )
+                                              return false
+                                            if (
+                                              !isCompetenciaInPeriod(
+                                                period,
+                                                prev.competencia,
+                                                prev.data_prevista,
+                                              )
+                                            )
+                                              return false
+                                            const recRes = reconciliacaoMap.get(prev.id)
+                                            const s = recRes
+                                              ? recRes.saldo
+                                              : Number(prev.valor_previsto) || 0
+                                            return s > 0.009
+                                          })
+                                        if (activeEndorsementPrev) {
+                                          const recRes = reconciliacaoMap.get(
+                                            activeEndorsementPrev.id,
                                           )
-                                            return false
-                                          const recRes = reconciliacaoMap.get(prev.id)
                                           const s = recRes
                                             ? recRes.saldo
-                                            : Number(prev.valor_previsto) || 0
-                                          return s > 0.009
-                                        },
-                                      )
-                                      if (activeEndorsementPrev) {
-                                        const recRes = reconciliacaoMap.get(
-                                          activeEndorsementPrev.id,
-                                        )
-                                        const s = recRes
-                                          ? recRes.saldo
-                                          : Number(activeEndorsementPrev.valor_previsto) || 0
-                                        handleOpenRegistrarRecebimento(
-                                          p,
-                                          activeEndorsementPrev.competencia,
-                                          activeEndorsementPrev.id,
-                                          s,
-                                          activeEndorsementPrev.endorsement,
-                                        )
-                                        return
+                                            : Number(activeEndorsementPrev.valor_previsto) || 0
+                                          handleOpenRegistrarRecebimento(
+                                            p,
+                                            activeEndorsementPrev.competencia,
+                                            activeEndorsementPrev.id,
+                                            s,
+                                            activeEndorsementPrev.endorsement,
+                                          )
+                                          return
+                                        }
                                       }
-                                    }
-                                    handleOpenRegistrarRecebimento(p)
-                                  }}
-                                >
-                                  <ArrowDownCircle className="w-3.5 h-3.5 mr-1" />
-                                  Registrar recebimento
-                                </Button>
-                              )}
-                              {policyRecCount > 0 && (
-                                <Button
-                                  size="sm"
-                                  variant="ghost"
-                                  className="text-slate-600 hover:text-slate-900 h-8 px-2"
-                                  title={`Ver/Editar histórico de recebimentos (${policyRecCount})`}
-                                  onClick={() => setHistoryPolicy(p)}
-                                >
-                                  <History className="w-3.5 h-3.5 mr-1" />
-                                  <span className="text-xs">{policyRecCount}</span>
-                                </Button>
-                              )}
-                              {can('policies', 'update') && (
-                                <Button
-                                  size="sm"
-                                  variant="ghost"
-                                  title="Editar Repasse Parceiro"
-                                  onClick={() => setEditPolicy(p)}
-                                >
-                                  <Edit2 className="w-3.5 h-3.5" />
-                                </Button>
-                              )}
-                            </div>
-                          </td>
-                        </tr>
+                                      handleOpenRegistrarRecebimento(p)
+                                    }}
+                                  >
+                                    <ArrowDownCircle className="w-3.5 h-3.5 mr-1" />
+                                    Registrar
+                                  </Button>
+                                )}
+                                {policyRecCount > 0 && (
+                                  <Button
+                                    size="sm"
+                                    variant="ghost"
+                                    className="text-slate-600 hover:text-slate-900 h-8 px-2"
+                                    title={`Ver/Editar histórico de recebimentos (${policyRecCount})`}
+                                    onClick={() => setHistoryPolicy(p)}
+                                  >
+                                    <History className="w-3.5 h-3.5 mr-1" />
+                                    <span className="text-xs">{policyRecCount}</span>
+                                  </Button>
+                                )}
+                                {can('policies', 'update') && (
+                                  <Button
+                                    size="sm"
+                                    variant="ghost"
+                                    title="Editar Repasse Parceiro"
+                                    onClick={() => setEditPolicy(p)}
+                                  >
+                                    <Edit2 className="w-3.5 h-3.5" />
+                                  </Button>
+                                )}
+                              </div>
+                            </td>
+                          </tr>
+
+                          {/* LINHA EXPANSÍVEL: DETALHAMENTO COMPLETO (PARCELAS, IMPOSTOS, DATAS, PRÊMIO, REPASSE) */}
+                          {isExpanded && (
+                            <tr className="bg-slate-50/90 border-b border-slate-200">
+                              <td colSpan={8} className="p-4 pl-11">
+                                <div className="space-y-3 text-xs text-slate-700">
+                                  {/* Grid de Detalhes Cadastrais e Financeiros */}
+                                  <div className="grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-6 gap-3 p-3 bg-white rounded-md border border-slate-200/80">
+                                    <div>
+                                      <span className="text-[11px] text-slate-500 block">
+                                        Ramo / Tipo
+                                      </span>
+                                      <strong className="text-slate-800 font-medium">
+                                        {tipoSeguro}
+                                      </strong>
+                                    </div>
+                                    <div>
+                                      <span className="text-[11px] text-slate-500 block">
+                                        Prêmio Líquido
+                                      </span>
+                                      <strong className="text-slate-800 font-medium">
+                                        R$ {fmtMoney(p.valor_liquido || p.premium_amount || 0)}
+                                      </strong>
+                                    </div>
+                                    <div>
+                                      <span className="text-[11px] text-slate-500 block">
+                                        % Comissão
+                                      </span>
+                                      <strong className="text-slate-800 font-medium">
+                                        {p.commission_percent || 0}%
+                                      </strong>
+                                    </div>
+                                    <div>
+                                      <span className="text-[11px] text-slate-500 block">
+                                        ISS / Deduções
+                                      </span>
+                                      <strong className="text-slate-800 font-medium">
+                                        R$ {fmtMoney(Number(p.iss || 0))}
+                                      </strong>
+                                    </div>
+                                    <div>
+                                      <span className="text-[11px] text-slate-500 block">
+                                        Início de Vigência
+                                      </span>
+                                      <strong className="text-slate-800 font-medium">
+                                        {formatDateDisplay(p.start_date) || '-'}
+                                      </strong>
+                                    </div>
+                                    <div>
+                                      <span className="text-[11px] text-slate-500 block">
+                                        Fim de Vigência
+                                      </span>
+                                      <strong className="text-slate-800 font-medium">
+                                        {formatDateDisplay(p.end_date) || '-'}
+                                      </strong>
+                                    </div>
+                                    {p.tipo_de_venda === 'Parceiro' && (
+                                      <>
+                                        <div>
+                                          <span className="text-[11px] text-slate-500 block">
+                                            Parceiro
+                                          </span>
+                                          <strong className="text-blue-700 font-medium">
+                                            {p.expand?.parceiro?.nome || '-'}
+                                          </strong>
+                                        </div>
+                                        <div>
+                                          <span className="text-[11px] text-slate-500 block">
+                                            Repasse (R$)
+                                          </span>
+                                          <strong className="text-blue-700 font-medium">
+                                            R$ {fmtMoney(p.valor_repasse || 0)}
+                                          </strong>
+                                        </div>
+                                      </>
+                                    )}
+                                  </div>
+
+                                  {/* Subtabela de Parcelas / Previsões / Competências Vinculadas */}
+                                  {policyPrevisoes.length > 0 && (
+                                    <div className="border rounded-md overflow-hidden bg-white">
+                                      <div className="bg-slate-100/90 px-3 py-1.5 font-semibold text-slate-700 text-[11px] border-b flex items-center justify-between">
+                                        <span>
+                                          Previsões / Parcelas Cadastradas ({policyPrevisoes.length}
+                                          )
+                                        </span>
+                                        <span className="text-[10px] text-slate-500 font-normal">
+                                          Reconciliação direta por parcela
+                                        </span>
+                                      </div>
+                                      <table className="w-full text-left text-xs text-slate-700">
+                                        <thead className="bg-slate-50 border-b text-[11px] text-slate-500">
+                                          <tr>
+                                            <th className="p-2">Parcela / Origem</th>
+                                            <th className="p-2">Competência</th>
+                                            <th className="p-2">Data Prevista</th>
+                                            <th className="p-2 text-right">Valor Previsto</th>
+                                            <th className="p-2 text-right">Valor Recebido</th>
+                                            <th className="p-2 text-right">Saldo</th>
+                                            <th className="p-2 text-center">Status</th>
+                                            <th className="p-2 text-right">Ação</th>
+                                          </tr>
+                                        </thead>
+                                        <tbody className="divide-y divide-slate-100">
+                                          {policyPrevisoes.map((prev) => {
+                                            const recRes = reconciliacaoMap.get(prev.id)
+                                            const vPrev = Number(prev.valor_previsto) || 0
+                                            const rBruto = recRes ? recRes.valorRecebidoBruto : 0
+                                            const sParc = recRes
+                                              ? recRes.saldo
+                                              : Math.max(
+                                                  0,
+                                                  Math.round((vPrev - rBruto) * 100) / 100,
+                                                )
+                                            const isQuitadaParc = sParc <= 0.009
+
+                                            return (
+                                              <tr key={prev.id} className="hover:bg-slate-50/60">
+                                                <td className="p-2 font-medium">
+                                                  {prev.endorsement ? (
+                                                    <Badge
+                                                      variant="outline"
+                                                      className="text-[10px] px-1 py-0 border-blue-200 bg-blue-50 text-blue-700 mr-1"
+                                                    >
+                                                      Endosso
+                                                    </Badge>
+                                                  ) : (
+                                                    <span className="text-slate-600">
+                                                      Parcela {prev.parcela_numero || 1}
+                                                    </span>
+                                                  )}
+                                                </td>
+                                                <td className="p-2 font-bold text-slate-800">
+                                                  {prev.competencia || '-'}
+                                                </td>
+                                                <td className="p-2 text-slate-600">
+                                                  {formatDateDisplay(prev.data_prevista) || '-'}
+                                                </td>
+                                                <td className="p-2 text-right font-medium">
+                                                  R$ {fmtMoney(vPrev)}
+                                                </td>
+                                                <td className="p-2 text-right font-semibold text-emerald-700">
+                                                  R$ {fmtMoney(rBruto)}
+                                                </td>
+                                                <td className="p-2 text-right font-bold text-amber-700">
+                                                  R$ {fmtMoney(sParc)}
+                                                </td>
+                                                <td className="p-2 text-center">
+                                                  <Badge
+                                                    className={`text-[10px] px-1.5 py-0 ${
+                                                      isQuitadaParc
+                                                        ? 'bg-emerald-600 text-white'
+                                                        : rBruto > 0
+                                                          ? 'bg-blue-600 text-white'
+                                                          : 'bg-amber-500 text-white'
+                                                    }`}
+                                                  >
+                                                    {isQuitadaParc
+                                                      ? 'Recebida'
+                                                      : rBruto > 0
+                                                        ? 'Parcial'
+                                                        : 'Pendente'}
+                                                  </Badge>
+                                                </td>
+                                                <td className="p-2 text-right">
+                                                  {!isQuitadaParc && (
+                                                    <Button
+                                                      size="sm"
+                                                      className="h-6 text-[11px] px-2 bg-emerald-600 hover:bg-emerald-700 text-white"
+                                                      onClick={() =>
+                                                        handleOpenRegistrarRecebimento(
+                                                          p,
+                                                          prev.competencia,
+                                                          prev.id,
+                                                          sParc > 0 ? sParc : vPrev,
+                                                          prev.endorsement,
+                                                        )
+                                                      }
+                                                    >
+                                                      Baixar
+                                                    </Button>
+                                                  )}
+                                                </td>
+                                              </tr>
+                                            )
+                                          })}
+                                        </tbody>
+                                      </table>
+                                    </div>
+                                  )}
+                                </div>
+                              </td>
+                            </tr>
+                          )}
+                        </React.Fragment>
                       )
                     })
                   )}

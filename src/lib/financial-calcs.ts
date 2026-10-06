@@ -1,5 +1,5 @@
-import { Policy, CustoFixo, ComissaoRecebimento } from '@/types'
-import { DatePeriod, isDateInPeriod } from '@/lib/date-filter'
+import { Policy, CustoFixo, ComissaoRecebimento, ComissaoPrevista } from '@/types'
+import { DatePeriod, isDateInPeriod, extractDatePart } from '@/lib/date-filter'
 
 export const calcNetCommission = (p: Policy) => (p.commission || 0) - (p.iss || 0)
 
@@ -382,5 +382,228 @@ export function computeQuickPayLiquidacao(
     taxaPix,
     liquidoFinal,
     saldoDevedorRemanescente,
+  }
+}
+
+/**
+ * Informações de apólice com comissão pendente há mais de 60 dias.
+ */
+export interface PendenciaComissao60Item {
+  policy: Policy
+  dataReferencia: string // YYYY-MM-DD
+  origemReferencia: 'competencia' | 'start_date' | 'created'
+  diasParados: number
+  comissaoPrevista: number
+  valorRecebidoBruto: number
+  saldoPendente: number
+  competenciaSugerida?: string
+  comissaoPrevistaId?: string
+}
+
+export interface PendenciasComissao60Result {
+  totalValorPendente: number
+  countApolices: number
+  itens: PendenciaComissao60Item[]
+}
+
+/**
+ * Normaliza uma competência MM/AAAA (ou M/AAAA) para a data ISO do 1º dia (YYYY-MM-01).
+ * Retorna null se não estiver no formato.
+ */
+export function getFirstDayFromCompetencia(competencia?: string): string | null {
+  if (!competencia || typeof competencia !== 'string') return null
+  const cleaned = competencia.trim()
+  const match = cleaned.match(/^(\d{1,2})\/(\d{4})$/)
+  if (!match) return null
+  const month = match[1].padStart(2, '0')
+  const year = match[2]
+  return `${year}-${month}-01`
+}
+
+/**
+ * Calcula a diferença em dias corridos entre a data de referência e a data atual (ou hoje simulado).
+ */
+export function calculateElapsedDays(dataReferencia: string, todayStr?: string): number {
+  const refPart = extractDatePart(dataReferencia)
+  if (!refPart) return 0
+  const todayPart = todayStr ? extractDatePart(todayStr) : new Date().toISOString().split('T')[0]
+
+  const refDate = new Date(`${refPart}T00:00:00`)
+  const curDate = new Date(`${todayPart}T00:00:00`)
+
+  const diffMs = curDate.getTime() - refDate.getTime()
+  return Math.floor(diffMs / (1000 * 60 * 60 * 24))
+}
+
+/**
+ * Identifica apólices com comissão sem baixa há mais de 60 dias corridos.
+ *
+ * Regras:
+ * 1. Apólice não cancelada (status !== 'Cancelada').
+ * 2. Saldo pendente > 0.009 e não quitada (isPolicyCommissionSettled == false).
+ * 3. Data de referência:
+ *    - Se tiver competência MM/AAAA mais antiga pendente em `comissoesPrevistas` -> 1º dia do mês (YYYY-MM-01).
+ *    - Senão -> data de início de vigência da apólice (start_date).
+ *    - Senão -> data de criação do registro (created).
+ * 4. Dias corridos > 60 (exatamente 60 NÃO entra; 61 entra).
+ * 5. Ordenado do mais antigo (maior diasParados) para o mais novo.
+ */
+export function computePendenciasComissao60(
+  policies: Policy[],
+  recebimentos: ComissaoRecebimento[] = [],
+  comissoesPrevistas: ComissaoPrevista[] = [],
+  todayStr?: string,
+): PendenciasComissao60Result {
+  // Mapa de recebimentos brutos por apólice e por previsão
+  const recGrossByPolicy = new Map<string, number>()
+  const recGrossByPrev = new Map<string, number>()
+
+  for (const r of recebimentos) {
+    const vBruto = Number(r.valor_bruto) || 0
+    if (r.policy) {
+      recGrossByPolicy.set(r.policy, (recGrossByPolicy.get(r.policy) || 0) + vBruto)
+    }
+    if (r.comissao_prevista) {
+      recGrossByPrev.set(
+        r.comissao_prevista,
+        (recGrossByPrev.get(r.comissao_prevista) || 0) + vBruto,
+      )
+    }
+  }
+
+  // Previsões por apólice
+  const prevsByPolicy = new Map<string, ComissaoPrevista[]>()
+  for (const prev of comissoesPrevistas) {
+    if (prev.status === 'Cancelada') continue
+    if (!prevsByPolicy.has(prev.policy)) {
+      prevsByPolicy.set(prev.policy, [])
+    }
+    prevsByPolicy.get(prev.policy)!.push(prev)
+  }
+
+  const itens: PendenciaComissao60Item[] = []
+
+  for (const p of policies) {
+    // Apólice cancelada nunca alerta
+    if (p.status === 'Cancelada') continue
+
+    const polPrevs = prevsByPolicy.get(p.id) || []
+    let totalPrevisto = 0
+    let totalSaldo = 0
+    let oldestCompFirstDay: string | null = null
+    let oldestCompLabel: string | undefined = undefined
+    let oldestCompPrevId: string | undefined = undefined
+
+    if (polPrevs.length > 0) {
+      // Ordenar previsões pela data_prevista / competência
+      const sortedPrevs = [...polPrevs].sort((a, b) => {
+        const da = a.data_prevista || getFirstDayFromCompetencia(a.competencia) || a.created || ''
+        const db = b.data_prevista || getFirstDayFromCompetencia(b.competencia) || b.created || ''
+        return da.localeCompare(db)
+      })
+
+      for (const prev of sortedPrevs) {
+        const vPrev = Number(prev.valor_previsto) || 0
+        totalPrevisto = Math.round((totalPrevisto + vPrev) * 100) / 100
+        const recBruto = recGrossByPrev.get(prev.id) || 0
+        const saldo = Math.max(0, Math.round((vPrev - recBruto) * 100) / 100)
+        totalSaldo = Math.round((totalSaldo + saldo) * 100) / 100
+
+        // Se tem saldo pendente nessa parcela/competência e ainda não elegemos a mais antiga
+        if (saldo > 0.009 && !oldestCompFirstDay) {
+          const compFirstDay = getFirstDayFromCompetencia(prev.competencia)
+          if (compFirstDay) {
+            oldestCompFirstDay = compFirstDay
+            oldestCompLabel = prev.competencia
+            oldestCompPrevId = prev.id
+          } else if (prev.data_prevista) {
+            oldestCompFirstDay = extractDatePart(prev.data_prevista)
+            oldestCompLabel = prev.competencia
+            oldestCompPrevId = prev.id
+          }
+        }
+      }
+
+      // Se a apólice está quitada (saldo zerado e recebido > 0 ou flag comissao_recebida)
+      const recBrutoTotal = recGrossByPolicy.get(p.id) || 0
+      if (totalSaldo <= 0.009 && (recBrutoTotal > 0.009 || Boolean(p.comissao_recebida))) {
+        continue
+      }
+    } else {
+      // Fallback sem comissões previstas
+      if (p.comissao_recebida) continue
+
+      const fallbackPrevisto =
+        p.commission != null
+          ? Number(p.commission)
+          : Math.round(
+              (((p.valor_liquido || p.premium_amount || 0) * (p.commission_percent || 0)) / 100) *
+                100,
+            ) / 100
+      const iss = Number(p.iss || 0)
+      totalPrevisto = Math.max(0, Math.round((fallbackPrevisto - iss) * 100) / 100)
+      const rec = recGrossByPolicy.get(p.id) || 0
+      totalSaldo = Math.max(0, Math.round((totalPrevisto - rec) * 100) / 100)
+
+      if (totalSaldo <= 0.009) continue
+    }
+
+    // Sem saldo a receber pendente
+    if (totalSaldo <= 0.009) continue
+
+    // Determinar data de referência:
+    // 1. Competência (1º dia do mês YYYY-MM-01)
+    // 2. start_date
+    // 3. created
+    let dataReferencia = ''
+    let origemReferencia: 'competencia' | 'start_date' | 'created' = 'created'
+
+    if (oldestCompFirstDay) {
+      dataReferencia = oldestCompFirstDay
+      origemReferencia = 'competencia'
+    } else if (p.start_date) {
+      dataReferencia = extractDatePart(p.start_date)
+      origemReferencia = 'start_date'
+    } else if (p.created) {
+      dataReferencia = extractDatePart(p.created)
+      origemReferencia = 'created'
+    }
+
+    if (!dataReferencia) continue
+
+    const diasParados = calculateElapsedDays(dataReferencia, todayStr)
+
+    // Critério: dias corridos > 60
+    if (diasParados > 60) {
+      const recBruto = recGrossByPolicy.get(p.id) || 0
+      itens.push({
+        policy: p,
+        dataReferencia,
+        origemReferencia,
+        diasParados,
+        comissaoPrevista: totalPrevisto,
+        valorRecebidoBruto: recBruto,
+        saldoPendente: totalSaldo,
+        competenciaSugerida: oldestCompLabel,
+        comissaoPrevistaId: oldestCompPrevId,
+      })
+    }
+  }
+
+  // Ordenar do mais antigo para o mais novo (maior diasParados primeiro)
+  itens.sort((a, b) => {
+    if (b.diasParados !== a.diasParados) {
+      return b.diasParados - a.diasParados
+    }
+    return (b.policy.policy_code || 0) - (a.policy.policy_code || 0)
+  })
+
+  const totalValorPendente =
+    Math.round(itens.reduce((sum, item) => sum + item.saldoPendente, 0) * 100) / 100
+
+  return {
+    totalValorPendente,
+    countApolices: itens.length,
+    itens,
   }
 }
