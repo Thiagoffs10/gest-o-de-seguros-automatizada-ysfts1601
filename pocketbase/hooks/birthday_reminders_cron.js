@@ -50,6 +50,37 @@ cronAdd('birthday_reminders', '0 8 * * *', () => {
       return
     }
 
+    // Ordenar clientes pelo dia do nascimento para exibição clara
+    monthClients.sort((a, b) => {
+      var dayA = 0
+      var dayB = 0
+      try {
+        var strA = a.getString('birth_date').split('T')[0].split(' ')[0]
+        var pA = strA.split('-')
+        if (pA.length >= 3) dayA = parseInt(pA[2], 10)
+      } catch (_) {}
+      try {
+        var strB = b.getString('birth_date').split('T')[0].split(' ')[0]
+        var pB = strB.split('-')
+        if (pB.length >= 3) dayB = parseInt(pB[2], 10)
+      } catch (_) {}
+      return dayA - dayB
+    })
+
+    var clientDetails = []
+    for (var j = 0; j < monthClients.length; j++) {
+      var c = monthClients[j]
+      var cName = (c.getString('name') || 'Cliente').trim()
+      var bStr = c.getString('birth_date').split('T')[0].split(' ')[0]
+      var bParts = bStr.split('-')
+      var dayStr = bParts.length >= 3 ? bParts[2] : ''
+      if (dayStr) {
+        clientDetails.push(cName + ' (dia ' + dayStr + ')')
+      } else {
+        clientDetails.push(cName)
+      }
+    }
+
     var reminderMessage =
       'Aniversariantes de ' +
       monthName +
@@ -59,7 +90,8 @@ cronAdd('birthday_reminders', '0 8 * * *', () => {
       monthClients.length +
       ' cliente' +
       (monthClients.length > 1 ? 's' : '') +
-      ')'
+      '): ' +
+      clientDetails.join(', ')
 
     // Procurar se já existe o lembrete agrupado do mês
     var existingGroupReminder = null

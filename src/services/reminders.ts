@@ -27,6 +27,19 @@ export const completeReminder = async (id: string) => {
   })
 }
 
+export const deleteRemindersBatch = async (ids: string[]): Promise<number> => {
+  let count = 0
+  for (const id of ids) {
+    try {
+      await pb.collection('reminders').delete(id)
+      count++
+    } catch {
+      /* continue */
+    }
+  }
+  return count
+}
+
 export const completeAllPendingReminders = async (): Promise<number> => {
   const pending = await pb.collection('reminders').getFullList<Reminder>({
     filter: 'sent = false',

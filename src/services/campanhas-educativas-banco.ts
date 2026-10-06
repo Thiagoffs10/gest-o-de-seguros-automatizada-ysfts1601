@@ -90,14 +90,14 @@ Equipe CRED10MIX Corretora de Seguros`,
       '{nome_cliente}, garanta a proteção da sua residência com 10% de desconto exclusivo 🏡',
     sugestaoCorpo: `Olá, {nome_cliente}!
 
-Sabemos o quanto você preza pela tranquilidade e segurança do seu patrimônio com a CRED10MIX.
+Sabemos o quanto você preza pela tranquilidade e segurança do seu seguro de automóvel com a CRED10MIX.
 
 Que tal estender essa proteção para o seu lar? O Seguro Residencial oferece benefícios essenciais para o seu dia a dia:
 • Proteção da casa ou apartamento com coberturas completas de incêndio, queda de raio e explosão;
 • Cobertura contra roubo ou furto qualificado de bens no imóvel;
 • Assistências 24h emergenciais completas: chaveiro, encanador, eletricista e conserto de eletrodomésticos de linha branca.
 
-E o melhor: como você já conta com o seguro do seu veículo conosco, preparamos uma condição imperdível — você pode garantir a contratação agora com 10% de desconto especial!
+E o melhor: como você já conta com o seu seguro de automóvel conosco, preparamos uma condição imperdível — você pode garantir a contratação agora com 10% de desconto especial!
 
 Para solicitar a sua cotação rápida e sem compromisso, fale agora mesmo pelo WhatsApp:
 📲 WhatsApp: 81 98865-3534 (Thiago)

@@ -18,8 +18,10 @@ import {
   createReminder,
   updateReminder,
   deleteReminder,
+  deleteRemindersBatch,
   completeAllPendingReminders,
 } from '@/services/reminders'
+import { Checkbox } from '@/components/ui/checkbox'
 import { getClients } from '@/services/clients'
 import { sendSingleEmail, sendMonthlyBirthdaysEmail } from '@/services/communications'
 import { Reminder, Client } from '@/types'
@@ -67,6 +69,9 @@ export default function RemindersPage() {
   const [completeAllOpen, setCompleteAllOpen] = useState(false)
   const [completingAll, setCompletingAll] = useState(false)
   const [deleteTarget, setDeleteTarget] = useState<Reminder | null>(null)
+  const [selectedIds, setSelectedIds] = useState<string[]>([])
+  const [deleteBatchOpen, setDeleteBatchOpen] = useState(false)
+  const [deletingBatch, setDeletingBatch] = useState(false)
   const [loading, setLoading] = useState(true)
   const [sendingEmailId, setSendingEmailId] = useState<string | null>(null)
   const [search, setSearch] = useState('')
@@ -400,6 +405,49 @@ export default function RemindersPage() {
   const paginatedReminders = filteredReminders.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE)
   const pendingCount = reminders.filter((r) => !r.sent).length
 
+  const allVisibleSelected =
+    paginatedReminders.length > 0 && paginatedReminders.every((r) => selectedIds.includes(r.id))
+
+  const handleToggleSelectAll = () => {
+    if (allVisibleSelected) {
+      const visibleIds = new Set(paginatedReminders.map((r) => r.id))
+      setSelectedIds((prev) => prev.filter((id) => !visibleIds.has(id)))
+    } else {
+      const newSelected = new Set(selectedIds)
+      paginatedReminders.forEach((r) => newSelected.add(r.id))
+      setSelectedIds(Array.from(newSelected))
+    }
+  }
+
+  const handleToggleSelectOne = (id: string) => {
+    setSelectedIds((prev) =>
+      prev.includes(id) ? prev.filter((item) => item !== id) : [...prev, id],
+    )
+  }
+
+  const handleDeleteBatch = async () => {
+    if (selectedIds.length === 0) return
+    setDeletingBatch(true)
+    try {
+      const count = await deleteRemindersBatch(selectedIds)
+      toast({
+        title: 'Lembretes excluídos com sucesso!',
+        description: `${count} lembrete(s) excluído(s).`,
+      })
+      setSelectedIds([])
+      setDeleteBatchOpen(false)
+      loadData()
+    } catch (err: any) {
+      toast({
+        title: 'Erro ao excluir selecionados',
+        description: err?.message || 'Falha ao excluir.',
+        variant: 'destructive',
+      })
+    } finally {
+      setDeletingBatch(false)
+    }
+  }
+
   if (loading)
     return <div className="text-slate-500 py-8 text-center">Carregando informações...</div>
 
@@ -413,6 +461,17 @@ export default function RemindersPage() {
           </p>
         </div>
         <div className="flex flex-wrap items-center gap-2">
+          {can('reminders', 'delete') && selectedIds.length > 0 && (
+            <Button
+              variant="destructive"
+              size="sm"
+              onClick={() => setDeleteBatchOpen(true)}
+              className="bg-red-600 hover:bg-red-700 font-semibold"
+            >
+              <Trash2 className="w-4 h-4 mr-1.5" />
+              Excluir selecionados ({selectedIds.length})
+            </Button>
+          )}
           {can('reminders', 'update') && pendingCount > 0 && (
             <Button
               variant="outline"
@@ -495,6 +554,13 @@ export default function RemindersPage() {
           <table className="w-full text-left text-sm text-slate-700">
             <thead className="bg-slate-100 text-slate-600 font-semibold border-b">
               <tr>
+                <th className="p-3.5 w-10 text-center">
+                  <Checkbox
+                    checked={allVisibleSelected}
+                    onCheckedChange={handleToggleSelectAll}
+                    aria-label="Selecionar todos os lembretes visíveis"
+                  />
+                </th>
                 <th className="p-3.5">Tipo</th>
                 <th className="p-3.5">Cliente</th>
                 <th className="p-3.5">Data Programada</th>
@@ -506,22 +572,44 @@ export default function RemindersPage() {
             <tbody className="divide-y divide-slate-100">
               {filteredReminders.length === 0 ? (
                 <tr>
-                  <td colSpan={6} className="text-center p-6 text-slate-500">
+                  <td colSpan={7} className="text-center p-6 text-slate-500">
                     Nenhum lembrete encontrado.
                   </td>
                 </tr>
               ) : (
                 paginatedReminders.map((r) => {
                   const isGroupBirthday = isGroupBirthdayReminder(r)
-                  const monthClientsCount = isGroupBirthday
-                    ? getMonthClientsForReminder(r).length
-                    : 0
+                  const monthClients = isGroupBirthday ? getMonthClientsForReminder(r) : []
+                  const monthClientsCount = monthClients.length
+                  const isSelected = selectedIds.includes(r.id)
+
+                  // Formatar lista de nomes para exibição enriquecida na linha
+                  const birthdayNamesInline =
+                    isGroupBirthday && monthClients.length > 0
+                      ? monthClients
+                          .map((c) => {
+                            const cName = (c.name || 'Cliente').trim()
+                            const bPart = extractDateOnly(c.birth_date || '')
+                            const day = bPart ? bPart.split('-')[2] : ''
+                            return day ? `${cName} (dia ${day})` : cName
+                          })
+                          .join(', ')
+                      : null
 
                   return (
                     <tr
                       key={r.id}
-                      className={`hover:bg-slate-50 ${isGroupBirthday ? 'bg-amber-50/30' : ''}`}
+                      className={`hover:bg-slate-50 ${isGroupBirthday ? 'bg-amber-50/30' : ''} ${
+                        isSelected ? 'bg-blue-50/50' : ''
+                      }`}
                     >
+                      <td className="p-3.5 text-center">
+                        <Checkbox
+                          checked={isSelected}
+                          onCheckedChange={() => handleToggleSelectOne(r.id)}
+                          aria-label={`Selecionar lembrete ${r.id}`}
+                        />
+                      </td>
                       <td className="p-3.5 font-bold text-blue-600">
                         <div className="flex items-center gap-1.5">
                           {isGroupBirthday && <Cake className="w-4 h-4 text-amber-500 shrink-0" />}
@@ -539,8 +627,20 @@ export default function RemindersPage() {
                         )}
                       </td>
                       <td className="p-3.5">{formatDateDisplay(r.date)}</td>
-                      <td className="p-3.5 max-w-xs truncate" title={r.message}>
-                        {r.message}
+                      <td className="p-3.5 max-w-md">
+                        <div className="space-y-0.5">
+                          <p className="text-slate-800 font-medium" title={r.message}>
+                            {r.message}
+                          </p>
+                          {birthdayNamesInline && !r.message?.includes(':') && (
+                            <p
+                              className="text-xs text-amber-800 line-clamp-2"
+                              title={birthdayNamesInline}
+                            >
+                              🎂 {birthdayNamesInline}
+                            </p>
+                          )}
+                        </div>
                       </td>
                       <td className="p-3.5">
                         <Badge className={r.sent ? 'bg-slate-400' : 'bg-amber-500'}>
@@ -1026,6 +1126,30 @@ export default function RemindersPage() {
             <AlertDialogCancel>Cancelar</AlertDialogCancel>
             <AlertDialogAction className="bg-red-600 hover:bg-red-700" onClick={handleDelete}>
               Excluir
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+
+      {/* Diálogo Confirmar Exclusão em Lote */}
+      <AlertDialog open={deleteBatchOpen} onOpenChange={setDeleteBatchOpen}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Excluir lembretes selecionados?</AlertDialogTitle>
+            <AlertDialogDescription>
+              Tem certeza que deseja excluir permanentemente os{' '}
+              <strong>{selectedIds.length} lembrete(s) selecionado(s)</strong>? Esta ação não pode
+              ser desfeita.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel disabled={deletingBatch}>Cancelar</AlertDialogCancel>
+            <AlertDialogAction
+              className="bg-red-600 hover:bg-red-700"
+              onClick={handleDeleteBatch}
+              disabled={deletingBatch}
+            >
+              {deletingBatch ? 'Excluindo...' : `Excluir ${selectedIds.length} Lembrete(s)`}
             </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>

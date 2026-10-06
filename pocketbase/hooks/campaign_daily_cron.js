@@ -91,8 +91,6 @@ cronAdd('campaign_daily_pipeline', '0 9 * * *', () => {
           ) {
             if (isAtiva) {
               hasAuto = true
-              var mod = p.getString('modelo_veiculo') || p.getString('placa') || 'veículo'
-              autoVehicles.push(mod)
             }
           }
           if (
@@ -209,13 +207,11 @@ cronAdd('campaign_daily_pipeline', '0 9 * * *', () => {
         var objetivo = nextPasso.objetivo || ''
 
         var clientFirstName = clientName.split(' ')[0] || 'Cliente'
-        var veiculoPrincipal = autoVehicles.length > 0 ? autoVehicles[0] : ''
         var clientSnapshot = {
           nome: clientName,
           primeiro_nome: clientFirstName,
           email: clientEmail,
           possui_auto: hasAuto,
-          veiculo: veiculoPrincipal,
           possui_residencial: hasResidencial,
           possui_vida: hasVida,
           total_apolices: clientPolicies.length,
@@ -235,9 +231,6 @@ cronAdd('campaign_daily_pipeline', '0 9 * * *', () => {
               ' (Primeiro nome: ' +
               clientFirstName +
               ')\n' +
-              '- Veículo segurado: ' +
-              (veiculoPrincipal || 'Não informado') +
-              '\n' +
               '- Possui seguro auto: ' +
               (hasAuto ? 'Sim' : 'Não') +
               '\n' +
@@ -258,6 +251,7 @@ cronAdd('campaign_daily_pipeline', '0 9 * * *', () => {
               '- Campanha: ' +
               campNome +
               '\n\n' +
+              'REGRA CRÍTICA: NÃO cite marca, modelo ou placa de veículo em hipótese alguma. Use apenas termos genéricos como "seu seguro de automóvel" ou "sua proteção veicular".\n\n' +
               'IMPORTANTE: Se for oferta de Seguro Residencial, ofereça os benefícios (proteção da casa, coberturas de incêndio/roubo/assistências 24h), peça para garantir agora com 10% de desconto e peça expressamente para solicitar a cotação pelo WhatsApp 81 98865-3534 com Thiago.\n\n' +
               'Gere um JSON estrito com {"assunto": "...", "corpo": "..."}.'
 
@@ -292,9 +286,7 @@ cronAdd('campaign_daily_pipeline', '0 9 * * *', () => {
               'Olá, ' +
               clientFirstName +
               '!\n\n' +
-              'Sabemos o quanto você preza pela segurança do seu ' +
-              (veiculoPrincipal ? 'veículo (' + veiculoPrincipal + ')' : 'patrimônio') +
-              ' com a CRED10MIX.\n\n' +
+              'Sabemos o quanto você preza pela tranquilidade e segurança do seu seguro de automóvel com a CRED10MIX.\n\n' +
               'Que tal estender essa tranquilidade para a proteção da sua casa? O Seguro Residencial CRED10MIX protege o seu lar com coberturas completas contra incêndio, roubo/furto e assistências 24h emergenciais (chaveiro, eletricista, encanador e conserto de eletrodomésticos).\n\n' +
               'Como você já é nosso cliente parceiro de seguro auto, você pode garantir a contratação agora com 10% de desconto especial exclusivo!\n\n' +
               'Para aproveitar a condição e solicitar a sua cotação rápida, chame diretamente no WhatsApp 81 98865-3534 com Thiago.\n\n' +
@@ -312,9 +304,7 @@ cronAdd('campaign_daily_pipeline', '0 9 * * *', () => {
               (objetivo ||
                 'Mantenha os canais de socorro salvos no seu telefone e conte sempre conosco em qualquer emergência.') +
               '\n\n' +
-              'Qualquer dúvida sobre as coberturas do seu seguro ' +
-              (veiculoPrincipal ? '(' + veiculoPrincipal + ')' : '') +
-              ', estamos sempre ao seu lado! WhatsApp: 81 98865-3534 (Thiago)\n\n' +
+              'Qualquer dúvida sobre as coberturas da sua proteção veicular, estamos sempre ao seu lado! WhatsApp: 81 98865-3534 (Thiago)\n\n' +
               'Atenciosamente,\nEquipe CRED10MIX Corretora de Seguros'
           }
         }

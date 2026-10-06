@@ -357,20 +357,63 @@ export default function Financial() {
     return map
   }, [recebimentos])
 
+  // Reconciliação unificada recebimento ↔ previsão com inferência de data e FIFO por esgotamento
+  const reconciliacaoMap = useMemo(
+    () => reconciliarRecebimentosComPrevisoes(allComissoesPrevistasList, recebimentos),
+    [allComissoesPrevistasList, recebimentos],
+  )
+
   const policiesWithActiveEndorsementInPeriod = useMemo(() => {
     const set = new Set<string>()
     for (const prev of allComissoesPrevistasList) {
       if (!prev.endorsement || prev.status === 'Cancelada') continue
+      // Incluir apenas se a previsão pertencer ao período e tiver saldo pendente real
       if (isCompetenciaInPeriod(period, prev.competencia, prev.data_prevista)) {
-        set.add(prev.policy)
+        const recRes = reconciliacaoMap.get(prev.id)
+        const vPrev = Number(prev.valor_previsto) || 0
+        const recBruto = recRes ? recRes.valorRecebidoBruto : 0
+        const saldo = recRes
+          ? recRes.saldo
+          : Math.max(0, Math.round((vPrev - recBruto) * 100) / 100)
+        const isRecebida = prev.status === 'Recebida' || saldo <= 0.009
+        if (saldo > 0.009 && !isRecebida) {
+          set.add(prev.policy)
+        }
       }
     }
     return set
-  }, [allComissoesPrevistasList, period])
+  }, [allComissoesPrevistasList, period, reconciliacaoMap])
 
-  // Helper para verificar se comissão da apólice está quitada (Soma dos BRUTOS >= previsto)
+  // Helper para verificar se comissão da apólice está quitada (Soma dos BRUTOS >= previsto ou saldo consolidado zerado)
   const isPolicyCommissionSettled = useCallback(
     (p: Policy) => {
+      // 1. Se a apólice possui previsões cadastradas (inclusive endossos), verificar o saldo consolidado de todas as previsões
+      const polPrevs = allComissoesPrevistasList.filter(
+        (prev) => prev.policy === p.id && prev.status !== 'Cancelada',
+      )
+
+      if (polPrevs.length > 0) {
+        let totalSaldo = 0
+        let totalRecebidoBruto = 0
+        for (const prev of polPrevs) {
+          const recRes = reconciliacaoMap.get(prev.id)
+          const vPrev = Number(prev.valor_previsto) || 0
+          const s = recRes
+            ? recRes.saldo
+            : Math.max(
+                0,
+                Math.round((vPrev - (recRes ? recRes.valorRecebidoBruto : 0)) * 100) / 100,
+              )
+          totalSaldo = Math.round((totalSaldo + s) * 100) / 100
+          totalRecebidoBruto =
+            Math.round((totalRecebidoBruto + (recRes ? recRes.valorRecebidoBruto : 0)) * 100) / 100
+        }
+        // Se todas as previsões da apólice estão totalmente recebidas (saldo consolidado zerado)
+        if (totalSaldo <= 0.009 && (totalRecebidoBruto > 0.009 || Boolean(p.comissao_recebida))) {
+          return true
+        }
+      }
+
       // Se a apólice possui endosso com previsão ativa e saldo pendente no período, ela NÃO está liquidada
       if (policiesWithActiveEndorsementInPeriod.has(p.id)) {
         return false
@@ -386,7 +429,12 @@ export default function Financial() {
       const recBruto = receivedGrossByPolicy.get(p.id) || 0
       return previsto > 0 && recBruto >= previsto - 0.009
     },
-    [receivedGrossByPolicy, policiesWithActiveEndorsementInPeriod],
+    [
+      receivedGrossByPolicy,
+      policiesWithActiveEndorsementInPeriod,
+      allComissoesPrevistasList,
+      reconciliacaoMap,
+    ],
   )
 
   const applyFilters = useCallback(
@@ -447,12 +495,6 @@ export default function Financial() {
       isPolicyCommissionSettled,
       policiesWithActiveEndorsementInPeriod,
     ],
-  )
-
-  // Reconciliação unificada recebimento ↔ previsão com inferência de data e FIFO por esgotamento
-  const reconciliacaoMap = useMemo(
-    () => reconciliarRecebimentosComPrevisoes(allComissoesPrevistasList, recebimentos),
-    [allComissoesPrevistasList, recebimentos],
   )
 
   // Mapa de recebimentos por apólice no período selecionado
@@ -596,12 +638,6 @@ export default function Financial() {
     const comissaoLiquidaPrevista = Math.max(
       0,
       Math.round((comissaoBrutaPrevista - issDeducoesPrevistas) * 100) / 100,
-    )
-
-    // Reconciliação unificada recebimento ↔ previsão com inferência de data e FIFO por esgotamento
-    const reconciliacaoMap = reconciliarRecebimentosComPrevisoes(
-      allComissoesPrevistasList,
-      recebimentos,
     )
 
     // Agrupamento de previsões por apólice para cálculos de saldo reconciliado líquido

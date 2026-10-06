@@ -158,7 +158,7 @@ export default function Layout() {
                   <Icon className="w-5 h-5" />
                   <span>{item.title}</span>
                 </div>
-                {item.badge ? (
+                {item.badge && item.badge > 0 ? (
                   <Badge className="bg-amber-500 text-slate-950 font-bold px-1.5 py-0.5 text-xs">
                     {item.badge}
                   </Badge>
@@ -329,7 +329,7 @@ export default function Layout() {
                         <Icon className="w-5 h-5" />
                         <span>{item.title}</span>
                       </div>
-                      {item.badge ? (
+                      {item.badge && item.badge > 0 ? (
                         <Badge className="bg-amber-500 text-slate-950 font-bold">
                           {item.badge}
                         </Badge>
