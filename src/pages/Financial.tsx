@@ -14,7 +14,11 @@ import {
   ArrowLeft,
   AlertCircle,
 } from 'lucide-react'
-import { getPolicies, updatePolicyFinancial } from '@/services/policies'
+import {
+  getPolicies,
+  updatePolicyFinancial,
+  dispensarAlertaComissao60Batch,
+} from '@/services/policies'
 import { getParceiros } from '@/services/parceiros'
 import {
   getParceiroDebitosPendentes,
@@ -1492,6 +1496,14 @@ export default function Financial() {
         onRegistrarRecebimento={(policy, comp, prevId, saldo) =>
           handleOpenRegistrarRecebimento(policy, comp, prevId, saldo)
         }
+        onDispensarAlerta60={async (policyIds) => {
+          // Marca no backend e recarrega dados imediatamente
+          await dispensarAlertaComissao60Batch(
+            policyIds,
+            'Dispensado do alerta de comissões sem baixa há mais de 60 dias (legado/histórico)',
+          )
+          await loadData()
+        }}
       />
 
       {/* 5 BLOCOS OPERACIONAIS REORGANIZADOS COM TODOS OS CARDS CLICÁVEIS */}

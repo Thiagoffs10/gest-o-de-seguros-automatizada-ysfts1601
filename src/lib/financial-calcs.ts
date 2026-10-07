@@ -484,8 +484,14 @@ export function computePendenciasComissao60(
   const itens: PendenciaComissao60Item[] = []
 
   for (const p of policies) {
-    // Apólice cancelada nunca alerta
+    // 1. Apólice cancelada nunca alerta
     if (p.status === 'Cancelada') continue
+
+    // 2. Apólice com alerta dispensado / ignorado pelo usuário nunca alerta
+    if (p.comissao_alerta_60d_ignorado === true) continue
+
+    // 3. Apólice marcada como comissão já recebida no cadastro legado/histórico
+    if (p.comissao_recebida === true) continue
 
     const polPrevs = prevsByPolicy.get(p.id) || []
     let totalPrevisto = 0
@@ -495,6 +501,10 @@ export function computePendenciasComissao60(
     let oldestCompPrevId: string | undefined = undefined
 
     if (polPrevs.length > 0) {
+      // Se TODAS as previsões ativas da apólice já estão quitadas / Recebidas no banco
+      const todasRecebidas = polPrevs.every((prev) => prev.status === 'Recebida')
+      if (todasRecebidas) continue
+
       // Ordenar previsões pela data_prevista / competência
       const sortedPrevs = [...polPrevs].sort((a, b) => {
         const da = a.data_prevista || getFirstDayFromCompetencia(a.competencia) || a.created || ''
@@ -502,11 +512,41 @@ export function computePendenciasComissao60(
         return da.localeCompare(db)
       })
 
+      // Alocação FIFO de recebimentos da apólice para previsões sem vínculo direto
+      // Calcula quanto sobrou de recebimentos brutos da apólice após abater vínculos diretos
+      const saldoRestantePorPrev = new Map<string, number>()
+      for (const prev of sortedPrevs) {
+        const vPrev = Number(prev.valor_previsto) || 0
+        const recDireto = recGrossByPrev.get(prev.id) || 0
+        saldoRestantePorPrev.set(prev.id, Math.max(0, Math.round((vPrev - recDireto) * 100) / 100))
+      }
+
+      // Recebimentos da apólice sem vínculo direto a comissao_prevista
+      const polRecsSemVinculo = recebimentos.filter(
+        (r) =>
+          r.policy === p.id &&
+          (!r.comissao_prevista || !saldoRestantePorPrev.has(r.comissao_prevista)),
+      )
+      let sobraNaoVinculada =
+        Math.round(polRecsSemVinculo.reduce((s, r) => s + (Number(r.valor_bruto) || 0), 0) * 100) /
+        100
+
+      // Distribui FIFO a sobra não vinculada pelas previsões em aberto
+      for (const prev of sortedPrevs) {
+        if (sobraNaoVinculada <= 0.009) break
+        const sAtual = saldoRestantePorPrev.get(prev.id) || 0
+        if (sAtual > 0.009) {
+          const abate = Math.min(sAtual, sobraNaoVinculada)
+          saldoRestantePorPrev.set(prev.id, Math.max(0, Math.round((sAtual - abate) * 100) / 100))
+          sobraNaoVinculada = Math.max(0, Math.round((sobraNaoVinculada - abate) * 100) / 100)
+        }
+      }
+
       for (const prev of sortedPrevs) {
         const vPrev = Number(prev.valor_previsto) || 0
         totalPrevisto = Math.round((totalPrevisto + vPrev) * 100) / 100
-        const recBruto = recGrossByPrev.get(prev.id) || 0
-        const saldo = Math.max(0, Math.round((vPrev - recBruto) * 100) / 100)
+        // Se a previsão foi marcada como 'Recebida', seu saldo é zero
+        const saldo = prev.status === 'Recebida' ? 0 : saldoRestantePorPrev.get(prev.id) || 0
         totalSaldo = Math.round((totalSaldo + saldo) * 100) / 100
 
         // Se tem saldo pendente nessa parcela/competência e ainda não elegemos a mais antiga
@@ -524,15 +564,13 @@ export function computePendenciasComissao60(
         }
       }
 
-      // Se a apólice está quitada (saldo zerado e recebido > 0 ou flag comissao_recebida)
+      // Se a apólice está quitada (saldo zerado e recebido > 0)
       const recBrutoTotal = recGrossByPolicy.get(p.id) || 0
-      if (totalSaldo <= 0.009 && (recBrutoTotal > 0.009 || Boolean(p.comissao_recebida))) {
+      if (totalSaldo <= 0.009 && recBrutoTotal > 0.009) {
         continue
       }
     } else {
       // Fallback sem comissões previstas
-      if (p.comissao_recebida) continue
-
       const fallbackPrevisto =
         p.commission != null
           ? Number(p.commission)

@@ -127,6 +127,9 @@ export interface Policy {
   data_cancelamento?: string
   motivo_cancelamento?: string
   notes?: string
+  comissao_alerta_60d_ignorado?: boolean
+  comissao_alerta_60d_ignorado_data?: string
+  comissao_alerta_60d_ignorado_motivo?: string
   created: string
   updated: string
   previous_policy?: string

@@ -487,12 +487,54 @@ export const updatePolicyFinancial = async (
     forma_pagamento_repasse?: string | null
     comissao_recebida?: boolean
     data_recebimento_comissao?: string | null
+    comissao_alerta_60d_ignorado?: boolean
+    comissao_alerta_60d_ignorado_data?: string | null
+    comissao_alerta_60d_ignorado_motivo?: string | null
   },
 ) => {
   if (data.comissao_recebida === true && !data.data_recebimento_comissao) {
     throw new Error('A data de recebimento é obrigatória ao marcar a comissão como recebida.')
   }
   return pb.collection('policies').update<Policy>(id, data)
+}
+
+/**
+ * Marca uma apólice para ser ignorada do alerta de comissões sem baixa há mais de 60 dias.
+ * Não exclui dados financeiros nem altera valores — apenas registra a flag e timestamp.
+ */
+export const dispensarAlertaComissao60 = async (
+  policyId: string,
+  motivo = 'Dispensado manualmente pelo usuário',
+) => {
+  const hoje = todayLocalDate()
+  return pb.collection('policies').update<Policy>(policyId, {
+    comissao_alerta_60d_ignorado: true,
+    comissao_alerta_60d_ignorado_data: hoje,
+    comissao_alerta_60d_ignorado_motivo: motivo,
+  })
+}
+
+/**
+ * Marca múltiplas apólices para serem ignoradas do alerta de 60 dias em lote.
+ */
+export const dispensarAlertaComissao60Batch = async (
+  policyIds: string[],
+  motivo = 'Dispensado em lote pelo usuário',
+) => {
+  const hoje = todayLocalDate()
+  const results = await Promise.all(
+    policyIds.map((id) =>
+      pb
+        .collection('policies')
+        .update<Policy>(id, {
+          comissao_alerta_60d_ignorado: true,
+          comissao_alerta_60d_ignorado_data: hoje,
+          comissao_alerta_60d_ignorado_motivo: motivo,
+        })
+        .catch(() => null),
+    ),
+  )
+  return results.filter(Boolean).length
 }
 
 export const deletePolicy = async (id: string) => {

@@ -9,6 +9,9 @@ import {
   ArrowRight,
   RefreshCw,
   Archive,
+  EyeOff,
+  CheckSquare,
+  Square,
 } from 'lucide-react'
 import {
   SistemaAlerta,
@@ -39,6 +42,7 @@ interface AlertasCentralProps {
     prevId?: string,
     saldo?: number,
   ) => void
+  onDispensarAlerta60?: (policyIds: string[]) => Promise<void> | void
 }
 
 export const AlertasCentral: React.FC<AlertasCentralProps> = ({
@@ -46,6 +50,7 @@ export const AlertasCentral: React.FC<AlertasCentralProps> = ({
   onVerApolice,
   pendencias60,
   onRegistrarRecebimento,
+  onDispensarAlerta60,
 }) => {
   const [alertas, setAlertas] = useState<SistemaAlerta[]>([])
   const [loading, setLoading] = useState(false)
@@ -53,6 +58,8 @@ export const AlertasCentral: React.FC<AlertasCentralProps> = ({
     null,
   )
   const [modalLista60Open, setModalLista60Open] = useState(false)
+  const [selectedPolicyIds, setSelectedPolicyIds] = useState<string[]>([])
+  const [processingDismiss, setProcessingDismiss] = useState(false)
   const { toast } = useToast()
 
   const carregarAlertas = async () => {
@@ -99,6 +106,64 @@ export const AlertasCentral: React.FC<AlertasCentralProps> = ({
   const hasAlertas = alertas.length > 0
   const hasLegados = Boolean(legadosInfo && legadosInfo.count > 0)
   const hasPendencias60 = Boolean(pendencias60 && pendencias60.countApolices > 0)
+
+  const handleToggleSelect = (policyId: string) => {
+    setSelectedPolicyIds((prev) =>
+      prev.includes(policyId) ? prev.filter((id) => id !== policyId) : [...prev, policyId],
+    )
+  }
+
+  const handleSelectAll = () => {
+    if (!pendencias60) return
+    if (selectedPolicyIds.length === pendencias60.itens.length) {
+      setSelectedPolicyIds([])
+    } else {
+      setSelectedPolicyIds(pendencias60.itens.map((it) => it.policy.id))
+    }
+  }
+
+  const handleDispensarItem = async (policyId: string) => {
+    if (!onDispensarAlerta60) return
+    setProcessingDismiss(true)
+    try {
+      await onDispensarAlerta60([policyId])
+      setSelectedPolicyIds((prev) => prev.filter((id) => id !== policyId))
+      toast({
+        title: 'Item removido do alerta',
+        description: 'A apólice foi marcada como dispensada/legado e não aparecerá mais no alerta.',
+      })
+    } catch {
+      toast({
+        title: 'Erro ao remover',
+        description: 'Não foi possível dispensar o alerta da apólice.',
+        variant: 'destructive',
+      })
+    } finally {
+      setProcessingDismiss(false)
+    }
+  }
+
+  const handleDispensarSelecionados = async () => {
+    if (!onDispensarAlerta60 || selectedPolicyIds.length === 0) return
+    setProcessingDismiss(true)
+    try {
+      const count = selectedPolicyIds.length
+      await onDispensarAlerta60(selectedPolicyIds)
+      setSelectedPolicyIds([])
+      toast({
+        title: 'Itens removidos do alerta',
+        description: `${count} ${count === 1 ? 'apólice marcada' : 'apólices marcadas'} como dispensada(s)/legado.`,
+      })
+    } catch {
+      toast({
+        title: 'Erro ao remover selecionados',
+        description: 'Não foi possível dispensar as apólices selecionadas.',
+        variant: 'destructive',
+      })
+    } finally {
+      setProcessingDismiss(false)
+    }
+  }
 
   if (!hasAlertas && !hasLegados && !hasPendencias60 && !loading) {
     return null
@@ -151,29 +216,63 @@ export const AlertasCentral: React.FC<AlertasCentralProps> = ({
         <Dialog open={modalLista60Open} onOpenChange={setModalLista60Open}>
           <DialogContent className="max-w-3xl max-h-[85vh] flex flex-col p-0">
             <DialogHeader className="p-5 pb-3 border-b">
-              <div className="flex items-center gap-2">
-                <div className="p-1.5 bg-rose-100 text-rose-700 rounded-md">
-                  <Clock className="h-4 w-4" />
+              <div className="flex items-center justify-between gap-3">
+                <div className="flex items-center gap-2">
+                  <div className="p-1.5 bg-rose-100 text-rose-700 rounded-md">
+                    <Clock className="h-4 w-4" />
+                  </div>
+                  <div>
+                    <DialogTitle className="text-base font-bold text-slate-900">
+                      Comissões sem Baixa há mais de 60 Dias
+                    </DialogTitle>
+                    <DialogDescription className="text-xs text-slate-500 mt-0.5">
+                      Total acumulado de{' '}
+                      <strong className="text-rose-700">
+                        R$ {formatCurrency(pendencias60.totalValorPendente)}
+                      </strong>{' '}
+                      em <strong>{pendencias60.countApolices}</strong>{' '}
+                      {pendencias60.countApolices === 1 ? 'apólice pendente' : 'apólices pendentes'}
+                      . Ordenadas da mais antiga para a mais recente.
+                    </DialogDescription>
+                  </div>
                 </div>
-                <DialogTitle className="text-base font-bold text-slate-900">
-                  Comissões sem Baixa há mais de 60 Dias
-                </DialogTitle>
+
+                {onDispensarAlerta60 && selectedPolicyIds.length > 0 && (
+                  <Button
+                    size="sm"
+                    variant="destructive"
+                    onClick={handleDispensarSelecionados}
+                    disabled={processingDismiss}
+                    className="h-8 text-xs font-semibold shrink-0 gap-1.5 shadow-xs"
+                  >
+                    <EyeOff className="h-3.5 w-3.5" />
+                    Ignorar selecionados ({selectedPolicyIds.length})
+                  </Button>
+                )}
               </div>
-              <DialogDescription className="text-xs text-slate-500 mt-1">
-                Total acumulado de{' '}
-                <strong className="text-rose-700">
-                  R$ {formatCurrency(pendencias60.totalValorPendente)}
-                </strong>{' '}
-                em <strong>{pendencias60.countApolices}</strong>{' '}
-                {pendencias60.countApolices === 1 ? 'apólice pendente' : 'apólices pendentes'}.
-                Ordenadas da mais antiga para a mais recente.
-              </DialogDescription>
             </DialogHeader>
 
             <div className="overflow-y-auto flex-1 p-5 pt-3">
               <table className="w-full text-left text-xs text-slate-700">
                 <thead className="bg-slate-100 text-slate-600 font-semibold border-b">
                   <tr>
+                    {onDispensarAlerta60 && (
+                      <th className="p-2.5 w-8 text-center">
+                        <button
+                          type="button"
+                          onClick={handleSelectAll}
+                          title="Selecionar todos"
+                          className="text-slate-500 hover:text-slate-800"
+                        >
+                          {selectedPolicyIds.length === pendencias60.itens.length &&
+                          pendencias60.itens.length > 0 ? (
+                            <CheckSquare className="h-4 w-4 text-rose-600" />
+                          ) : (
+                            <Square className="h-4 w-4" />
+                          )}
+                        </button>
+                      </th>
+                    )}
                     <th className="p-2.5">Cliente / Apólice</th>
                     <th className="p-2.5">Seguradora</th>
                     <th className="p-2.5 text-center">Ref. Base</th>
@@ -190,9 +289,30 @@ export const AlertasCentral: React.FC<AlertasCentralProps> = ({
                       item.policy.expand?.seguradora?.nome || item.policy.insurance_company || '-'
                     const docNumber =
                       item.policy.numero_proposta || item.policy.policy_number || '-'
+                    const isSelected = selectedPolicyIds.includes(item.policy.id)
 
                     return (
-                      <tr key={item.policy.id} className="hover:bg-slate-50/80">
+                      <tr
+                        key={item.policy.id}
+                        className={`hover:bg-slate-50/80 transition-colors ${
+                          isSelected ? 'bg-rose-50/40' : ''
+                        }`}
+                      >
+                        {onDispensarAlerta60 && (
+                          <td className="p-2.5 text-center">
+                            <button
+                              type="button"
+                              onClick={() => handleToggleSelect(item.policy.id)}
+                              className="text-slate-500 hover:text-slate-800"
+                            >
+                              {isSelected ? (
+                                <CheckSquare className="h-4 w-4 text-rose-600" />
+                              ) : (
+                                <Square className="h-4 w-4" />
+                              )}
+                            </button>
+                          </td>
+                        )}
                         <td className="p-2.5">
                           <div className="font-semibold text-slate-900">{clientName}</div>
                           <div className="text-[11px] text-slate-500">Doc: {docNumber}</div>
@@ -261,6 +381,19 @@ export const AlertasCentral: React.FC<AlertasCentralProps> = ({
                                 }}
                               >
                                 Ver
+                              </Button>
+                            )}
+                            {onDispensarAlerta60 && (
+                              <Button
+                                size="sm"
+                                variant="ghost"
+                                title="Marcar como legado / ignorar alerta desta apólice"
+                                disabled={processingDismiss}
+                                onClick={() => handleDispensarItem(item.policy.id)}
+                                className="h-7 text-xs px-2 text-slate-500 hover:text-amber-800 hover:bg-amber-50"
+                              >
+                                <EyeOff className="w-3.5 h-3.5 mr-1" />
+                                Ignorar
                               </Button>
                             )}
                           </div>
