@@ -236,6 +236,136 @@ Prêmio Total: R$ 2.990,00
       expect(faltaNasc?.motivo).toContain('Allianz não inclui a data de nascimento')
     })
 
+    it('(b.1) Allianz AUTO PF Real (Caso IRIS NOVAES): extrai endereço desmembrado, ignora CNPJ da seguradora na pág 7 e nunca insere "DE DADOS PESSOAIS" na cidade', () => {
+      // Texto idêntico à proposta de 7 páginas anexada pelo usuário
+      const textAllianzAutoReal = `
+Olá IRIS NOVAES BUDACH MACHADO, Agradecemos por escolher a Allianz para proteger o seu carro.
+Confira todos os dados da sua proposta antes de contratar 
+o seu seguro e consulte as Condições Gerais do Seguro Allianz 
+Auto em allianz.com.br
+Página 1 de 7 Nº Proposta: 141237745
+AUTO
+AUTOMÓVEL
+ALLIANZ
+PROPOSTA
+06-10-2026 11:57:29 04116100840TF22CI39 2820088 141237745 OP
+SEU CORRETOR
+CRED10MIX CORRETORA DE SEGUROS LTDA
+E-mail: thiago@cred10mix.com.br Telefone: 8134939966 Código: 2820088
+SUSEP Nº: 202062795 FIilial: 2P
+ SUAS INFORMAÇÕES
+Nome: IRIS NOVAES BUDACH MACHADO
+CPF/CNPJ: 009.171.474-56 Tel: 81998747908 E-mail: tiagomp@live.com
+Endereço: AV DEZESSETE DE AGOSTO, 1070, AP 202 - CASA FORTE - RECIFE/PE - 52061540
+INFORMAÇÕES DO CONDUTOR PRINCIPAL
+Nome: IRIS NOVAES BUDACH MACHADO CPF: 009.171.474-56
+Idade: 37 anos
+Estado Civil: Casado[a] ou convive em união estável
+Deseja ampliar a cobertura do seguro para condutores do veículo segurado com idade entre 18 a 25 anos: Não. Estou
+ciente que não haverá cobertura para condutores entre 18 a 25 anos.
+O principal condutor reside em: Apartamento
+INFORMAÇÕES DO SEU SEGURO
+Vigência: das 24H de 11/10/2026 às 24H de 11/10/2027 Nº da Proposta: 141237745
+Tipo de Seguro: Renovação Allianz sem sinistro Ramo: 31 - Automóvel
+Veículo: VOLKSWAGEN TAOS Highline 250 1.4 TSI TB AT6 Flex Aut. 4p Produto: Automoveis 1211
+Cód. FIPE: 005528-0 Versão: 000160/160.19
+Placa: RZH0J10 Condições Gerais: 08/2026
+Chassi: 8AWBJ6B21NA812053 Classe Bônus: 03
+Zero Km: Não Grupo: 01
+Ano/Modelo: 2022 CEP Pernoite: 52061-540
+Categoria de Risco: Automóvel - Particular Finalidade de Uso: Particular
+Kit gás: Não
+INFORMAÇÕES DA RENOVAÇÃO
+Nº. Apólice Anterior: 2161578 Cód. CI: 51725201936840
+Seguradora Anterior: 5177 Fim da vigência anterior: 11/10/2026
+Veículo Igual ao Anterior: Sim 
+
+OFERTA ESCOLHIDA 
+BÁSICO
+Preço Líquido R$ 2.107,93
+Preço Total (IOF + Juros inclusos) R$ 2.263,48
+
+INFORMAÇÕES DE PAGAMENTO
+Forma de pagamento Nº. do Cartão: 4271********9465
+Preço líquido: R$ 2.107,92 Taxa mensal juros: 0,00
+Cartão de Crédito* em 10 parcelas Valor juros: R$ 0,00 IOF: R$ 155,56
+Vencimento: Fatura Cartão Preço Total (impostos inclusos)
+R$ 2.263,48 
+
+Parcelas Valor da Parcela Parcelas Valor da Parcela
+1 R$ 226,35 6 R$ 226,35
+2 R$ 226,35 7 R$ 226,35
+3 R$ 226,35 8 R$ 226,35
+4 R$ 226,35 9 R$ 226,35
+5 R$ 226,35 10 R$ 226,33
+
+PRIVACIDADE DE DADOS PESSOAIS 
+A Allianz realiza o tratamento de seus dados pessoais observando a legislação vigente...
+
+Página 7 de 7 Nº Proposta: 141237745
+Allianz Seguros S.A. Código: 5177 | CNPJ: 061.573.796/0001-66 IE: 108.063.509.113 | Rua Eugenio de Medeiros, nº 303, 1º andar-parte, 2º ao 9º andar,
+15º e 16º andar, Pinheiros, São Paulo-SP
+      `.trim()
+
+      const res = parsePropostaTexto(textAllianzAutoReal, 'proposta-allianz-auto-141237745.pdf')
+
+      // Formato e proposta
+      expect(res.formato).toBe('ALLIANZ')
+      expect(res.seguradoraNome).toBe('Allianz')
+      expect(res.numeroProposta).toBe('141237745')
+      expect(res.tipoSeguro).toBe('Auto')
+
+      // Segurado: Pessoa Física, sem lixo e sem CNPJ da Allianz
+      expect(res.segurado.tipoPessoa).toBe('PF')
+      expect(res.segurado.nome).toBe('IRIS NOVAES BUDACH MACHADO')
+      expect(res.segurado.nome.includes('**')).toBe(false)
+      expect(res.segurado.nome.includes('/')).toBe(false)
+      expect(res.segurado.cpfCnpj).toBe('00917147456')
+      expect(res.segurado.cpfCnpj).not.toBe('06157379600016')
+      expect(res.segurado.email).toBe('tiagomp@live.com')
+      expect(res.segurado.telefone).toBe('(81) 99874-7908')
+
+      // Endereço desmembrado sem lixo
+      expect(res.segurado.rua).toBe('AV DEZESSETE DE AGOSTO')
+      expect(res.segurado.numero).toBe('1070, AP 202')
+      expect(res.segurado.bairro).toBe('CASA FORTE')
+      expect(res.segurado.cidade).toBe('RECIFE')
+      expect(res.segurado.cidade).not.toContain('DADOS PESSOAIS')
+      expect(res.segurado.estado).toBe('PE')
+      expect(res.segurado.cep).toBe('52061-540')
+
+      // Condutor principal
+      expect(res.condutorPrincipal.nome).toBe('IRIS NOVAES BUDACH MACHADO')
+      expect(res.condutorPrincipal.cpf).toBe('00917147456')
+      expect(res.condutorPrincipal.mesmoQueSegurado).toBe(true)
+
+      // Veículo
+      expect(res.veiculo.marcaModelo).toBe(
+        'VOLKSWAGEN TAOS Highline 250 1.4 TSI TB AT6 Flex Aut. 4p',
+      )
+      expect(res.veiculo.placa).toBe('RZH0J10')
+      expect(res.veiculo.chassi).toBe('8AWBJ6B21NA812053')
+      expect(res.veiculo.codigoFipe).toBe('005528-0')
+      expect(res.veiculo.anoModelo).toBe(2022)
+
+      // Vigência
+      expect(res.vigenciaInicio).toBe('2026-10-11')
+      expect(res.vigenciaFim).toBe('2027-10-11')
+
+      // Renovação
+      expect(res.renovacao.isRenovacao).toBe(true)
+      expect(res.renovacao.apoliceAnterior).toBe('2161578')
+      expect(res.renovacao.seguradoraAnterior).toBe('5177')
+      expect(res.renovacao.classeBonus).toBe('03')
+
+      // Valores e parcelas (preço líquido das INFORMAÇÕES DE PAGAMENTO)
+      expect(res.premioLiquido).toBe(2107.92)
+      expect(res.iof).toBe(155.56)
+      expect(res.premioTotal).toBe(2263.48)
+      expect(res.quantidadeParcelas).toBe(10)
+      expect(res.formaPagamento).toBe('Crédito')
+    })
+
     it('(b.2) Allianz: detecta variante Condomínio (Pessoa Jurídica) com endereço enriquecido e parcelas', () => {
       // Simula documento real com artefatos "|" ou "||" gerados por quebras de tabela do conversor PDF
       const textCondominio = `
