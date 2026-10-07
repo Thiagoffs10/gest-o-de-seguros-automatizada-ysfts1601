@@ -62,6 +62,21 @@ export const ImportarPropostaPdfModal: React.FC<ImportarPropostaPdfModalProps> =
 
     setCarregando(true)
     try {
+      // DEBUG CAPTURE
+      try {
+        const dbgForm = new FormData()
+        dbgForm.append('arquivo', file)
+        await fetch(
+          `${import.meta.env.VITE_POCKETBASE_URL}/backend/v1/debug/execute-pdf-to-markdown`,
+          {
+            method: 'POST',
+            body: dbgForm,
+          },
+        )
+      } catch {
+        /* intentionally ignored */
+      }
+
       const resultado = await extrairPropostaDeArquivoPdf(file, seguradoras)
       setConferida(resultado)
       toast({

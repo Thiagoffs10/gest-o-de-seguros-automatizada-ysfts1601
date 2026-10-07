@@ -1,3 +1,5 @@
+
+
 routerAdd(
   'POST',
   '/backend/v1/documentos/extrair-proposta',
@@ -26,9 +28,13 @@ routerAdd(
           ' sample=' +
           md.substring(0, 400).replace(/\n/g, '\\n'),
       )
-      console.log('--- TO_MARKDOWN FULL DUMP START ---')
-      console.log(md)
-      console.log('--- TO_MARKDOWN FULL DUMP END ---')
+      console.log('--- TO_MARKDOWN CHUNK COUNT --- len=' + md.length)
+      for (var ci = 0; ci < md.length; ci += 1000) {
+        console.log('--- CHUNK ' + Math.floor(ci / 1000) + ' --- ' + md.substring(ci, ci + 1000))
+      }
+      console.log('--- TO_MARKDOWN CHUNKS END ---')
+      try {
+
       return e.json(200, {
         success: true,
         fileName: fileName,
