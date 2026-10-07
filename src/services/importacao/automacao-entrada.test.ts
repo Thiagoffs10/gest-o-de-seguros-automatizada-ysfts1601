@@ -642,53 +642,153 @@ Prêmio Total: R$ 4.380,00
       expect(res.renovacao.classeBonus).toBe('1')
     })
 
-    it('(a.2-md) Azul Seguros com marcações de Markdown (tabelas e pipes) geradas por $documents.toMarkdown', () => {
+    it('(a.2-md) Azul Seguros com o MARKDOWN REAL retornado pelo pipeline $documents.toMarkdown a partir do PDF de evidência', () => {
+      // Texto Markdown idêntico ao extraído pelo serviço $documents.toMarkdown em produção do arquivo
+      // azulproposta6320779928-0-1-20261007142357535-f2c13.pdf
       const markdownRealAzul = `
 # Proposta de Seguro Auto
-## Azul Tradicional
 
-| Dados da cotação | | | | |
-| --- | --- | --- | --- | --- |
-| **Orçamento** | 6320779928 | **Oferta** | 1 | |
-| **Versão** | 0 | **Proposta** | 12-31784355 | |
-| **Apólice** | 03 14696320 | **Status** | Emitido | |
+# Azul Tradicional
 
-**Vigência**
+**Dados da cotação**
+
+| Orçamento | Versão | Oferta | Proposta | Apólice | Status |
+| --- | --- | --- | --- | --- | --- |
+| 6320779928 | 0 | 1 | 12-31784355 | 03 14696320 | Emitido |
+
+## Vigência
+
 Das 24h do dia 10/10/2026 até as 24h do dia 10/10/2027
 
-## Corretor(a)
-| Corretor | Participação | Líder | SUSEP | Telefone | E-mail |
+**Corretor(a)**
+
+| Corretor CRED10MIX CORRETORA DE SEGUROS LTDA | Participação | Líder | SUSEP | Telefone | E-mail |
 | --- | --- | --- | --- | --- | --- |
-| CRED10MIX CORRETORA DE SEGUROS LTDA | 100.00% | Sim | 1676SJ | (81) 3224-0174 | thiago@cred10mix.com.br |
+| Corretor CRED10MIX CORRETORA DE SEGUROS LTDA | 100.00% | Sim | 1676SJ | (81) 3224-0174 | thiago@cred10mix.com.br |
 
 ## Dados Gerais
-| **Segurado(a)** | LIVIA LOURENCO FERNANDES DA CUNHA BARROS |
-| **Nascimento** | 02/08/1990 | **CPF** | 057.365.924-95 |
-| **Sexo** | Feminino | **Profissão** | 387-Administradores |
-| **Endereço residencial** | R Doralice de Almeida Lyra, 55 |
-| **Complemento** | - | **CEP** | 58037-335 |
-| **UF** | PB | **Bairro** | Jardim Oceania | **Cidade** | João Pessoa |
-| **E-mail** | paulagabrieladv@gmail.com | **Celular:** | (83) 99112-9729 |
 
-## Veículo
-| **Veículo** | 6140 - - NOVO ONIX HATCH LT 1.0 12V FLEX |
-| **Placa** | QSI2A04 | **Chassi** | 9BGEB48A0LG219020 |
-| **Ano Fabricação / Modelo** | 2020 / 2020 | **Fipe** | N45179 |
+| Segurado(a) | Nascimento | CPF |
+| --- | --- | --- |
+| LIVIA LOURENCO FERNANDES DA CUNHA BARROS | 02/08/1990 | 057.365.924-95 |
 
-## Questionário de avaliação de risco
-| **Condutor** | PAULA GABRIELA DE MORAIS NEGREIROS | **CPF** | 088.181.234-08 |
-| **Nascimento** | 15/10/1996 | **CEP de pernoite** | 58037-335 |
+| Sexo | Profissão | País de nascimento |
+| --- | --- | --- |
+| Feminino | 387-Administradores | Brasil |
 
-## Forma de pagamento
+| Tipo de Operação | Segmento | Bônus | Origem do bônus |
+| --- | --- | --- | --- |
+| Renovação da Cia | Azul | Classe 1 | - |
+|  | Tradicional |  |  |
+
+| Tradicional |  |  |  |
+| --- | --- | --- | --- |
+| Seguradora | Sucursal | Apólice | Item |
+| Azul Seguros | 3 | 12806713 | 1 |
+
+| Endereço residencial | Complemento | CEP | Bairro | Cidade | UF |
+| --- | --- | --- | --- | --- | --- |
+| R Doralice de Almeida Lyra, 55 | - | 58037-335 | Jardim Oceania | João Pessoa | PB |
+
+| E-mail | Telefone | Tipo de envio | Enviar correspondência para |
+| --- | --- | --- | --- |
+| paulagabrieladv@gmail.com | Celular: (83) 99112-9729 | DIGITAL | SEGURADO |
+
+**Veículo**
+
+| Placa | Chassi | Veículo | Ano Fabricação / Modelo |
+| --- | --- | --- | --- |
+| QSI2A04 | 9BGEB48A0LG219020 | 6140 -- NOVO ONIX HATCH LT 1.0 12V FLEX | 2020 / 2020 |
+
+| Fipe | Zero km | Câmbio | Blindado | Kit Gás | Pessoa com deficiência | Isenção Fiscal | Portas |
+| --- | --- | --- | --- | --- | --- | --- | --- |
+| 45179 | N | Manual | Não | Não | Não | Sem Isenção | 5 |
+| Combustível |  | Categoria |  |  |  |  |  |
+| GASOLINA/ALCOOL |  | 10 - VEICULOS DE PASSEIO |  |  |  |  |  |
+
+## Questionário de avaliação de risco<sup>1</sup>
+
+| Conductor |  |  | Nascimento | CPF |
+| --- | --- | --- | --- | --- |
+| PAULA GABRIELA DE MORAIS NEGREIROS |  |  | 15/10/1996 | 088.181.234-08 |
+| Tipo de uso | CEP de pernoite | Dispositivos antifurto/anti-roubo |  |  |
+| Particular | 58037-335 | Outros Dispositivos, Não |  |  |
+| Seguro do corretor |  |  |  |  |
+| Não |  |  |  |  |
+
+## Coberturas e serviços automóvel
+
+| Descrição | LMI (indenização) | Franquia | Valor do Prêmio |
+| --- | --- | --- | --- |
+| Compreensiva (Colisão, Incêndio, Roubo ou Furto) - Valor de mercado | 100.00% | R$ 3.804,00 (50% da Obrigatória) | R$ 1.018,84 |
+| RCF-V Danos Materiais | R$ 50.000,00 | - | R$ 380,53 |
+| RCF-V Danos Corporais | R$ 50.000,00 | - | R$ 23,47 |
+| Custos de defesa auto | Não contratado | - | - |
+
+**Pag. 1  de 5**
+
+---
+
+## Vidros
+
+| Descrição | LMI (indenização) | Valor do Prêmio |
+| --- | --- | --- |
+| Danos aos Vidros e Retrovisores e Faróis e Lanternas - | limite por peça (para troca) | R$ 63,58 |
+| Franquias: Vidros (Para-Brisa e Traseiro): R$ 285,00 / Vidros Laterais: R$ 205,00 / Faróis/Lanternas: R$ 640,00 / Retrovisores: R$ 295,00 / Faróis de Xenônio: R$ 1.210,00 / Lanternas de LED: R$ 595,00 |  |  |
+
+## Assistências
+
+| Descrição | Valor do Prêmio |
+| --- | --- |
+| Assistência Gratuita – 200 Km | Gratuita |
+| Assistência 24h |  |
+| Benefícios inclusos |  |
+| • Extensão de Perímetro Básico |  |
+
+## $ Descontos
+
+| Descrição | Desconto |
+| --- | --- |
+| Desconto Cartão Porto Bank - Proponente | 10.00% |
+| Desconto de Negociação | 7.24% |
+| Desconto à vista - Segunda Compra Cartão Porto Bank | 5.00% |
+
+## $ Forma de pagamento
+
 | Forma de pagamento | Valor líquido | IOF | Juros | Encargos | Parcelas | Valor parcelas | Valor total |
 | --- | --- | --- | --- | --- | --- | --- | --- |
 | 97-Todas Cartão de Crédito Porto Bank (Existente) | R$ 1.486,42 | R$ 109,70 | R$ 0,00 | R$ 0,00 | 1x | R$ 1.596,12 | R$ 1.596,12 |
+| Bandeira VISA |  |  |  |  |  |  |  |
 
 ## Canais de atendimento
-Porto Seguro Cia de Seguros Gerais
-CNPJ: 61.198.164/0001-60
-SAC 0800 727 2766
-Central 24h Grande São Paulo: (11) 3366 3333
+
+**Porto Seguro Cia de Seguros Gerais**
+
+**CNPJ:** 61.198.164/0001-60
+
+**Código da Seguradora:** 05886
+
+**Processo SUSEP:** 15414.610648/2024-80
+
+**Versão Condições Gerais:** CG024
+
+**Ramos:** Casco(531), RCF-A(553), APP(520),
+Assistência(542)
+
+## SAC
+
+0800 727 2766 (informação, reclamação e
+cancelamento)
+
+## Central 24h
+
+Grande São Paulo: (11) 3366 3333
+
+Outras Regiões: 0300 33 76786
+
+Ouvidoria: 0800 7271184
+
+**Baixe o App Porto.**
       `.trim()
 
       const res = parsePropostaTexto(markdownRealAzul, 'proposta-azul.pdf')

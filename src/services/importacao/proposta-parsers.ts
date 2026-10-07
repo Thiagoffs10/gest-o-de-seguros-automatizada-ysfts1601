@@ -874,28 +874,42 @@ function extrairSegurado(
 
   // 2. NOME DO SEGURADO / RAZÃO SOCIAL
   // (a) Caso Azul Seguros / Porto Seguro (bloco "Dados Gerais"):
-  // No PDF, aparece:
-  // "Dados Gerais"
-  // "Segurado(a)"
-  // "LIVIA LOURENCO FERNANDES DA CUNHA BARROS"
-  // "Nascimento"
-  // "02/08/1990 057.365.924-95"
-  // "CPF"
-  // O rótulo "Segurado(a)" pode estar na mesma linha ou em linha separada!
+  // Em tabelas Markdown (Gfm):
+  // | Segurado(a) | Nascimento | CPF |
+  // | --- | --- | --- |
+  // | LIVIA LOURENCO FERNANDES DA CUNHA BARROS | 02/08/1990 | 057.365.924-95 |
   if (!nome && dadosGeraisText) {
-    // 1. Linha imediatamente seguinte a "Segurado(a)" ou na mesma linha
-    const linhaSeguradoMatch =
-      /(?:^|\n)[|* ]*segurado\s*(?:\(a\))?[|* :]*\n+([A-Za-zÀ-ÿ\s.'-]{4,80})(?=\n|$)/i.exec(
+    // Parser específico de tabela markdown para Segurado(a) / Nascimento / CPF
+    const tabelaSeguradoMatch =
+      /\|\s*segurado\s*(?:\(a\))?\s*\|[^\n]*\n\|(?:\s*[-:]+\s*\|)+\s*\n\|\s*([^|\n]+?)\s*\|/i.exec(
         dadosGeraisText,
       )
-    if (linhaSeguradoMatch) {
-      const raw = sanitizarTextoExtraido(linhaSeguradoMatch[1])
+    if (tabelaSeguradoMatch) {
+      const raw = sanitizarTextoExtraido(tabelaSeguradoMatch[1])
       if (
         raw.length > 3 &&
         !isTextoCabecalhoOuInvalido(raw) &&
         !raw.toLowerCase().includes('corretor')
       ) {
         nome = raw
+      }
+    }
+
+    // 1. Linha imediatamente seguinte a "Segurado(a)" ou na mesma linha
+    if (!nome) {
+      const linhaSeguradoMatch =
+        /(?:^|\n)[|* ]*segurado\s*(?:\(a\))?[|* :]*\n+([A-Za-zÀ-ÿ\s.'-]{4,80})(?=\n|$)/i.exec(
+          dadosGeraisText,
+        )
+      if (linhaSeguradoMatch) {
+        const raw = sanitizarTextoExtraido(linhaSeguradoMatch[1])
+        if (
+          raw.length > 3 &&
+          !isTextoCabecalhoOuInvalido(raw) &&
+          !raw.toLowerCase().includes('corretor')
+        ) {
+          nome = raw
+        }
       }
     }
 
@@ -988,24 +1002,43 @@ function extrairSegurado(
   // 3. DATA DE NASCIMENTO (Allianz NÃO traz e PJ não possui)
   if (formato !== 'ALLIANZ' && tipoPessoa === 'PF') {
     // Procura primeiro no bloco Dados Gerais / texto útil antes do questionário de risco/condutor
-    // Layouts possíveis:
-    // a) "Nascimento: 02/08/1990"
-    // b) "Nascimento\n02/08/1990 057.365.924-95\nCPF"
-    // c) "Nascimento\n02/08/1990"
     const escopoNasc = dadosGeraisText || textoUtilCliente
-    const nascLinhaQuebradaMatch =
-      /(?:data\s+de\s+nascimento|nascimento|nasc\.?)[*\s|:]*\n+(\d{1,2}[/.-]\d{1,2}[/.-]\d{4})/i.exec(
+
+    // 1. Em tabelas Markdown (ex: | Segurado(a) | Nascimento | CPF | ... | LIVIA ... | 02/08/1990 | 057... |)
+    const nascTabelaMatch =
+      /\|\s*[^|\n]*\b(?:data\s+de\s+nascimento|nascimento|nasc\.?)\b[^|\n]*\|[^\n]*\n\|(?:\s*[-:]+\s*\|)+\s*\n\|[^|\n]*\|\s*(\d{1,2}[/.-]\d{1,2}[/.-]\d{4})\s*\|/i.exec(
         escopoNasc,
       )
-    if (nascLinhaQuebradaMatch) {
-      dataNasc = parseDataFlexivel(nascLinhaQuebradaMatch[1])
-    } else {
-      const nascMatch =
-        /(?:data\s+de\s+nascimento|nascimento|nasc\.?)[:\s]+(\d{1,2}[/.-]\d{1,2}[/.-]\d{4})/i.exec(
+    if (nascTabelaMatch) {
+      dataNasc = parseDataFlexivel(nascTabelaMatch[1])
+    }
+
+    // 2. Célula markdown em qualquer tabela ou linha: "| 02/08/1990 |" dentro de Dados Gerais
+    if (!dataNasc && dadosGeraisText) {
+      const dateInDadosGeraisMatch = /\|\s*(\d{1,2}[/.-]\d{1,2}[/.-]\d{4})\s*\|/.exec(
+        dadosGeraisText,
+      )
+      if (dateInDadosGeraisMatch) {
+        dataNasc = parseDataFlexivel(dateInDadosGeraisMatch[1])
+      }
+    }
+
+    // 3. Linhas quebradas ou com dois pontos
+    if (!dataNasc) {
+      const nascLinhaQuebradaMatch =
+        /(?:data\s+de\s+nascimento|nascimento|nasc\.?)[*\s|:]*\n+(\d{1,2}[/.-]\d{1,2}[/.-]\d{4})/i.exec(
           escopoNasc,
         )
-      if (nascMatch) {
-        dataNasc = parseDataFlexivel(nascMatch[1])
+      if (nascLinhaQuebradaMatch) {
+        dataNasc = parseDataFlexivel(nascLinhaQuebradaMatch[1])
+      } else {
+        const nascMatch =
+          /(?:data\s+de\s+nascimento|nascimento|nasc\.?)[:\s]+(\d{1,2}[/.-]\d{1,2}[/.-]\d{4})/i.exec(
+            escopoNasc,
+          )
+        if (nascMatch) {
+          dataNasc = parseDataFlexivel(nascMatch[1])
+        }
       }
     }
   }
@@ -1123,12 +1156,52 @@ function extrairSegurado(
 
   // 6. ENDEREÇO COMPLETO E CEP
   // (a) Caso Azul Seguros / Porto Seguro (bloco "Endereço residencial"):
-  // No layout Azul Tradicional (com ou sem tabela):
-  // Rótulos que podem vir em linhas próprias seguidos pelo valor na próxima linha:
-  // "Endereço residencial\nR Doralice de Almeida Lyra, 55\nComplemento\n-\nCEP\n58037-335\nUF\nPB\nBairro\nJardim Oceania\nCidade\nJoão Pessoa"
-  // Ou na mesma linha: "Endereço residencial: R Doralice de Almeida Lyra, 55 / CEP: 58037-335..."
+  // Em tabelas Markdown (Gfm) como gerado pelo $documents.toMarkdown:
+  // | Endereço residencial | Complemento | CEP | Bairro | Cidade | UF |
+  // | --- | --- | --- | --- | --- | --- |
+  // | R Doralice de Almeida Lyra, 55 | - | 58037-335 | Jardim Oceania | João Pessoa | PB |
+  const parseTabelaMarkdownColunas = (
+    headerRegex: RegExp,
+    callback: (headers: string[], values: string[]) => void,
+  ) => {
+    const tableRegex = /\|([^\n]+)\|\s*\n\|(?:\s*[-:]+\s*\|)+\s*\n\|([^\n]+)\|/gi
+    let match: RegExpExecArray | null
+    while ((match = tableRegex.exec(textoUtilCliente)) !== null) {
+      const headerLine = match[1]
+      if (headerRegex.test(headerLine)) {
+        const headers = headerLine.split('|').map((h) => sanitizarTextoExtraido(h).toLowerCase())
+        const values = match[2].split('|').map((v) => sanitizarTextoExtraido(v))
+        callback(headers, values)
+        break
+      }
+    }
+  }
+
+  parseTabelaMarkdownColunas(/endere[çc]o\s+residencial/i, (headers, values) => {
+    headers.forEach((h, idx) => {
+      const val = values[idx] || ''
+      if (!val || val === '-' || isTextoCabecalhoOuInvalido(val)) return
+
+      if (h.includes('endereço') || h.includes('endereco')) {
+        rua = val
+      } else if (h.includes('cep')) {
+        const cClean = val.replace(/\D/g, '')
+        if (cClean.length === 8) {
+          cep = `${cClean.slice(0, 5)}-${cClean.slice(5)}`
+        }
+      } else if (h.includes('bairro')) {
+        bairro = val
+      } else if (h.includes('cidade')) {
+        cidade = val
+      } else if (h === 'uf' || h.includes('estado')) {
+        const u = val.replace(/[^A-Za-z]/g, '').toUpperCase()
+        if (u.length === 2) estado = u
+      }
+    })
+  })
+
   const parseCampoRotuloValor = (rotulo: string): string => {
-    // 1. Procura rótulo em linha própria e valor na linha seguinte (garantindo que não seja outro rótulo)
+    // 1. Procura rótulo em linha própria e valor na linha seguinte
     const regexLinhaSeguinte = new RegExp(
       `(?:^|\\n)[|* ]*${rotulo}[|* :]*\\n+([^\\n|]+?)(?=\\n|$)`,
       'i',
@@ -1155,29 +1228,33 @@ function extrairSegurado(
     return ''
   }
 
-  // Tentar capturar campos estruturados (Azul / Porto)
-  const azulRua = parseCampoRotuloValor('endere[çc]o(?:\\s+residencial)?')
-  if (azulRua) {
-    rua = azulRua
+  // Tentar capturar campos estruturados (Azul / Porto) se ainda não capturados via tabela
+  if (!rua) {
+    const azulRua = parseCampoRotuloValor('endere[çc]o(?:\\s+residencial)?')
+    if (azulRua) rua = azulRua
   }
-  const azulCep = parseCampoRotuloValor('cep')
-  if (azulCep) {
-    const cepClean = azulCep.replace(/\D/g, '')
-    if (cepClean.length === 8) {
-      cep = `${cepClean.slice(0, 5)}-${cepClean.slice(5)}`
+  if (!cep) {
+    const azulCep = parseCampoRotuloValor('cep')
+    if (azulCep) {
+      const cepClean = azulCep.replace(/\D/g, '')
+      if (cepClean.length === 8) {
+        cep = `${cepClean.slice(0, 5)}-${cepClean.slice(5)}`
+      }
     }
   }
-  const azulBairro = parseCampoRotuloValor('bairro')
-  if (azulBairro) {
-    bairro = azulBairro
+  if (!bairro) {
+    const azulBairro = parseCampoRotuloValor('bairro')
+    if (azulBairro) bairro = azulBairro
   }
-  const azulCidade = parseCampoRotuloValor('cidade')
-  if (azulCidade) {
-    cidade = azulCidade
+  if (!cidade) {
+    const azulCidade = parseCampoRotuloValor('cidade')
+    if (azulCidade) cidade = azulCidade
   }
-  const azulUf = parseCampoRotuloValor('uf')
-  if (azulUf && azulUf.length === 2) {
-    estado = azulUf.toUpperCase()
+  if (!estado) {
+    const azulUf = parseCampoRotuloValor('uf')
+    if (azulUf && azulUf.length === 2) {
+      estado = azulUf.toUpperCase()
+    }
   }
 
   if (!rua) {
