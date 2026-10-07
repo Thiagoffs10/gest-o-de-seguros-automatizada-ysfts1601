@@ -18,9 +18,6 @@ routerAdd(
     try {
       var res = $documents.toMarkdown({ file: file })
       var md = res.markdown || ''
-      console.log(
-        '--- TO_MARKDOWN EXTRACTED --- len=' + md.length + ' sample=' + md.substring(0, 500),
-      )
       return e.json(200, {
         success: true,
         fileName: fileName,
