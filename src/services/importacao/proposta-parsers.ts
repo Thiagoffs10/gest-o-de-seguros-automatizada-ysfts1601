@@ -58,6 +58,7 @@ const VALORES_INVALIDOS_OU_CABECALHOS = [
   'segurado(a)',
   'segurado',
   'proponente',
+  'condutor(a)',
   'condutor',
   'endereço residencial',
   'endereço',
@@ -68,6 +69,18 @@ const VALORES_INVALIDOS_OU_CABECALHOS = [
   'uf',
   'estado',
   'cep',
+  'sexo',
+  'profissão',
+  'país de nascimento',
+  'tipo de operação',
+  'segmento',
+  'bônus',
+  'origem do bônus',
+  'sucursal',
+  'apólice',
+  'item',
+  'tipo de envio',
+  'enviar correspondência para',
 ]
 
 export function isTextoCabecalhoOuInvalido(val?: string | null): boolean {
@@ -786,9 +799,12 @@ function extrairSegurado(
   const textoUtilCliente =
     idxCorteInstitucional > 0 ? text.substring(0, idxCorteInstitucional) : text
 
-  // Isolar o bloco "Dados Gerais" (Azul Tradicional / Porto Seguro) se presente
+  // Isolar o bloco "Dados Gerais" (Azul Tradicional / Porto Seguro) se presente.
+  // Tolerante a qualquer formatação markdown (#, ##, **, negrito, espaços) e delimitação
+  // por cabeçalhos conhecidos (Veículo, Questionário, Coberturas, Vigência, Corretor, etc.)
+  // ou próxima seção (#/##)
   const dadosGeraisSectionMatch =
-    /(?:#+\s*|\*{0,2})Dados\s+Gerais\*{0,2}[\s\S]*?(?=(?:(?:#+\s*|\*{0,2})(?:Ve[íi]culo|Question[áa]rio|Coberturas|Declara[çc][ãa]o|Termos)|$))/i.exec(
+    /(?:^|\n)\s*(?:#+\s*)?\*{0,2}\s*Dados\s+Gerais\s*\*{0,2}[\s\S]*?(?=(?:(?:\n\s*#+\s*|\n\s*\*{1,2}\s*)(?:Ve[íi]culo|Question[áa]rio|Coberturas|Vidros|Assist[êe]ncias|Descontos|Forma\s+de\s+pagamento|Declara[çc][ãa]o|Termos|Canais|SAC|Uso\s+interno)|$))/i.exec(
       textoUtilCliente,
     )
   const dadosGeraisText = dadosGeraisSectionMatch ? dadosGeraisSectionMatch[0] : ''
@@ -812,8 +828,8 @@ function extrairSegurado(
   // No layout Azul Tradicional:
   // "Nascimento 02/08/1990 057.365.924-95 CPF" ou "057.365.924-95 CPF" ou "CPF 057.365.924-95"
   // E também via tabela GFM (| Segurado(a) | Nascimento | CPF |)
-  if (!cpfCnpj && dadosGeraisText) {
-    parseTabelaGfmLinhas(/segurado\s*(?:\(a\))?/i, dadosGeraisText, (headers, values) => {
+  const extrairCpfCnpjDeTabelaSegurado = (fonteTexto: string) => {
+    parseTabelaGfmLinhas(/segurado\s*(?:\(a\))?/i, fonteTexto, (headers, values) => {
       headers.forEach((h, idx) => {
         const val = values[idx] || ''
         if (!val || val === '-' || isTextoCabecalhoOuInvalido(val)) return
@@ -837,7 +853,7 @@ function extrairSegurado(
     if (!cpfCnpj) {
       const cpfNaLinha =
         /(?:cpf[*\s|:]+([0-9.\-/]{11,14})|([0-9]{3}\.[0-9]{3}\.[0-9]{3}-[0-9]{2})\s*(?:[|*]*\s*cpf)?)/i.exec(
-          dadosGeraisText,
+          fonteTexto,
         )
       if (cpfNaLinha) {
         const docRaw = cpfNaLinha[1] || cpfNaLinha[2]
@@ -849,7 +865,7 @@ function extrairSegurado(
       }
     }
     if (!cpfCnpj) {
-      const cnpjNaLinha = /(?:cnpj)[*\s|:]+([0-9.\-/]{14,18})/i.exec(dadosGeraisText)
+      const cnpjNaLinha = /(?:cnpj)[*\s|:]+([0-9.\-/]{14,18})/i.exec(fonteTexto)
       if (cnpjNaLinha) {
         const docLimpo = cnpjNaLinha[1].replace(/\D/g, '')
         if (docLimpo.length === 14 && !isCnpjSeguradoraOuInvalido(docLimpo)) {
@@ -858,6 +874,15 @@ function extrairSegurado(
         }
       }
     }
+  }
+
+  // 1ª prioridade: no escopo isolado dadosGeraisText
+  if (!cpfCnpj && dadosGeraisText) {
+    extrairCpfCnpjDeTabelaSegurado(dadosGeraisText)
+  }
+  // 2ª prioridade (Redundância Decisiva): busca global no texto útil inteiro
+  if (!cpfCnpj) {
+    extrairCpfCnpjDeTabelaSegurado(textoUtilCliente)
   }
 
   // Fallback 1: Buscar no bloco INFORMAÇÕES DO CONDUTOR PRINCIPAL
@@ -952,8 +977,8 @@ function extrairSegurado(
   // | Segurado(a) | Nascimento | CPF |
   // | --- | --- | --- |
   // | LIVIA LOURENCO FERNANDES DA CUNHA BARROS | 02/08/1990 | 057.365.924-95 |
-  if (!nome && dadosGeraisText) {
-    parseTabelaGfmLinhas(/segurado\s*(?:\(a\))?/i, dadosGeraisText, (headers, values) => {
+  const extrairNomeDeTabelaSegurado = (fonteTexto: string) => {
+    parseTabelaGfmLinhas(/segurado\s*(?:\(a\))?/i, fonteTexto, (headers, values) => {
       headers.forEach((h, idx) => {
         const val = values[idx] || ''
         if (!val || val === '-' || isTextoCabecalhoOuInvalido(val)) return
@@ -975,7 +1000,7 @@ function extrairSegurado(
     if (!nome) {
       const linhaSeguradoMatch =
         /(?:^|\n)[|* ]*segurado\s*(?:\(a\))?[|* :]*\n+([A-Za-zÀ-ÿ\s.'-]{4,80})(?=\n|$)/i.exec(
-          dadosGeraisText,
+          fonteTexto,
         )
       if (linhaSeguradoMatch) {
         const raw = sanitizarTextoExtraido(linhaSeguradoMatch[1])
@@ -992,7 +1017,7 @@ function extrairSegurado(
     if (!nome) {
       const nomeAzulMatch =
         /segurado\s*(?:\(a\))?[*\s|:]*\n*([A-Za-zÀ-ÿ\s.'-]{4,80}?)(?=(?:\s*[|*]?\s*(?:nascimento|cpf|cnpj|sexo|profiss[ãa]o|endere[çc]o|pa[íi]s)|\n\s*\n|\||$))/i.exec(
-          dadosGeraisText,
+          fonteTexto,
         )
       if (nomeAzulMatch) {
         const raw = sanitizarTextoExtraido(nomeAzulMatch[1])
@@ -1005,6 +1030,15 @@ function extrairSegurado(
         }
       }
     }
+  }
+
+  // 1ª prioridade: no escopo isolado dadosGeraisText
+  if (!nome && dadosGeraisText) {
+    extrairNomeDeTabelaSegurado(dadosGeraisText)
+  }
+  // 2ª prioridade (Redundância Decisiva): busca global no texto útil inteiro
+  if (!nome) {
+    extrairNomeDeTabelaSegurado(textoUtilCliente)
   }
 
   // (b) Se for proposta Condomínio (PJ) da Allianz, pode ter razão social completa antes de "Essa é a proposta..."
@@ -1078,11 +1112,8 @@ function extrairSegurado(
   // 3. DATA DE NASCIMENTO (Allianz NÃO traz e PJ não possui)
   if (formato !== 'ALLIANZ' && tipoPessoa === 'PF') {
     // Procura primeiro no bloco Dados Gerais / texto útil antes do questionário de risco/condutor
-    const escopoNasc = dadosGeraisText || textoUtilCliente
-
-    // 1. Em tabelas Markdown tolerantes mapeadas pelo cabeçalho
-    if (dadosGeraisText) {
-      parseTabelaGfmLinhas(/segurado\s*(?:\(a\))?/i, dadosGeraisText, (headers, values) => {
+    const extrairNascimentoDeTabela = (fonteTexto: string) => {
+      parseTabelaGfmLinhas(/segurado\s*(?:\(a\))?/i, fonteTexto, (headers, values) => {
         headers.forEach((h, idx) => {
           const val = values[idx] || ''
           if (!val || val === '-' || isTextoCabecalhoOuInvalido(val)) return
@@ -1095,6 +1126,17 @@ function extrairSegurado(
       })
     }
 
+    // 1ª prioridade: tabela GFM em dadosGeraisText
+    if (!dataNasc && dadosGeraisText) {
+      extrairNascimentoDeTabela(dadosGeraisText)
+    }
+    // 2ª prioridade: tabela GFM no texto útil global
+    if (!dataNasc) {
+      extrairNascimentoDeTabela(textoUtilCliente)
+    }
+
+    const escopoNasc = dadosGeraisText || textoUtilCliente
+
     // Fallback regex de tabela de nascimento
     if (!dataNasc) {
       const nascTabelaMatch =
@@ -1106,7 +1148,7 @@ function extrairSegurado(
       }
     }
 
-    // 2. Célula markdown em qualquer tabela ou linha: "| 02/08/1990 |" dentro de Dados Gerais
+    // 2. Célula markdown em qualquer tabela ou linha: "| 02/08/1990 |" dentro de Dados Gerais ou texto útil
     if (!dataNasc && dadosGeraisText) {
       const dateInDadosGeraisMatch = /\|\s*(\d{1,2}[/.-]\d{1,2}[/.-]\d{4})\s*\|/.exec(
         dadosGeraisText,
@@ -1281,34 +1323,45 @@ function extrairSegurado(
   // | Endereço residencial | Complemento | CEP | Bairro | Cidade | UF |
   // | --- | --- | --- | --- | --- | --- |
   // | R Doralice de Almeida Lyra, 55 | - | 58037-335 | Jardim Oceania | João Pessoa | PB |
-  parseTabelaGfmLinhas(/endere[çc]o\s+residencial/i, textoUtilCliente, (headers, values) => {
-    headers.forEach((h, idx) => {
-      const val = values[idx] || ''
-      if (!val || val === '-' || isTextoCabecalhoOuInvalido(val)) return
+  const extrairEnderecoDeTabela = (fonteTexto: string) => {
+    parseTabelaGfmLinhas(/endere[çc]o\s+residencial/i, fonteTexto, (headers, values) => {
+      headers.forEach((h, idx) => {
+        const val = values[idx] || ''
+        if (!val || val === '-' || isTextoCabecalhoOuInvalido(val)) return
 
-      if (h.includes('endereço') || h.includes('endereco')) {
-        const pedacos = val.split(',').map((p) => p.trim())
-        rua = pedacos[0] || val
-        if (pedacos.length >= 2 && !numero) {
-          numero = pedacos.slice(1).join(', ')
+        if (h.includes('endereço') || h.includes('endereco')) {
+          const pedacos = val.split(',').map((p) => p.trim())
+          rua = pedacos[0] || val
+          if (pedacos.length >= 2 && !numero) {
+            numero = pedacos.slice(1).join(', ')
+          }
+        } else if (h.includes('complemento')) {
+          // Mantém complemento se necessário
+        } else if (h.includes('cep')) {
+          const cClean = val.replace(/\D/g, '')
+          if (cClean.length === 8) {
+            cep = `${cClean.slice(0, 5)}-${cClean.slice(5)}`
+          }
+        } else if (h.includes('bairro')) {
+          bairro = val
+        } else if (h.includes('cidade')) {
+          cidade = val
+        } else if (h === 'uf' || h.includes('estado')) {
+          const u = val.replace(/[^A-Za-z]/g, '').toUpperCase()
+          if (u.length === 2) estado = u
         }
-      } else if (h.includes('complemento')) {
-        // Mantém complemento se necessário
-      } else if (h.includes('cep')) {
-        const cClean = val.replace(/\D/g, '')
-        if (cClean.length === 8) {
-          cep = `${cClean.slice(0, 5)}-${cClean.slice(5)}`
-        }
-      } else if (h.includes('bairro')) {
-        bairro = val
-      } else if (h.includes('cidade')) {
-        cidade = val
-      } else if (h === 'uf' || h.includes('estado')) {
-        const u = val.replace(/[^A-Za-z]/g, '').toUpperCase()
-        if (u.length === 2) estado = u
-      }
+      })
     })
-  })
+  }
+
+  // 1ª prioridade: se dadosGeraisText estiver isolado
+  if (dadosGeraisText) {
+    extrairEnderecoDeTabela(dadosGeraisText)
+  }
+  // 2ª prioridade: busca global no texto útil inteiro
+  if (!rua || !cep || !bairro || !cidade || !estado) {
+    extrairEnderecoDeTabela(textoUtilCliente)
+  }
 
   const parseCampoRotuloValor = (rotulo: string): string => {
     // 1. Procura rótulo em linha própria e valor na linha seguinte

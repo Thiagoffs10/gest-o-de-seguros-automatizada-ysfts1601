@@ -850,6 +850,70 @@ Ouvidoria: 0800 7271184
       expect(res.quantidadeParcelas).toBe(1)
     })
 
+    it('(a.2-sem-escopo) Resiliência Decisiva: Se regex de escopo "Dados Gerais" for danificado ou não casar, o fallback global extrai 100% dos campos de LIVIA LOURENCO sem falhas', () => {
+      // Simula um markdown onde o título "Dados Gerais" foi completamente alterado/ausente
+      // mas as tabelas GFM do segurado, endereço e contato continuam presentes no corpo do texto útil
+      const markdownSemEscopo = `
+# Proposta de Seguro Auto
+
+# Azul Tradicional
+
+**Dados da cotação**
+
+| Orçamento | Versão | Oferta | Proposta | Apólice | Status |
+| --- | --- | --- | --- | --- | --- |
+| 6320779928 | 0 | 1 | 12-31784355 | 03 14696320 | Emitido |
+
+## Vigência
+
+Das 24h do dia 10/10/2026 até as 24h do dia 10/10/2027
+
+**Corretor(a)**
+
+| Corretor CRED10MIX CORRETORA DE SEGUROS LTDA | Participação | Líder | SUSEP | Telefone | E-mail |
+| --- | --- | --- | --- | --- | --- |
+| Corretor CRED10MIX CORRETORA DE SEGUROS LTDA | 100.00% | Sim | 1676SJ | (81) 3224-0174 | thiago@cred10mix.com.br |
+
+| Segurado(a) | Nascimento | CPF |
+| --- | --- | --- |
+| LIVIA LOURENCO FERNANDES DA CUNHA BARROS | 02/08/1990 | 057.365.924-95 |
+
+| Endereço residencial | Complemento | CEP | Bairro | Cidade | UF |
+| --- | --- | --- | --- | --- | --- |
+| R Doralice de Almeida Lyra, 55 | - | 58037-335 | Jardim Oceania | João Pessoa | PB |
+
+| E-mail | Telefone | Tipo de envio | Enviar correspondência para |
+| --- | --- | --- | --- |
+| paulagabrieladv@gmail.com | Celular: (83) 99112-9729 | DIGITAL | SEGURADO |
+
+**Veículo**
+
+| Placa | Chassi | Veículo | Ano Fabricação / Modelo |
+| --- | --- | --- | --- |
+| QSI2A04 | 9BGEB48A0LG219020 | 6140 -- NOVO ONIX HATCH LT 1.0 12V FLEX | 2020 / 2020 |
+
+## Canais de atendimento
+
+**Porto Seguro Cia de Seguros Gerais**
+CNPJ: 61.198.164/0001-60
+      `.trim()
+
+      const res = parsePropostaTexto(markdownSemEscopo, 'proposta-sem-escopo.pdf')
+
+      // Assert campo a campo: resiliência global garantiu extração mesmo SEM o título "Dados Gerais"
+      expect(res.segurado.nome).toBe('LIVIA LOURENCO FERNANDES DA CUNHA BARROS')
+      expect(res.segurado.dataNascimento).toBe('1990-08-02')
+      expect(res.segurado.cpfCnpj).toBe('05736592495')
+      expect(res.segurado.email).toBe('paulagabrieladv@gmail.com')
+      expect(res.segurado.telefone).toBe('(83) 99112-9729')
+      expect(res.segurado.cep).toBe('58037-335')
+      expect(res.segurado.rua).toBe('R Doralice de Almeida Lyra')
+      expect(res.segurado.numero).toBe('55')
+      expect(res.segurado.bairro).toBe('Jardim Oceania')
+      expect(res.segurado.cidade).toBe('João Pessoa')
+      expect(res.segurado.estado).toBe('PB')
+    })
+
     it('(d) Yelum: decodifica notação de parcelamento especial "1+11" (12x)', () => {
       const text = `
 YELUM SEGURADORA
