@@ -849,7 +849,8 @@ function extrairSegurado(
 
       if (isSegurado && isNasc && isCpf) {
         // Encontrou a pilha de rótulos de 3 campos!
-        // As próximas 3 linhas de dados devem ser [NOME], [DATA], [CPF]
+        // As próximas linhas de dados podem ser [NOME], [DATA], [CPF]
+        // ou [NOME] e na seguinte [DATA] [CPF] combinados
         let valCursor = i + 3
         const vals: string[] = []
         while (valCursor < lines.length && vals.length < 3) {
@@ -860,11 +861,8 @@ function extrairSegurado(
           valCursor++
         }
 
-        if (vals.length >= 3) {
+        if (vals.length >= 2) {
           const candNome = sanitizarTextoExtraido(vals[0])
-          const candData = parseDataFlexivel(vals[1])
-          const candCpfClean = vals[2].replace(/\D/g, '')
-
           if (
             candNome.length > 3 &&
             !isTextoCabecalhoOuInvalido(candNome) &&
@@ -873,14 +871,33 @@ function extrairSegurado(
             if (!nome) nome = candNome
           }
 
-          if (candData && !dataNasc) {
-            dataNasc = candData
-          }
+          // Se vals[1] contiver Data e CPF combinados ("02/08/1990 057.365.924-95")
+          const combinedMatch =
+            /(\d{1,2}[/.-]\d{1,2}[/.-]\d{4})\s+([0-9]{3}\.[0-9]{3}\.[0-9]{3}-[0-9]{2})/i.exec(
+              vals[1],
+            )
+          if (combinedMatch) {
+            if (!dataNasc) dataNasc = parseDataFlexivel(combinedMatch[1])
+            const candCpfClean = combinedMatch[2].replace(/\D/g, '')
+            if (candCpfClean.length === 11 && isValidCpf(candCpfClean)) {
+              if (!cpfCnpj) {
+                cpfCnpj = candCpfClean
+                tipoPessoa = 'PF'
+              }
+            }
+          } else if (vals.length >= 3) {
+            const candData = parseDataFlexivel(vals[1])
+            const candCpfClean = vals[2].replace(/\D/g, '')
 
-          if (candCpfClean.length === 11 && isValidCpf(candCpfClean)) {
-            if (!cpfCnpj) {
-              cpfCnpj = candCpfClean
-              tipoPessoa = 'PF'
+            if (candData && !dataNasc) {
+              dataNasc = candData
+            }
+
+            if (candCpfClean.length === 11 && isValidCpf(candCpfClean)) {
+              if (!cpfCnpj) {
+                cpfCnpj = candCpfClean
+                tipoPessoa = 'PF'
+              }
             }
           }
           if (nome && dataNasc && cpfCnpj) return
@@ -1573,27 +1590,61 @@ function extrairSegurado(
     // PB
     // Jardim Oceania
     // João Pessoa
-    for (let j = 0; j < lines.length - 3; j++) {
+    for (let j = 0; j < lines.length - 1; j++) {
       const lineCep = lines[j].trim()
-      const cepMatch = /^([0-9]{5}-[0-9]{3})$/.exec(lineCep)
+      const cepMatch = /(?:^|\b)([0-9]{5}-[0-9]{3})\b/.exec(lineCep)
       if (cepMatch) {
-        const candUf = lines[j + 1]?.trim().toUpperCase()
-        if (candUf && /^[A-Z]{2}$/.test(candUf)) {
+        // Encontrou CEP! Procurar UF nas próximas 3 linhas
+        let ufFound = ''
+        let idxUfFound = -1
+        for (let u = j + 1; u <= Math.min(lines.length - 1, j + 3); u++) {
+          const cand = lines[u]?.trim().toUpperCase()
+          if (/^[A-Z]{2}$/.test(cand)) {
+            ufFound = cand
+            idxUfFound = u
+            break
+          }
+        }
+
+        if (ufFound) {
           if (!cep) cep = cepMatch[1]
-          if (!estado) estado = candUf
-          const candBairro = lines[j + 2]?.trim()
-          const candCidade = lines[j + 3]?.trim()
-          if (candBairro && !isTextoCabecalhoOuInvalido(candBairro) && !bairro) {
+          if (!estado) estado = ufFound
+
+          // Próximas linhas após a UF podem ser Bairro e Cidade
+          const candBairro = lines[idxUfFound + 1]?.trim()
+          const candCidade = lines[idxUfFound + 2]?.trim()
+          if (
+            candBairro &&
+            !isTextoCabecalhoOuInvalido(candBairro) &&
+            candBairro !== '-' &&
+            !bairro
+          ) {
             bairro = sanitizarTextoExtraido(candBairro)
           }
-          if (candCidade && !isTextoCabecalhoOuInvalido(candCidade) && !cidade) {
+          if (
+            candCidade &&
+            !isTextoCabecalhoOuInvalido(candCidade) &&
+            candCidade !== '-' &&
+            !cidade
+          ) {
             cidade = sanitizarTextoExtraido(candCidade)
           }
+
+          // Procurar rua nas linhas anteriores ao CEP
           if (!rua) {
-            for (let k = j - 1; k >= Math.max(0, j - 3); k--) {
+            for (let k = j - 1; k >= Math.max(0, j - 4); k--) {
               const candRua = lines[k].trim()
               if (candRua === '-' || isTextoCabecalhoOuInvalido(candRua)) continue
-              if (candRua.length > 5 && !candRua.toLowerCase().includes('endereço')) {
+              const candRuaNorm = normalizarRotulo(candRua)
+              if (
+                candRuaNorm.includes('endereço') ||
+                candRuaNorm.includes('complemento') ||
+                candRuaNorm.includes('cep') ||
+                candRuaNorm.includes('uf')
+              ) {
+                continue
+              }
+              if (candRua.length > 3) {
                 const pedacos = candRua.split(',').map((p) => p.trim())
                 rua = pedacos[0] || candRua
                 if (pedacos.length >= 2 && !numero) {

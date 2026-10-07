@@ -942,6 +942,129 @@ CNPJ: 61.198.164/0001-60
       expect(modalFormData.estado).toBe('PB')
     })
 
+    it('(a.2-rotulos-negrito) Azul Seguros: Rótulos em negrito e valores na linha seguinte / fluxo contínuo sem pipes', () => {
+      // Layout diagnosticado do PDF 6320779928 Azul Tradicional com rótulos markdown em negrito:
+      const textoRotulosNegrito = `
+# Proposta de Seguro Auto
+Azul Tradicional
+
+**Dados da cotação**
+**Orçamento Versão Oferta Proposta Apólice Status**
+6320779928 0 1 12-31784355 03 14696320 Emitido
+
+**Vigência**
+Das 24h do dia 10/10/2026 até as 24h do dia 10/10/2027
+
+**Corretor(a)**
+CRED10MIX CORRETORA DE SEGUROS LTDA 100.00% Sim 1676SJ (81) 3224-0174 thiago@cred10mix.com.br
+
+**Dados Gerais**
+
+**Segurado(a)**
+LIVIA LOURENCO FERNANDES DA CUNHA BARROS
+
+**Nascimento**
+02/08/1990
+
+**CPF**
+057.365.924-95
+
+**Profissão**
+387-Administradores
+
+**Sexo**
+Feminino
+
+**Endereço residencial**
+R Doralice de Almeida Lyra, 55
+
+**Complemento**
+-
+
+**CEP**
+58037-335
+
+**UF**
+PB
+
+**Bairro**
+Jardim Oceania
+
+**Cidade**
+João Pessoa
+
+**E-mail**
+paulagabrieladv@gmail.com
+
+**Telefone**
+Celular: (83) 99112-9729
+
+**Veículo**
+6140 - - NOVO ONIX HATCH LT 1.0 12V FLEX
+QSI2A04
+9BGEB48A0LG219020
+2020 / 2020
+
+**Questionário de avaliação de risco**
+PAULA GABRIELA DE MORAIS NEGREIROS 088.181.234-08
+15/10/1996
+58037-335
+
+**Forma de pagamento**
+97-Todas Cartão de Crédito Porto Bank
+R$ 1.486,42 R$ 109,70 R$ 0,00 R$ 0,00 1x R$ 1.596,12 R$ 1.596,12
+
+**Canais de atendimento**
+Porto Seguro Cia de Seguros Gerais
+CNPJ: 61.198.164/0001-60
+      `.trim()
+
+      const res = parsePropostaTexto(textoRotulosNegrito, 'azul_proposta_6320779928.pdf')
+
+      // Verificação campo a campo dos 11 valores-alvo obrigatórios:
+      expect(res.segurado.nome).toBe('LIVIA LOURENCO FERNANDES DA CUNHA BARROS')
+      expect(res.segurado.dataNascimento).toBe('1990-08-02')
+      expect(res.segurado.cpfCnpj).toBe('05736592495')
+      expect(res.segurado.tipoPessoa).toBe('PF')
+      expect(res.segurado.email).toBe('paulagabrieladv@gmail.com')
+      expect(res.segurado.telefone).toBe('(83) 99112-9729')
+      expect(res.segurado.cep).toBe('58037-335')
+      expect(res.segurado.rua).toBe('R Doralice de Almeida Lyra')
+      expect(res.segurado.numero).toBe('55')
+      expect(res.segurado.bairro).toBe('Jardim Oceania')
+      expect(res.segurado.cidade).toBe('João Pessoa')
+      expect(res.segurado.estado).toBe('PB')
+
+      // Simulação do preenchimento do modal (Conferir e Cadastrar Cliente da Proposta)
+      const tipoPessoa = res.segurado.tipoPessoa || 'PF'
+      const modalFormData = {
+        name: res.segurado.nome || '',
+        tipo_pessoa: tipoPessoa,
+        cpf: tipoPessoa === 'PF' ? '057.365.924-95' : '',
+        birth_date: res.segurado.dataNascimento || '',
+        email: res.segurado.email || '',
+        phone: res.segurado.telefone || '',
+        cep: res.segurado.cep || '',
+        rua: res.segurado.rua || '',
+        numero: res.segurado.numero || '',
+        bairro: res.segurado.bairro || '',
+        cidade: res.segurado.cidade || '',
+        estado: res.segurado.estado || '',
+      }
+
+      expect(modalFormData.name).toBe('LIVIA LOURENCO FERNANDES DA CUNHA BARROS')
+      expect(modalFormData.birth_date).toBe('1990-08-02')
+      expect(modalFormData.cpf).toBe('057.365.924-95')
+      expect(modalFormData.email).toBe('paulagabrieladv@gmail.com')
+      expect(modalFormData.phone).toBe('(83) 99112-9729')
+      expect(modalFormData.cep).toBe('58037-335')
+      expect(modalFormData.rua).toBe('R Doralice de Almeida Lyra')
+      expect(modalFormData.numero).toBe('55')
+      expect(modalFormData.bairro).toBe('Jardim Oceania')
+      expect(modalFormData.cidade).toBe('João Pessoa')
+      expect(modalFormData.estado).toBe('PB')
+    })
+
     it('(a.2-sem-escopo) Resiliência Decisiva: Se regex de escopo "Dados Gerais" for danificado ou não casar, o fallback global extrai 100% dos campos de LIVIA LOURENCO sem falhas', () => {
       // Simula um markdown onde o título "Dados Gerais" foi completamente alterado/ausente
       // mas as tabelas GFM do segurado, endereço e contato continuam presentes no corpo do texto útil
