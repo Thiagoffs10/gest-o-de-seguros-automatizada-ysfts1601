@@ -575,6 +575,278 @@ Prêmio Total: R$ 4.380,00
       expect(res.condutorPrincipal.mesmoQueSegurado).toBe(false)
     })
 
+    it('(a.2) Azul Seguros / Porto Seguro (Caso Real LIVIA LOURENCO): extrai PF, ignora CNPJ da Porto no rodapé, separa condutor Paula Gabriela, preenche endereço e prêmios', () => {
+      // Texto completo extraído do PDF real de 5 páginas enviado pelo usuário
+      const textAzulReal = `
+Proposta de Seguro Auto
+Azul Tradicional
+Dados da cotação
+Orçamento
+6320779928
+Oferta
+1
+Versão
+0 12-31784355
+Proposta Apólice
+03 14696320
+Vigência
+Das 24h do dia 10/10/2026 até as 24h do dia 10/10/2027
+Status
+Emitido
+Corretor(a)
+Corretor Participação Líder SUSEP Telefone E-mail
+CRED10MIX CORRETORA DE
+SEGUROS LTDA
+100.00% Sim 1676SJ (81) 3224-0174 thiago@cred10mix.com.br
+Dados Gerais
+Segurado(a)
+LIVIA LOURENCO FERNANDES DA CUNHA BARROS
+Nascimento
+02/08/1990 057.365.924-95
+CPF
+Sexo Profissão
+Feminino 387-Administradores
+País de nascimento
+Brasil
+Azul
+Tradicional
+Segmento Origem do bônus
+-
+Tipo de Operação
+Renovação da Cia
+Bônus
+Classe 1
+Seguradora
+Azul Seguros
+Sucursal
+3
+Apólice
+12806713
+Item
+1
+Endereço residencial
+R Doralice de Almeida Lyra, 55
+Complemento
+-
+CEP
+58037-335
+UF
+PB
+Bairro
+Jardim Oceania
+Cidade
+João Pessoa
+E-mail
+paulagabrieladv@gmail.com
+Telefone Tipo de envio Enviar correspondência para
+Celular: (83) 99112-9729 DIGITAL SEGURADO
+Veículo
+6140 - - NOVO ONIX HATCH LT 1.0 12V FLEX
+Veículo
+QSI2A04
+Placa
+9BGEB48A0LG219020
+Chassi
+2020 / 2020
+Ano Fabricação / Modelo
+Zero km
+45179 N
+Fipe Câmbio
+Manual
+Blindado
+Não
+Kit Gás
+Não
+Isenção Fiscal
+Sem Isenção 5
+10 - VEICULOS DE PASSEIO
+Categoria
+Pessoa com deficiência
+Não
+Combustível
+GASOLINA/ALCOOL
+Portas
+Questionário de avaliação de risco¹
+Seguro do corretor
+Não
+PAULA GABRIELA DE MORAIS NEGREIROS 088.181.234-08
+58037-335
+Condutor Nascimento
+15/10/1996
+CPF
+CEP de pernoite Dispositivos antifurto/anti-roubo
+Outros Dispositivos, Não
+Tipo de uso
+Particular
+Coberturas e serviços automóvel
+Descrição LMI (indenização) Franquia Valor do Prêmio
+Compreensiva (Colisão, Incêndio, Roubo ou
+Furto) - Valor de mercado
+100.00% R$ 3.804,00 (50% da R$ 1.018,84
+Obrigatória)
+RCF-V Danos Materiais R$ 50.000,00 - R$ 380,53
+RCF-V Danos Corporais R$ 50.000,00 - R$ 23,47
+Custos de defesa auto Não contratado - -
+
+Forma de pagamento
+Forma de pagamento Valor líquido IOF Juros Encargos Parcelas Valor parcelas Valor total
+97-Todas Cartão de
+Crédito Porto Bank
+(Existente)
+R$ 1.486,42 R$ 109,70 R$ 0,00 R$ 0,00 1x R$ 1.596,12 R$ 1.596,12
+Bandeira
+VISA
+
+Declaração do proponente Seguro Automóvel
+Declaro que li as Condições Gerais deste seguro...
+
+Canais de atendimento
+Porto Seguro Cia de Seguros Gerais
+CNPJ: 61.198.164/0001-60
+Código da Seguradora: 05886
+Processo SUSEP: 15414.610648/2024-80
+SAC 0800 727 2766
+Central 24h Grande São Paulo: (11) 3366 3333
+Outras Regiões: 0300 33 76786
+Ouvidoria: 0800 7271184
+      `.trim()
+
+      const res = parsePropostaTexto(textAzulReal, 'proposta-azul-tradicional-14696320.pdf')
+
+      // 1. Identificação da Seguradora e Formato
+      expect(res.formato).toBe('AZUL_SEGUROS')
+      expect(res.seguradoraNome).toBe('Azul Seguros')
+      expect(res.tipoSeguro).toBe('Auto')
+      expect(res.numeroProposta).toBe('12-31784355')
+
+      // 2. Segurado (PF) — LIVIA LOURENCO (NÃO "Nascimento" nem CNPJ institucional)
+      expect(res.segurado.tipoPessoa).toBe('PF')
+      expect(res.segurado.nome).toBe('LIVIA LOURENCO FERNANDES DA CUNHA BARROS')
+      expect(res.segurado.nome).not.toContain('Nascimento')
+      expect(res.segurado.cpfCnpj).toBe('05736592495')
+      expect(res.segurado.cpfCnpj).not.toBe('61198164000160') // Proteção contra CNPJ da Porto Seguro
+      expect(res.segurado.dataNascimento).toBe('1990-08-02')
+      expect(res.segurado.email).toBe('paulagabrieladv@gmail.com')
+      expect(res.segurado.telefone).toBe('(83) 99112-9729') // Ignora telefones institucionais
+      expect(res.segurado.telefone).not.toContain('3224-0174') // Telefone da corretora ignorado
+      expect(res.segurado.telefone).not.toContain('0800')
+
+      // Endereço desmembrado
+      expect(res.segurado.rua).toBe('R Doralice de Almeida Lyra')
+      expect(res.segurado.numero).toBe('55')
+      expect(res.segurado.bairro).toBe('Jardim Oceania')
+      expect(res.segurado.cidade).toBe('João Pessoa')
+      expect(res.segurado.estado).toBe('PB')
+      expect(res.segurado.cep).toBe('58037-335')
+
+      // 3. Condutor Principal separado (PAULA GABRIELA)
+      expect(res.condutorPrincipal.nome).toBe('PAULA GABRIELA DE MORAIS NEGREIROS')
+      expect(res.condutorPrincipal.cpf).toBe('08818123408')
+      expect(res.condutorPrincipal.mesmoQueSegurado).toBe(false)
+
+      // 4. Veículo
+      expect(res.veiculo.marcaModelo).toBe('NOVO ONIX HATCH LT 1.0 12V FLEX')
+      expect(res.veiculo.placa).toBe('QSI2A04')
+      expect(res.veiculo.chassi).toBe('9BGEB48A0LG219020')
+      expect(res.veiculo.anoModelo).toBe(2020)
+      expect(res.veiculo.anoFabricacao).toBe(2020)
+      expect(res.veiculo.codigoFipe).toBe('45179')
+
+      // 5. Vigência e Prêmios
+      expect(res.vigenciaInicio).toBe('2026-10-10')
+      expect(res.vigenciaFim).toBe('2027-10-10')
+      expect(res.premioLiquido).toBe(1486.42)
+      expect(res.iof).toBe(109.7)
+      expect(res.premioTotal).toBe(1596.12)
+      expect(res.formaPagamento).toBe('Crédito')
+      expect(res.quantidadeParcelas).toBe(1)
+      expect(res.parcelamentoDescricao).toContain('1x de R$ 1.596,12')
+
+      // 6. Renovação
+      expect(res.renovacao.isRenovacao).toBe(true)
+      expect(res.renovacao.apoliceAnterior).toBe('12806713')
+      expect(res.renovacao.seguradoraAnterior).toBe('Azul Seguros')
+      expect(res.renovacao.classeBonus).toBe('1')
+    })
+
+    it('(a.2-md) Azul Seguros com marcações de Markdown (tabelas e pipes) geradas por $documents.toMarkdown', () => {
+      const markdownRealAzul = `
+# Proposta de Seguro Auto
+## Azul Tradicional
+
+| Dados da cotação | | | | |
+| --- | --- | --- | --- | --- |
+| **Orçamento** | 6320779928 | **Oferta** | 1 | |
+| **Versão** | 0 | **Proposta** | 12-31784355 | |
+| **Apólice** | 03 14696320 | **Status** | Emitido | |
+
+**Vigência**
+Das 24h do dia 10/10/2026 até as 24h do dia 10/10/2027
+
+## Corretor(a)
+| Corretor | Participação | Líder | SUSEP | Telefone | E-mail |
+| --- | --- | --- | --- | --- | --- |
+| CRED10MIX CORRETORA DE SEGUROS LTDA | 100.00% | Sim | 1676SJ | (81) 3224-0174 | thiago@cred10mix.com.br |
+
+## Dados Gerais
+| **Segurado(a)** | LIVIA LOURENCO FERNANDES DA CUNHA BARROS |
+| **Nascimento** | 02/08/1990 | **CPF** | 057.365.924-95 |
+| **Sexo** | Feminino | **Profissão** | 387-Administradores |
+| **Endereço residencial** | R Doralice de Almeida Lyra, 55 |
+| **Complemento** | - | **CEP** | 58037-335 |
+| **UF** | PB | **Bairro** | Jardim Oceania | **Cidade** | João Pessoa |
+| **E-mail** | paulagabrieladv@gmail.com | **Celular:** | (83) 99112-9729 |
+
+## Veículo
+| **Veículo** | 6140 - - NOVO ONIX HATCH LT 1.0 12V FLEX |
+| **Placa** | QSI2A04 | **Chassi** | 9BGEB48A0LG219020 |
+| **Ano Fabricação / Modelo** | 2020 / 2020 | **Fipe** | N45179 |
+
+## Questionário de avaliação de risco
+| **Condutor** | PAULA GABRIELA DE MORAIS NEGREIROS | **CPF** | 088.181.234-08 |
+| **Nascimento** | 15/10/1996 | **CEP de pernoite** | 58037-335 |
+
+## Forma de pagamento
+| Forma de pagamento | Valor líquido | IOF | Juros | Encargos | Parcelas | Valor parcelas | Valor total |
+| --- | --- | --- | --- | --- | --- | --- | --- |
+| 97-Todas Cartão de Crédito Porto Bank (Existente) | R$ 1.486,42 | R$ 109,70 | R$ 0,00 | R$ 0,00 | 1x | R$ 1.596,12 | R$ 1.596,12 |
+
+## Canais de atendimento
+Porto Seguro Cia de Seguros Gerais
+CNPJ: 61.198.164/0001-60
+SAC 0800 727 2766
+Central 24h Grande São Paulo: (11) 3366 3333
+      `.trim()
+
+      const res = parsePropostaTexto(markdownRealAzul, 'proposta-azul.pdf')
+
+      expect(res.formato).toBe('AZUL_SEGUROS')
+      expect(res.segurado.nome).toBe('LIVIA LOURENCO FERNANDES DA CUNHA BARROS')
+      expect(res.segurado.cpfCnpj).toBe('05736592495')
+      expect(res.segurado.tipoPessoa).toBe('PF')
+      expect(res.segurado.dataNascimento).toBe('1990-08-02')
+      expect(res.segurado.telefone).toBe('(83) 99112-9729')
+      expect(res.segurado.email).toBe('paulagabrieladv@gmail.com')
+      expect(res.segurado.rua).toBe('R Doralice de Almeida Lyra')
+      expect(res.segurado.numero).toBe('55')
+      expect(res.segurado.cidade).toBe('João Pessoa')
+      expect(res.segurado.estado).toBe('PB')
+      expect(res.segurado.cep).toBe('58037-335')
+
+      expect(res.condutorPrincipal.nome).toBe('PAULA GABRIELA DE MORAIS NEGREIROS')
+      expect(res.condutorPrincipal.cpf).toBe('08818123408')
+      expect(res.condutorPrincipal.mesmoQueSegurado).toBe(false)
+
+      expect(res.veiculo.marcaModelo).toBe('NOVO ONIX HATCH LT 1.0 12V FLEX')
+      expect(res.veiculo.placa).toBe('QSI2A04')
+      expect(res.veiculo.chassi).toBe('9BGEB48A0LG219020')
+
+      expect(res.premioLiquido).toBe(1486.42)
+      expect(res.iof).toBe(109.7)
+      expect(res.premioTotal).toBe(1596.12)
+      expect(res.quantidadeParcelas).toBe(1)
+    })
+
     it('(d) Yelum: decodifica notação de parcelamento especial "1+11" (12x)', () => {
       const text = `
 YELUM SEGURADORA

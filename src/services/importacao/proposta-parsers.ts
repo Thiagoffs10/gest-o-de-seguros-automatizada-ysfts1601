@@ -26,7 +26,7 @@ import { isValidCpf } from '@/lib/document-validators'
  * Sanitiza valores de texto extraídos de PDFs (remove artefatos como '|', barras repetidas,
  * colapsa quebras de linha e múltiplos espaços, e executa trim).
  */
-// Cabeçalhos de seções, textos de privacidade ou ruídos conhecidos que NUNCA devem ser aceitos como valores (ex: em cidade/bairro/rua/nome)
+// Cabeçalhos de seções, rótulos de campos, textos de privacidade ou ruídos conhecidos que NUNCA devem ser aceitos como valores (ex: em cidade/bairro/rua/nome)
 const VALORES_INVALIDOS_OU_CABECALHOS = [
   'de dados pessoais',
   'dados pessoais',
@@ -46,11 +46,30 @@ const VALORES_INVALIDOS_OU_CABECALHOS = [
   'assistência 24h',
   'assistência residencial',
   'oferta escolhida',
+  'nascimento',
+  'data de nascimento',
+  'cpf',
+  'cnpj',
+  'dados gerais',
+  'dados da cotação',
+  'canais de atendimento',
+  'questionário de avaliação de risco',
+  'coberturas e serviços automóvel',
+  'segurado(a)',
+  'segurado',
+  'proponente',
+  'condutor',
+  'endereço residencial',
+  'veículo',
 ]
 
 export function isTextoCabecalhoOuInvalido(val?: string | null): boolean {
   if (!val) return true
-  const v = val.trim().toLowerCase()
+  const v = val
+    .trim()
+    .toLowerCase()
+    .replace(/[*_#:|-]/g, '')
+    .trim()
   if (v.length < 2) return true
   return VALORES_INVALIDOS_OU_CABECALHOS.some((termo) => v === termo || v.startsWith(termo))
 }
@@ -88,6 +107,18 @@ export function detectarFormatoProposta(
 ): SeguradoraPropostaFormato {
   const t = text.toLowerCase()
   const n = (nomeArquivo || '').toLowerCase()
+
+  // Azul Seguros tem prioridade (mesmo quando emitida via Porto Seguro ou contendo menção a Porto)
+  if (
+    n.includes('azul') ||
+    t.includes('azul tradicional') ||
+    t.includes('azul seguros') ||
+    t.includes('proposta de seguro auto / azul') ||
+    t.includes('proposta de seguro auto\nazul tradicional') ||
+    (t.includes('azul') && t.includes('porto seguro'))
+  ) {
+    return 'AZUL_SEGUROS'
+  }
 
   if (
     n.includes('porto') ||
@@ -129,6 +160,7 @@ export function parsePropostaTexto(text: string, nomeArquivo: string = ''): Prop
   // Mapeamento de nome oficial da seguradora
   const nomesMap: Record<SeguradoraPropostaFormato, string> = {
     PORTO_SEGURO: 'Porto Seguro',
+    AZUL_SEGUROS: 'Azul Seguros',
     ALLIANZ: 'Allianz',
     HDI: 'HDI',
     YELUM: 'Yelum',
@@ -253,20 +285,42 @@ export function parsePropostaTexto(text: string, nomeArquivo: string = ''): Prop
 // =========================================================================
 
 function extrairNumeroProposta(text: string, formato: SeguradoraPropostaFormato): string {
+  // Caso específico Azul Seguros / Porto Seguro:
+  // "Proposta / 03 14696320" ou "Proposta Apólice / 03 14696320" ou "Proposta\n12-31784355" / "Proposta 12-31784355"
+  // Na Azul Tradicional:
+  // "Orçamento 6320779928 Versão 0 Oferta 1 Proposta 12-31784355 Apólice 03 14696320"
+  // Ou "Proposta Apólice / 03 14696320"
+  if (formato === 'AZUL_SEGUROS' || formato === 'PORTO_SEGURO') {
+    // 1. Procura se tem rótulo "Proposta" seguido diretamente de número (com ou sem hífen)
+    // Cuidado com "Proposta de Seguro Auto" - não é o número
+    const azulPropMatch =
+      /(?:^|[|\n\s])proposta\s*(?:ap[oó]lice)?\s*[|:\s/]+([0-9]{2}[\s-]?[0-9]{6,10}|[0-9]{4,12})/i.exec(
+        text,
+      )
+    if (azulPropMatch) {
+      const clean = azulPropMatch[1].trim()
+      // Ignora se for ano tipo "2026"
+      if (clean.replace(/\D/g, '').length >= 6) {
+        return clean
+      }
+    }
+  }
+
   // Padrões comuns: "Proposta: 123456", "Nº da Proposta: 123456", "Proposta nº: 123456"
   const patterns = [
-    /proposta(?:\s+n[ºo.]|\s+número)?[*\s|:]+([0-9\-./]{4,20})/i,
-    /n[ºo.]?\s+da\s+proposta[*\s|:]+([0-9\-./]{4,20})/i,
-    /n[ºo.]?\s+proposta[*\s|:]+([0-9\-./]{4,20})/i,
-    /proposta\s+de\s+seguro[*\s|:]+([0-9\-./]{4,20})/i,
-    /c[oó]digo\s+da\s+proposta[*\s|:]+([0-9\-./]{4,20})/i,
+    /n[ºo.]?\s+da\s+proposta[*\s|:]+([0-9\-./\s]{4,20})/i,
+    /n[ºo.]?\s+proposta[*\s|:]+([0-9\-./\s]{4,20})/i,
+    /c[oó]digo\s+da\s+proposta[*\s|:]+([0-9\-./\s]{4,20})/i,
+    // Proposta com número explícito, evitando casar com "Proposta de Seguro"
+    /(?:^|[|\n])\s*proposta(?:\s+n[ºo.]|\s+número)?[*\s|:]+([0-9\-./\s]{4,20})/i,
   ]
 
   for (const regex of patterns) {
     const match = regex.exec(text)
     if (match) {
-      const num = match[1].replace(/[^\d]/g, '')
-      if (num.length >= 4) return num
+      const num = match[1].trim()
+      const digits = num.replace(/\D/g, '')
+      if (digits.length >= 4) return num
     }
   }
 
@@ -321,27 +375,49 @@ function extrairPremios(text: string): { liquido: number; iof: number; total: nu
   let iof = 0
   let total = 0
 
-  // 1. Procura primeiro na seção específica "INFORMAÇÕES DE PAGAMENTO" (Allianz) onde o Preço líquido
-  // reflete exatamente as condições finais de pagamento.
+  // 1. Procura na seção "Forma de pagamento" (Azul Seguros / Porto Seguro / Allianz)
   const infoPagSection =
-    /(?:#+\s*|\*{0,2})INFORMA[ÇC][ÕO]ES\s+DE\s+PAGAMENTO\*{0,2}[\s\S]*?(?=(?:DECLARA[ÇC][ÃA]O|OFICINAS|CL[ÁA]USULAS|P[áa]gina|\n{3,}|$))/i.exec(
+    /(?:#+\s*|\*{0,2})(?:INFORMA[ÇC][ÕO]ES\s+DE\s+PAGAMENTO|Forma\s+de\s+pagamento)\*{0,2}[\s\S]*?(?=(?:DECLARA[ÇC][ÃA]O|OFICINAS|CL[ÁA]USULAS|QUESTION[ÁA]RIO|P[áa]gina|\n{3,}|$))/i.exec(
       text,
     )
   const pagText = infoPagSection ? infoPagSection[0] : ''
 
   if (pagText) {
-    const pagLiq =
-      /(?:pre[çc]o\s+l[íi]quido|pr[êe]mio\s+l[íi]quido)[*\s|:]+R?\$?\s*([0-9.,]+)/i.exec(pagText)
-    if (pagLiq) liquido = parseMoeda(pagLiq[1])
-
-    const pagIof = /iof[*\s|:]+R?\$?\s*([0-9.,]+)/i.exec(pagText)
-    if (pagIof) iof = parseMoeda(pagIof[1])
-
-    const pagTot =
-      /(?:pre[çc]o\s+total|pr[êe]mio\s+total|total\s+a\s+pagar)(?:\s*\([^)]*\))?[*\s|:]+R?\$?\s*([0-9.,]+)/i.exec(
+    // Caso tabela da Azul / Porto Seguro:
+    // "Forma de pagamento Valor líquido IOF Juros Encargos Parcelas Valor parcelas Valor total"
+    // "97-Todas Cartão de Crédito Porto Bank (Existente) R$ 1.486,42 R$ 109,70 R$ 0,00 R$ 0,00 1x R$ 1.596,12 R$ 1.596,12"
+    // Ou com quebras/markdown:
+    // "| 97-Todas Cartão... | R$ 1.486,42 | R$ 109,70 | R$ 0,00 | R$ 0,00 | 1x | R$ 1.596,12 | R$ 1.596,12 |"
+    const linhaValoresMatch =
+      /Cart[ãa]o[^\n\r|]*?(?:R\$\s*([0-9.,]+))\s*(?:[|*]*\s*R\$\s*([0-9.,]+))\s*(?:[|*]*\s*R\$\s*[0-9.,]+)?\s*(?:[|*]*\s*R\$\s*[0-9.,]+)?\s*(?:[|*]*\s*\d{1,2}x)?\s*(?:[|*]*\s*R\$\s*[0-9.,]+)?\s*(?:[|*]*\s*R\$\s*([0-9.,]+))/i.exec(
         pagText,
       )
-    if (pagTot) total = parseMoeda(pagTot[1])
+    if (linhaValoresMatch) {
+      if (linhaValoresMatch[1]) liquido = parseMoeda(linhaValoresMatch[1])
+      if (linhaValoresMatch[2]) iof = parseMoeda(linhaValoresMatch[2])
+      if (linhaValoresMatch[3]) total = parseMoeda(linhaValoresMatch[3])
+    }
+
+    if (!liquido) {
+      const pagLiq =
+        /(?:pre[çc]o\s+l[íi]quido|pr[êe]mio\s+l[íi]quido|valor\s+l[íi]quido)[*\s|:]+R?\$?\s*([0-9.,]+)/i.exec(
+          pagText,
+        )
+      if (pagLiq) liquido = parseMoeda(pagLiq[1])
+    }
+
+    if (!iof) {
+      const pagIof = /iof[*\s|:]+R?\$?\s*([0-9.,]+)/i.exec(pagText)
+      if (pagIof) iof = parseMoeda(pagIof[1])
+    }
+
+    if (!total) {
+      const pagTot =
+        /(?:pre[çc]o\s+total|pr[êe]mio\s+total|total\s+a\s+pagar|valor\s+total)(?:\s*\([^)]*\))?[*\s|:]+R?\$?\s*([0-9.,]+)/i.exec(
+          pagText,
+        )
+      if (pagTot) total = parseMoeda(pagTot[1])
+    }
   }
 
   // 2. Se não encontrou na seção de pagamento, procura no texto global
@@ -456,22 +532,25 @@ function extrairParcelamento(
     parcelas = p1 + p2
     descricao = `${p1}+${p2} (${parcelas}x)`
   } else {
-    // Procura "Nº. de Parcelas: 10" ou "Valor da Parcela: 233,50" ou "10 parcelas" ou "10x de R$ ..."
+    // Procura "Nº. de Parcelas: 10" ou "Valor da Parcela: 233,50" ou "10 parcelas" ou "10x de R$ ..." ou "1x R$ 1.596,12"
     const numParcMatch = /n[ºo.]?\s+de\s+parcelas[*\s|:]+(\d{1,2})/i.exec(text)
     const parcMatch =
       numParcMatch ||
+      /(\d{1,2})\s*x\s+R?\$?\s*([0-9.,]+)/i.exec(text) ||
       /(?:parcelas?|parcelamento)[*\s|:]+(\d{1,2})x?/i.exec(text) ||
       /(\d{1,2})\s*(?:x|vezes)\s+de\s+R?\$?/i.exec(text) ||
       /(\d{1,2})\s+parcelas\b/i.exec(text)
 
-    const vlrParcMatch = /(?:valor\s+da\s+parcela|vlr\s+parcela)[*\s|:]+R?\$?\s*([0-9.,]+)/i.exec(
-      text,
-    )
+    const vlrParcMatch =
+      /(?:valor\s+da\s+parcela|valor\s+parcelas|vlr\s+parcela)[*\s|:]+R?\$?\s*([0-9.,]+)/i.exec(
+        text,
+      )
 
     if (parcMatch) {
       parcelas = parseInt(parcMatch[1], 10)
-      if (vlrParcMatch) {
-        descricao = `${parcelas}x de R$ ${vlrParcMatch[1].trim()}`
+      const vlr = parcMatch[2] || (vlrParcMatch ? vlrParcMatch[1].trim() : '')
+      if (vlr) {
+        descricao = `${parcelas}x de R$ ${vlr.trim()}`
       } else {
         descricao = `${parcelas}x`
       }
@@ -490,26 +569,32 @@ function extrairVeiculo(text: string): PropostaVeiculoExtraido {
   let anoMod = 0
 
   // Placa: 3 letras + 4 números ou padrão Mercosul (3 letras + 1 num + 1 letra + 2 num)
-  const placaMatch = /(?:placa[*\s|:]+)?\b([A-Z]{3}[-\s]?[0-9][A-Z0-9][0-9]{2})\b/i.exec(text)
+  // Pode vir como "QSI2A04 Placa" ou "Placa: QSI2A04" ou "Placa | QSI2A04" ou "Placa\nQSI2A04"
+  const placaMatch =
+    /(?:placa[*\s|:/]+)?\b([A-Z]{3}[-\s]?[0-9][A-Z0-9][0-9]{2})\b(?:\s*placa)?/i.exec(text) ||
+    /\b([A-Z]{3}[-\s]?[0-9][A-Z0-9][0-9]{2})\s+placa\b/i.exec(text)
   if (placaMatch) {
     placa = placaMatch[1].replace(/[-\s]/g, '').toUpperCase()
   }
 
   // Chassi: 17 caracteres alfanuméricos (excluindo I, O, Q)
-  const chassiMatch = /(?:chassi[*\s|:]+)?\b([A-HJ-NPR-Z0-9]{17})\b/i.exec(text)
+  // Pode vir como "9BGEB48A0LG219020 Chassi" ou "Chassi: 9BGEB48A0LG219020"
+  const chassiMatch =
+    /(?:chassi[*\s|:/]+)?\b([A-HJ-NPR-Z0-9]{17})\b(?:\s*chassi)?/i.exec(text) ||
+    /\b([A-HJ-NPR-Z0-9]{17})\s+chassi\b/i.exec(text)
   if (chassiMatch) {
     chassi = chassiMatch[1].toUpperCase()
   }
 
-  // FIPE: 000000-0 ou 6-7 dígitos
-  const fipeMatch = /(?:fipe|c[oó]digo\s+fipe|c[oó]d\.\s*fipe)[*\s|:]+([0-9]{6,7}-?[0-9]?)/i.exec(
-    text,
-  )
+  // FIPE: 000000-0 ou código alfanumérico como "N45179 Fipe" ou "Fipe 45179" ou "Cód. FIPE: 005528-0"
+  const fipeMatch =
+    /(?:fipe|c[oó]digo\s+fipe|c[oó]d\.\s*fipe)[*\s|:]+([A-Za-z0-9-]{5,9})/i.exec(text) ||
+    /\b([A-Za-z0-9-]{5,9})\s+fipe\b/i.exec(text)
   if (fipeMatch) {
     codigoFipe = fipeMatch[1].trim()
   }
 
-  // Ano Fabricação / Modelo (ex: 2023/2024 ou Ano/Modelo: 2022)
+  // Ano Fabricação / Modelo (ex: 2020 / 2020 Ano Fabricação / Modelo ou Ano/Modelo: 2022)
   const anoDuploMatch =
     /(?:ano(?:\s+fab(?:\.|\/mod)?)?[:\s]+)?\b(19\d{2}|20\d{2})\s*\/\s*(19\d{2}|20\d{2})\b/i.exec(
       text,
@@ -525,15 +610,32 @@ function extrairVeiculo(text: string): PropostaVeiculoExtraido {
     }
   }
 
-  // Marca / Modelo: geralmente próximo a "Veículo:", "Modelo:", "Descrição do veículo"
-  const modMatch =
-    /(?:ve[íi]culo|modelo|marca\/modelo)[*\s|:]+([A-Za-z0-9\s.\-/+]+?)(?=(?:\s*[|*]?\s*(?:produto|ano|placa|chassi|c[oó]d|vers[ãa]o)|\n|\||$))/i.exec(
+  // Marca / Modelo:
+  // 1. Caso Azul Seguros: "6140 - - NOVO ONIX HATCH LT 1.0 12V FLEX" ou "Veículo / 6140 - - NOVO ONIX..."
+  const azulVeicMatch =
+    /(?:ve[íi]culo[*\s|:/]+)?(?:\d{3,5}\s*-\s*-?\s*)?([A-Z0-9\s.\-/+]{6,60}?\b(?:ONIX|GOL|POLO|COROLLA|CIVIC|COMPASS|RENEGADE|CRETA|TRACKER|HB20|ARGO|MOBI|T-CROSS|NIVUS|KICKS|DUSTER|KWID|STRADA|TORO|HILUX|S10|RANGER|FIESTA|FOCUS|CRUZE|FIT|CITY|HR-V|WR-V|YARIS|ETIOS|SANDERO|LOGAN|CLIO|208|2008|C3|C4|TAOS|TIGUAN|SW4|BMW|AUDI|MERCEDES)[A-Z0-9\s.\-/+]*?)(?=(?:\s*[|*]?\s*(?:ve[íi]culo|produto|ano|placa|chassi|c[oó]d|vers[ãa]o|fipe)|\n|\||$))/i.exec(
       text,
     )
-  if (modMatch) {
-    const rawMod = sanitizarTextoExtraido(modMatch[1])
-    if (rawMod.length > 3 && rawMod.length < 80) {
-      marcaModelo = rawMod
+
+  if (azulVeicMatch) {
+    let clean = sanitizarTextoExtraido(azulVeicMatch[1])
+    clean = clean.replace(/^\d{3,5}\s*-\s*-?\s*/, '').trim()
+    if (clean.length > 3 && clean.length < 80 && !isTextoCabecalhoOuInvalido(clean)) {
+      marcaModelo = clean
+    }
+  }
+
+  // Fallback padrão Marca / Modelo
+  if (!marcaModelo) {
+    const modMatch =
+      /(?:ve[íi]culo|modelo|marca\/modelo)[*\s|:]+([A-Za-z0-9\s.\-/+]+?)(?=(?:\s*[|*]?\s*(?:produto|ano|placa|chassi|c[oó]d|vers[ãa]o|fipe)|\n|\||$))/i.exec(
+        text,
+      )
+    if (modMatch) {
+      const rawMod = sanitizarTextoExtraido(modMatch[1]).replace(/^\d{3,5}\s*-\s*-?\s*/, '')
+      if (rawMod.length > 3 && rawMod.length < 80 && !isTextoCabecalhoOuInvalido(rawMod)) {
+        marcaModelo = rawMod
+      }
     }
   }
 
@@ -583,15 +685,48 @@ function extrairSegurado(
   const isCnpjSeguradoraOuInvalido = (docLimpo: string): boolean => {
     // Allianz: 06.157.796/0001-66 ou 06157379... ou qualquer 06.157...
     if (docLimpo.startsWith('06157')) return true
+    // Porto Seguro Cia de Seguros Gerais / Azul Seguros: 61.198.164/0001-60
+    if (docLimpo.startsWith('61198164')) return true
+    // Azul Companhia de Seguros Gerais: 33.448.150/0001-11
+    if (docLimpo.startsWith('33448150')) return true
+    // Porto Seguro Vida e Previdência: 61.884.227/0001-38
+    if (docLimpo.startsWith('61884227')) return true
+    // Bradesco Auto/RE: 92.682.038/0001-00 ou 92.682...
+    if (docLimpo.startsWith('92682038')) return true
+    // HDI Seguros: 29.980.149/0001-81
+    if (docLimpo.startsWith('29980149')) return true
+    // Yelum Seguradora / Liberty Seguros: 61.550.141/0001-72
+    if (docLimpo.startsWith('61550141')) return true
+    // MAPFRE Seguros Gerais: 61.074.175/0001-38
+    if (docLimpo.startsWith('61074175')) return true
+    // Tokio Marine: 33.164.021/0001-00
+    if (docLimpo.startsWith('33164021')) return true
+    // Sompo Seguros: 61.383.493/0001-80
+    if (docLimpo.startsWith('61383493')) return true
     // Matrícula SUSEP / Corretora Cred10mix (ex: 202062795...)
     if (docLimpo.startsWith('202062795')) return true
     return false
   }
 
   // 1. EXTRAÇÃO DE DOCUMENTO (CPF ou CNPJ) E DETECÇÃO PF vs PJ
-  // REGRA DE OURO: Primeiro buscar dentro do bloco SUAS INFORMAÇÕES
+  // Truncar o texto no início das declarações/termos contratuais e rodapés ("Canais de atendimento",
+  // "Declaração do proponente", "Termos e condições", "Porto Seguro Cia de Seguros", etc.)
+  // para evitar que CNPJs institucionais da seguradora cheguem na extração do cliente!
+  const idxCorteInstitucional = text.search(
+    /(?:declara[çc][ãa]o\s+do\s+proponente|termos\s+e\s+condi[çc][õo]es|canais\s+de\s+atendimento|tratamento\s+de\s+dados\s+pessoais|uso\s+interno\s+da\s+cia)/i,
+  )
+  const textoUtilCliente =
+    idxCorteInstitucional > 0 ? text.substring(0, idxCorteInstitucional) : text
+
+  // Isolar o bloco "Dados Gerais" (Azul Tradicional / Porto Seguro) se presente
+  const dadosGeraisSectionMatch =
+    /(?:#+\s*|\*{0,2})Dados\s+Gerais\*{0,2}[\s\S]*?(?=(?:(?:#+\s*|\*{0,2})(?:Ve[íi]culo|Question[áa]rio|Coberturas|Declara[çc][ãa]o|Termos)|\n{3,}|$))/i.exec(
+      textoUtilCliente,
+    )
+  const dadosGeraisText = dadosGeraisSectionMatch ? dadosGeraisSectionMatch[0] : ''
+
+  // REGRA DE OURO 1: Buscar primeiro dentro do bloco SUAS INFORMAÇÕES (Allianz)
   if (suasInfoText) {
-    // Padrão: "CPF/CNPJ: 009.171.474-56" ou "**CPF/CNPJ:** 009.171.474-56" ou "| CPF/CNPJ | 009.171.474-56 |"
     const docSuasInfo = /(?:CPF\/CNPJ|CPF|CNPJ)[*\s|:]+([0-9.\-/]{11,18})/i.exec(suasInfoText)
     if (docSuasInfo) {
       const docLimpo = docSuasInfo[1].replace(/\D/g, '')
@@ -601,6 +736,34 @@ function extrairSegurado(
       } else if (docLimpo.length === 14 && !isCnpjSeguradoraOuInvalido(docLimpo)) {
         cpfCnpj = docLimpo
         tipoPessoa = 'PJ'
+      }
+    }
+  }
+
+  // REGRA DE OURO 2: Buscar dentro de DADOS GERAIS (Azul Seguros / Porto Seguro)
+  // No layout Azul Tradicional:
+  // "Nascimento 02/08/1990 057.365.924-95 CPF" ou "057.365.924-95 CPF" ou "CPF 057.365.924-95"
+  if (!cpfCnpj && dadosGeraisText) {
+    const cpfNaLinha =
+      /(?:cpf[*\s|:]+([0-9.\-/]{11,14})|([0-9]{3}\.[0-9]{3}\.[0-9]{3}-[0-9]{2})\s*(?:[|*]*\s*cpf)?)/i.exec(
+        dadosGeraisText,
+      )
+    if (cpfNaLinha) {
+      const docRaw = cpfNaLinha[1] || cpfNaLinha[2]
+      const docLimpo = docRaw.replace(/\D/g, '')
+      if (docLimpo.length === 11 && isValidCpf(docLimpo)) {
+        cpfCnpj = docLimpo
+        tipoPessoa = 'PF'
+      }
+    }
+    if (!cpfCnpj) {
+      const cnpjNaLinha = /(?:cnpj)[*\s|:]+([0-9.\-/]{14,18})/i.exec(dadosGeraisText)
+      if (cnpjNaLinha) {
+        const docLimpo = cnpjNaLinha[1].replace(/\D/g, '')
+        if (docLimpo.length === 14 && !isCnpjSeguradoraOuInvalido(docLimpo)) {
+          cpfCnpj = docLimpo
+          tipoPessoa = 'PJ'
+        }
       }
     }
   }
@@ -620,43 +783,50 @@ function extrairSegurado(
     }
   }
 
-  // Fallback 2: Se não encontrou nos blocos estruturados, buscar em cabeçalhos específicos
+  // Fallback 2: Buscar em cabeçalhos específicos no textoUtilCliente (antes do corte institucional)
   if (!cpfCnpj) {
-    const cnpjMatch = /(?:cnpj|c\.n\.p\.j\.?)[*\s|:]+([0-9.\-/]{14,18})/i.exec(text)
-    const cpfMatch = /(?:cpf|c\.p\.f\.?)[*\s|:]+([0-9.\-/]{11,14})/i.exec(text)
-    const docMatch = /(?:documento)[*\s|:]+([0-9.\-/]{11,18})/i.exec(text)
+    // Atenção: Procura CPF primeiro ou CNPJ apenas se for explicitamente identificado
+    const cpfMatch =
+      /(?:cpf|c\.p\.f\.?)[*\s|:]+([0-9.\-/]{11,14})/i.exec(textoUtilCliente) ||
+      /([0-9]{3}\.[0-9]{3}\.[0-9]{3}-[0-9]{2})\s*(?:[|*]*\s*cpf)/i.exec(textoUtilCliente)
 
-    if (cnpjMatch) {
-      const numLimpo = cnpjMatch[1].replace(/\D/g, '')
-      if (numLimpo.length === 14 && !isCnpjSeguradoraOuInvalido(numLimpo)) {
-        cpfCnpj = numLimpo
-        tipoPessoa = 'PJ'
-      }
-    }
-
-    if (!cpfCnpj && cpfMatch) {
+    if (cpfMatch) {
       const numLimpo = cpfMatch[1].replace(/\D/g, '')
-      if (numLimpo.length === 11) {
+      if (numLimpo.length === 11 && isValidCpf(numLimpo)) {
         cpfCnpj = numLimpo
         tipoPessoa = 'PF'
       }
     }
 
-    if (!cpfCnpj && docMatch) {
-      const numLimpo = docMatch[1].replace(/\D/g, '')
-      if (numLimpo.length === 14 && !isCnpjSeguradoraOuInvalido(numLimpo)) {
-        cpfCnpj = numLimpo
-        tipoPessoa = 'PJ'
-      } else if (numLimpo.length === 11) {
-        cpfCnpj = numLimpo
-        tipoPessoa = 'PF'
+    if (!cpfCnpj) {
+      const cnpjMatch = /(?:cnpj|c\.n\.p\.j\.?)[*\s|:]+([0-9.\-/]{14,18})/i.exec(textoUtilCliente)
+      if (cnpjMatch) {
+        const numLimpo = cnpjMatch[1].replace(/\D/g, '')
+        if (numLimpo.length === 14 && !isCnpjSeguradoraOuInvalido(numLimpo)) {
+          cpfCnpj = numLimpo
+          tipoPessoa = 'PJ'
+        }
+      }
+    }
+
+    if (!cpfCnpj) {
+      const docMatch = /(?:documento)[*\s|:]+([0-9.\-/]{11,18})/i.exec(textoUtilCliente)
+      if (docMatch) {
+        const numLimpo = docMatch[1].replace(/\D/g, '')
+        if (numLimpo.length === 14 && !isCnpjSeguradoraOuInvalido(numLimpo)) {
+          cpfCnpj = numLimpo
+          tipoPessoa = 'PJ'
+        } else if (numLimpo.length === 11) {
+          cpfCnpj = numLimpo
+          tipoPessoa = 'PF'
+        }
       }
     }
   }
 
   // Fallback 3: Buscar qualquer CPF válido formatado no texto da página 1 (antes de termos contratuais/rodapés)
   if (!cpfCnpj) {
-    const cpfsEncontrados = text.match(/\b\d{3}\.\d{3}\.\d{3}-\d{2}\b/g)
+    const cpfsEncontrados = textoUtilCliente.match(/\b\d{3}\.\d{3}\.\d{3}-\d{2}\b/g)
     if (cpfsEncontrados) {
       for (const rawCpf of cpfsEncontrados) {
         const limpo = rawCpf.replace(/\D/g, '')
@@ -670,8 +840,8 @@ function extrairSegurado(
   }
 
   // Caso especial: Condomínio sem CNPJ explícito no label
-  if (!cpfCnpj && /condom[íi]nio|residencia[l]?\s+do\s+edif[íi]cio/i.test(text)) {
-    const cnpjsEncontrados = text.match(/\b\d{2}\.\d{3}\.\d{3}\/\d{4}-\d{2}\b/g)
+  if (!cpfCnpj && /condom[íi]nio|residencia[l]?\s+do\s+edif[íi]cio/i.test(textoUtilCliente)) {
+    const cnpjsEncontrados = textoUtilCliente.match(/\b\d{2}\.\d{3}\.\d{3}\/\d{4}-\d{2}\b/g)
     if (cnpjsEncontrados) {
       for (const rawCnpj of cnpjsEncontrados) {
         const limpo = rawCnpj.replace(/\D/g, '')
@@ -685,22 +855,46 @@ function extrairSegurado(
   }
 
   // 2. NOME DO SEGURADO / RAZÃO SOCIAL
-  // Se for proposta Condomínio (PJ) da Allianz, pode ter razão social completa antes de "Essa é a proposta..."
-  const allianzCabecalhoMatch =
-    /(?:^|\n)\s*([A-Z0-9\s.,'/-]{10,80})\s*\n\s*Essa\s+[ée]\s+a\s+proposta\s+do\s+seu\s+seguro\s+Allianz\s+Condom[íi]nio/i.exec(
-      text,
-    )
-  if (allianzCabecalhoMatch) {
-    const cab = allianzCabecalhoMatch[1].trim()
-    if (cab.length > 5 && !cab.toLowerCase().includes('corretora')) {
-      nome = cab
+  // (a) Caso Azul Seguros / Porto Seguro (bloco "Dados Gerais"):
+  // No PDF, aparece:
+  // "Dados Gerais"
+  // "Segurado(a)"
+  // "LIVIA LOURENCO FERNANDES DA CUNHA BARROS"
+  // "Nascimento 02/08/1990 057.365.924-95 CPF"
+  // O rótulo "Segurado(a)" pode estar na mesma linha ou em linha separada!
+  if (!nome && dadosGeraisText) {
+    const nomeAzulMatch =
+      /segurado\s*(?:\(a\))?[*\s|:]*\n*([A-Za-zÀ-ÿ\s.'-]{4,80}?)(?=(?:\s*[|*]?\s*(?:nascimento|cpf|cnpj|sexo|profiss[ãa]o|endere[çc]o|pa[íi]s)|\n\s*\n|\||$))/i.exec(
+        dadosGeraisText,
+      )
+    if (nomeAzulMatch) {
+      const raw = sanitizarTextoExtraido(nomeAzulMatch[1])
+      if (
+        raw.length > 3 &&
+        !isTextoCabecalhoOuInvalido(raw) &&
+        !raw.toLowerCase().includes('corretora')
+      ) {
+        nome = raw
+      }
     }
   }
 
-  // Se não achou pelo cabeçalho de condomínio, busca no bloco "SUAS INFORMAÇÕES"
+  // (b) Se for proposta Condomínio (PJ) da Allianz, pode ter razão social completa antes de "Essa é a proposta..."
+  if (!nome) {
+    const allianzCabecalhoMatch =
+      /(?:^|\n)\s*([A-Z0-9\s.,'/-]{10,80})\s*\n\s*Essa\s+[ée]\s+a\s+proposta\s+do\s+seu\s+seguro\s+Allianz\s+Condom[íi]nio/i.exec(
+        text,
+      )
+    if (allianzCabecalhoMatch) {
+      const cab = allianzCabecalhoMatch[1].trim()
+      if (cab.length > 5 && !cab.toLowerCase().includes('corretora')) {
+        nome = cab
+      }
+    }
+  }
+
+  // (c) Bloco "SUAS INFORMAÇÕES" (Allianz)
   if (!nome && suasInfoText) {
-    // "Nome: IRIS NOVAES BUDACH MACHADO" ou "**Nome:** IRIS..." ou "| Nome | IRIS... |"
-    // Pára em delimitador de campo (CPF, CNPJ, Tel, E-mail, Endereço, Idade, Estado, pipes ou nova linha)
     const nomeSuasInfo =
       /(?:Nome|Segurado)[*\s|:]+([A-Za-zÀ-ÿ0-9\s.,'/-]+?)(?=(?:\s*[|*]?\s*(?:CPF|CNPJ|Tel|E-mail|Endere[çc]o|Idade|Estado|Telefone)|\||\n|$))/i.exec(
         suasInfoText,
@@ -713,8 +907,7 @@ function extrairSegurado(
     }
   }
 
-  // Se ainda não achou nome, tenta saudação da Allianz:
-  // Suporta markdown bold: "Olá **IRIS NOVAES BUDACH MACHADO**," ou "Olá IRIS NOVAES BUDACH MACHADO,"
+  // (d) Saudação da Allianz ("Olá IRIS NOVAES BUDACH MACHADO,")
   if (!nome) {
     const olaMatch =
       /Ol[áa]\s+\*{0,2}([A-ZÀ-ÿ\s]{4,80}?)\*{0,2},\s*(?:Agradecemos|Confira|Essa)/i.exec(text)
@@ -726,7 +919,7 @@ function extrairSegurado(
     }
   }
 
-  // Fallback 1: Buscar no bloco INFORMAÇÕES DO CONDUTOR PRINCIPAL
+  // Fallback 1: Buscar no bloco INFORMAÇÕES DO CONDUTOR PRINCIPAL (apenas se não houver condutor separado)
   if (!nome && condPrincipalText) {
     const nomeCondSec =
       /(?:Nome|Condutor)[*\s|:]+([A-Za-zÀ-ÿ0-9\s.,'/-]+?)(?=(?:\s*[|*]?\s*(?:CPF|Idade|Estado|Parentesco)|\||\n|$))/i.exec(
@@ -743,8 +936,8 @@ function extrairSegurado(
   // Fallback 2: Fallback genérico de nome
   if (!nome) {
     const nomeMatch =
-      /(?:nome\s+do\s+segurado|segurado(?:\s*\(a\))?|proponente|raz[ãa]o\s+social)[*\s|:]+([A-Za-zÀ-ÿ0-9\s.-]+?)(?=\s*[|*]?\s*(?:cpf|cnpj|nasc|data|endere[çc]o|telefone|email)|\n|\||$)/i.exec(
-        text,
+      /(?:nome\s+do\s+segurado|segurado(?:\s*\(a\))?|proponente|raz[ãa]o\s+social)[*\s|:]*\n*([A-Za-zÀ-ÿ0-9\s.-]+?)(?=\s*[|*]?\s*(?:cpf|cnpj|nasc|data|endere[çc]o|telefone|email)|\n|\||$)/i.exec(
+        textoUtilCliente,
       )
     if (nomeMatch) {
       const n = sanitizarTextoExtraido(nomeMatch[1])
@@ -756,9 +949,10 @@ function extrairSegurado(
 
   // 3. DATA DE NASCIMENTO (Allianz NÃO traz e PJ não possui)
   if (formato !== 'ALLIANZ' && tipoPessoa === 'PF') {
+    // Procura primeiro no bloco Dados Gerais / texto útil antes do questionário de risco/condutor
     const nascMatch =
       /(?:data\s+de\s+nascimento|nascimento|nasc\.?)[:\s]+(\d{1,2}[/.-]\d{1,2}[/.-]\d{4})/i.exec(
-        text,
+        dadosGeraisText || textoUtilCliente,
       )
     if (nascMatch) {
       dataNasc = parseDataFlexivel(nascMatch[1])
@@ -797,9 +991,12 @@ function extrairSegurado(
   const normalizarTelefoneComDDD = (rawTel: string): string => {
     let clean = rawTel.trim()
     const digitsOnly = clean.replace(/\D/g, '')
+    // Se veio no formato "Celular: (83) 99112-9729" já tem DDD
     if (digitsOnly.length === 8 || digitsOnly.length === 9) {
       if (/OLINDA|RECIFE|\bPE\b/i.test(text)) {
         clean = `81${digitsOnly}`
+      } else if (/JO[ÃA]O\s+PESSOA|\bPB\b/i.test(text)) {
+        clean = `83${digitsOnly}`
       }
     }
     const d = clean.replace(/\D/g, '')
@@ -813,10 +1010,19 @@ function extrairSegurado(
   }
 
   const isTelefoneInstitucionalOuInvalido = (digits: string): boolean => {
-    // 0800 (SACs de seguradoras)
-    if (digits.startsWith('0800')) return true
-    // Matrícula SUSEP / Corretora Cred10mix: telefone 8134939966 / 34939966
-    if (digits.includes('34939966')) return true
+    // 0800 (SACs e Ouvidorias de seguradoras)
+    if (
+      digits.startsWith('0800') ||
+      digits.includes('08007272766') ||
+      digits.includes('08007271184')
+    )
+      return true
+    // 0300 (Centrais de atendimento outras regiões)
+    if (digits.startsWith('0300') || digits.includes('03003376786')) return true
+    // Central 24h Grande São Paulo Porto Seguro: 1133663333 / 33663333
+    if (digits.includes('33663333')) return true
+    // Matrícula SUSEP / Corretora Cred10mix: telefone 8134939966, 8132240174, 32240174
+    if (digits.includes('34939966') || digits.includes('32240174')) return true
     // Linha Direta Allianz: 40901110 / 08007777243
     if (digits.includes('40901110') || digits.includes('08007777243')) return true
     return false
@@ -836,10 +1042,24 @@ function extrairSegurado(
     }
   }
 
+  // Busca em Dados Gerais (Azul / Porto)
+  if (!telefone && dadosGeraisText) {
+    const telAzul =
+      /(?:celular|telefone|tel)[*\s|:/]+(\(?[0-9]{2}\)?\s*[0-9]{4,5}[-\s]?[0-9]{4}|[0-9]{8,11})/i.exec(
+        dadosGeraisText,
+      )
+    if (telAzul) {
+      const cleanDigits = telAzul[1].replace(/\D/g, '')
+      if (!isTelefoneInstitucionalOuInvalido(cleanDigits)) {
+        telefone = normalizarTelefoneComDDD(telAzul[1])
+      }
+    }
+  }
+
   if (!telefone) {
-    // Busca no texto todo com label
-    const telMatches = text.matchAll(
-      /(?:telefone|celular|tel|fone)[*\s|:]+(\(?[0-9]{2}\)?\s*[0-9]{4,5}[-\s]?[0-9]{4}|[0-9]{8,11})/gi,
+    // Busca no texto útil do cliente com label (evitando pegar SAC da pág 5)
+    const telMatches = textoUtilCliente.matchAll(
+      /(?:telefone|celular|tel|fone)[*\s|:/]+(\(?[0-9]{2}\)?\s*[0-9]{4,5}[-\s]?[0-9]{4}|[0-9]{8,11})/gi,
     )
     for (const match of telMatches) {
       const cleanDigits = match[1].replace(/\D/g, '')
@@ -851,11 +1071,31 @@ function extrairSegurado(
   }
 
   // 6. ENDEREÇO COMPLETO E CEP
-  // Caso Auto / Allianz PF: linha única completa no bloco "SUAS INFORMAÇÕES":
-  // "Endereço: AV DEZESSETE DE AGOSTO, 1070, AP 202 - CASA FORTE - RECIFE/PE - 52061540"
-  // ou "**Endereço:** AV DEZESSETE DE AGOSTO..." ou "| Endereço | ..."
+  // (a) Caso Azul Seguros / Porto Seguro (bloco "Endereço residencial"):
+  // No layout Azul Tradicional:
+  // "Endereço residencial / R Doralice de Almeida Lyra, 55 / Complemento - / CEP 58037-335 / UF PB / Bairro Jardim Oceania / Cidade João Pessoa"
+  // Ou quebrado por quebra de linha ou barras:
+  // "Endereço residencial"
+  // "R Doralice de Almeida Lyra, 55"
+  // "Complemento -"
+  // "CEP 58037-335"
+  // "UF PB"
+  // "Bairro Jardim Oceania"
+  // "Cidade João Pessoa"
+  const endResidencialMatch =
+    /endere[çc]o\s+residencial[*\s|:/]+\n*([^\n|/]+?)(?=(?:\s*[|*/]?\s*(?:complemento|cep|uf|bairro|cidade|e-mail|telefone)|\n|\||\/|$))/i.exec(
+      textoUtilCliente,
+    )
+  if (endResidencialMatch) {
+    const rawEnd = sanitizarTextoExtraido(endResidencialMatch[1])
+    if (rawEnd.length > 3 && !isTextoCabecalhoOuInvalido(rawEnd)) {
+      rua = rawEnd
+    }
+  }
+
+  // (b) Caso Auto / Allianz PF: linha única completa no bloco "SUAS INFORMAÇÕES":
   let enderecoLinhaUnica = ''
-  if (suasInfoText) {
+  if (!rua && suasInfoText) {
     const endSuasMatch = /Endere[çc]o[*\s|:]+([^\n|]+)/i.exec(suasInfoText)
     if (endSuasMatch) {
       enderecoLinhaUnica = endSuasMatch[1].trim()
@@ -863,14 +1103,8 @@ function extrairSegurado(
   }
 
   if (enderecoLinhaUnica) {
-    // Quebrar por traços:
-    // Parte 0: "AV DEZESSETE DE AGOSTO, 1070, AP 202"
-    // Parte 1: "CASA FORTE" (Bairro)
-    // Parte 2: "RECIFE/PE" (Cidade/UF)
-    // Parte 3: "52061540" (CEP)
     const partes = enderecoLinhaUnica.split('-').map((p) => p.trim())
     if (partes.length >= 2) {
-      // Primeira parte: Logradouro, número e complemento
       const logradouroComp = partes[0]
       const pedacosLogr = logradouroComp.split(',').map((p) => p.trim())
       rua = pedacosLogr[0] || ''
@@ -878,7 +1112,6 @@ function extrairSegurado(
         numero = pedacosLogr[1]
       }
       if (pedacosLogr.length >= 3) {
-        // Se tiver complemento (ex: AP 202), armazena junto com o número
         const comp = pedacosLogr.slice(2).join(', ')
         if (numero) {
           numero = `${numero}, ${comp}`
@@ -887,10 +1120,8 @@ function extrairSegurado(
         }
       }
 
-      // Varrer as outras partes para Bairro, Cidade/UF e CEP
       for (let i = 1; i < partes.length; i++) {
         const parte = partes[i]
-        // CEP com 8 dígitos juntos ou com traço: 52061540 ou 52061-540
         const cepM = /\b([0-9]{5}-?[0-9]{3})\b/.exec(parte)
         if (cepM && !cep) {
           const cRaw = cepM[1].replace(/\D/g, '')
@@ -898,7 +1129,6 @@ function extrairSegurado(
           continue
         }
 
-        // Cidade / UF: RECIFE/PE
         const cidUfM = /([A-Za-zÀ-ÿ\s.-]+?)\/([A-Z]{2})\b/.exec(parte)
         if (cidUfM) {
           const candidataCidade = cidUfM[1].trim()
@@ -909,7 +1139,6 @@ function extrairSegurado(
           continue
         }
 
-        // Se não for CEP nem Cidade/UF e bairro ainda não estiver preenchido
         if (!bairro && !isTextoCabecalhoOuInvalido(parte)) {
           bairro = parte
         }
@@ -921,42 +1150,52 @@ function extrairSegurado(
 
   // Se não extraiu endereço em linha única, tentar os campos individuais de Allianz Condomínio
   if (!rua) {
-    const endCorrespMatch = /endere[çc]o\s+de\s+correspond[êe]ncia[:\s]+([^\n|]+)/i.exec(text)
+    const endCorrespMatch = /endere[çc]o\s+de\s+correspond[êe]ncia[:\s]+([^\n|]+)/i.exec(
+      textoUtilCliente,
+    )
     if (endCorrespMatch) {
       rua = endCorrespMatch[1].trim()
     }
   }
 
   if (!bairro) {
-    const bairroMatch = /bairro[:\s]+([A-Za-zÀ-ÿ0-9\s.-]+?)(?:\s+cidade|\s+cep|\n|$)/i.exec(text)
+    const bairroMatch =
+      /(?:bairro)[*\s|:/]+([A-Za-zÀ-ÿ0-9\s.-]+?)(?=(?:\s*[|*/]?\s*(?:cidade|uf|cep|e-mail|telefone|ve[íi]culo)|\n|\||\/|$))/i.exec(
+        textoUtilCliente,
+      )
     if (bairroMatch) {
-      const b = bairroMatch[1].trim()
+      const b = sanitizarTextoExtraido(bairroMatch[1])
       if (!isTextoCabecalhoOuInvalido(b)) bairro = b
     }
   }
 
   if (!cidade || !estado) {
-    const cidadeUfMatch = /cidade\/uf[:\s]+([A-Za-zÀ-ÿ\s.-]+?)\/([A-Z]{2})/i.exec(text)
+    const cidadeUfMatch = /cidade\/uf[:\s/]+([A-Za-zÀ-ÿ\s.-]+?)\/([A-Z]{2})/i.exec(textoUtilCliente)
     if (cidadeUfMatch) {
-      const candidata = cidadeUfMatch[1].trim()
+      const candidata = sanitizarTextoExtraido(cidadeUfMatch[1])
       if (!isTextoCabecalhoOuInvalido(candidata)) {
         cidade = candidata
         estado = cidadeUfMatch[2].trim().toUpperCase()
       }
     } else {
-      const cidMatch = /cidade[:\s]+([A-Za-zÀ-ÿ\s.-]+?)(?:\s+uf|\s+estado|\n|$)/i.exec(text)
+      const cidMatch =
+        /(?:cidade)[*\s|:/]+([A-Za-zÀ-ÿ\s.-]+?)(?=(?:\s*[|*/]?\s*(?:uf|estado|e-mail|telefone|ve[íi]culo)|\n|\||\/|$))/i.exec(
+          textoUtilCliente,
+        )
       if (cidMatch) {
-        const c = cidMatch[1].trim()
+        const c = sanitizarTextoExtraido(cidMatch[1])
         if (!isTextoCabecalhoOuInvalido(c)) cidade = c
       }
-      const ufMatch = /(?:uf|estado)[:\s]+([A-Z]{2})\b/i.exec(text)
+      const ufMatch = /(?:uf|estado)[*\s|:/]+([A-Z]{2})\b/i.exec(textoUtilCliente)
       if (ufMatch) estado = ufMatch[1].trim().toUpperCase()
     }
   }
 
-  // CEP no texto se ainda faltar: "CEP Pernoite: 52061-540" ou "CEP: 52061-540"
+  // CEP no texto se ainda faltar: "CEP 58037-335" ou "CEP: 52061-540"
   if (!cep) {
-    const cepMatch = /(?:cep\s+pernoite|cep)[:\s]+([0-9]{5}-?[0-9]{3})/i.exec(text)
+    const cepMatch =
+      /(?:cep)[*\s|:]+([0-9]{5}-?[0-9]{3})/i.exec(textoUtilCliente) ||
+      /(?:cep\s+pernoite)[*\s|:]+([0-9]{5}-?[0-9]{3})/i.exec(text)
     if (cepMatch) {
       const cRaw = cepMatch[1].replace(/\D/g, '')
       cep = `${cRaw.slice(0, 5)}-${cRaw.slice(5)}`
@@ -1045,27 +1284,69 @@ function extrairCondutor(
   let parentesco = ''
   let mesmo = true
 
-  // Isolar seção "INFORMAÇÕES DO CONDUTOR PRINCIPAL" (Allianz) se houver
-  const condSectionMatch =
-    /INFORMA[ÇC][ÕO]ES\s+DO\s+CONDUTOR(?:\s+PRINCIPAL)?[\s\S]*?(?=(?:INFORMA[ÇC][ÕO]ES\s+DO|INFORMA[ÇC][ÕO]ES\s+DE|INFORMA[ÇC][ÕO]ES\s+DA|COBERTURAS|OFERTA|DECLARA[ÇC][ÃA]O|P[áa]gina|\n\n\n|$))/i.exec(
+  // 1. Caso Azul Seguros / Porto Seguro ("Questionário de avaliação de risco"):
+  // No layout Azul Tradicional:
+  // "PAULA GABRIELA DE MORAIS NEGREIROS 088.181.234-08"
+  // "58037-335"
+  // "Condutor Nascimento 15/10/1996"
+  // "CPF"
+  const questionarioSecMatch =
+    /(?:Question[áa]rio\s+de\s+avalia[çc][ãa]o\s+de\s+risco|Perfil\s+do\s+condutor)[\s\S]*?(?=(?:Coberturas|Assist[êe]ncias|Declara[çc][ãa]o|Termos|Uso\s+Interno|\n{3,}|$))/i.exec(
       text,
     )
+  const questSec = questionarioSecMatch ? questionarioSecMatch[0] : ''
 
-  if (condSectionMatch) {
-    const condSec = condSectionMatch[0]
-    const nomeCondSec =
-      /(?:Nome|Condutor)[*\s|:]+([A-Za-zÀ-ÿ0-9\s.,'/-]+?)(?=(?:\s*[|*]?\s*(?:CPF|Idade|Estado|Parentesco)|\||\n|$))/i.exec(
-        condSec,
-      )
-    if (nomeCondSec) {
-      const raw = sanitizarTextoExtraido(nomeCondSec[1])
-      if (raw.length > 3 && raw.length < 80 && !isTextoCabecalhoOuInvalido(raw)) {
-        nomeCondutor = raw
+  if (questSec) {
+    // Procura por nome maiúsculo seguido por CPF na mesma linha ou linhas próximas
+    const condLinhaMatch = /([A-ZÀ-ÿ\s]{4,80})\s+([0-9]{3}\.[0-9]{3}\.[0-9]{3}-[0-9]{2})/i.exec(
+      questSec,
+    )
+    if (condLinhaMatch) {
+      const candNome = sanitizarTextoExtraido(condLinhaMatch[1])
+      if (
+        candNome.length > 3 &&
+        !isTextoCabecalhoOuInvalido(candNome) &&
+        !candNome.toLowerCase().includes('corretor') &&
+        !candNome.toLowerCase().includes('seguro')
+      ) {
+        nomeCondutor = candNome
+        cpfCondutor = condLinhaMatch[2].replace(/\D/g, '')
       }
     }
-    const cpfCondSec = /(?:CPF)[*\s|:]+([0-9.\-/]{11,14})/i.exec(condSec)
-    if (cpfCondSec) {
-      cpfCondutor = cpfCondSec[1].replace(/\D/g, '')
+
+    // Se achou o bloco mas não por linha direta, procura o nascimento do condutor
+    const nascCondMatch =
+      /(?:condutor\s+nascimento|nascimento\s+condutor|nascimento)[*\s|:]+(\d{1,2}[/.-]\d{1,2}[/.-]\d{4})/i.exec(
+        questSec,
+      )
+    if (nascCondMatch) {
+      dataNasc = parseDataFlexivel(nascCondMatch[1])
+    }
+  }
+
+  // 2. Isolar seção "INFORMAÇÕES DO CONDUTOR PRINCIPAL" (Allianz) se houver
+  if (!nomeCondutor) {
+    const condSectionMatch =
+      /INFORMA[ÇC][ÕO]ES\s+DO\s+CONDUTOR(?:\s+PRINCIPAL)?[\s\S]*?(?=(?:INFORMA[ÇC][ÕO]ES\s+DO|INFORMA[ÇC][ÕO]ES\s+DE|INFORMA[ÇC][ÕO]ES\s+DA|COBERTURAS|OFERTA|DECLARA[ÇC][ÃA]O|P[áa]gina|\n\n\n|$))/i.exec(
+        text,
+      )
+
+    if (condSectionMatch) {
+      const condSec = condSectionMatch[0]
+      const nomeCondSec =
+        /(?:Nome|Condutor)[*\s|:]+([A-Za-zÀ-ÿ0-9\s.,'/-]+?)(?=(?:\s*[|*]?\s*(?:CPF|Idade|Estado|Parentesco)|\||\n|$))/i.exec(
+          condSec,
+        )
+      if (nomeCondSec) {
+        const raw = sanitizarTextoExtraido(nomeCondSec[1])
+        if (raw.length > 3 && raw.length < 80 && !isTextoCabecalhoOuInvalido(raw)) {
+          nomeCondutor = raw
+        }
+      }
+      const cpfCondSec = /(?:CPF)[*\s|:]+([0-9.\-/]{11,14})/i.exec(condSec)
+      if (cpfCondSec) {
+        cpfCondutor = cpfCondSec[1].replace(/\D/g, '')
+      }
     }
   }
 
@@ -1128,23 +1409,49 @@ function extrairRenovacao(text: string): PropostaRenovacaoExtraida {
   let seguradoraAnt = ''
   let classeBonus = ''
 
+  // 1. Procura na linha da Azul / Porto: "Apólice 12806713" ou "Apólice: 12806713"
+  // Na Azul, sob "Tipo de Operação: Renovação da Cia", há "Seguradora: Azul Seguros", "Sucursal 3", "Apólice 12806713", "Bônus Classe 1"
+  if (isRenovacao) {
+    const azulRenovMatch =
+      /(?:ap[oó]lice|ap[oó]lice\s+anterior|n[ºo.]?\s+anterior)[*\s|:]+([0-9]{6,20})\b/i.exec(text)
+    if (azulRenovMatch) {
+      apoliceAnt = azulRenovMatch[1].trim()
+    }
+  }
+
   const antMatch = /(?:ap[oó]lice\s+anterior|n[ºo.]?\s+anterior)[*\s|:]+([0-9.\-/]{4,20})/i.exec(
     text,
   )
-  if (antMatch) {
+  if (antMatch && !apoliceAnt) {
     apoliceAnt = antMatch[1].trim()
   }
 
-  const segAntMatch =
-    /(?:seguradora\s+anterior|cia\s+anterior)[*\s|:]+([A-Za-zÀ-ÿ\s.-]+?)(?=(?:\s*[|*]?\s*(?:ap[oó]lice|b[oó]nus|fim)|\n|\||$))/i.exec(
-      text,
-    )
-  if (segAntMatch) {
-    seguradoraAnt = sanitizarTextoExtraido(segAntMatch[1])
+  // Seguradora anterior:
+  // Se for "Renovação da Cia" e tiver "Seguradora: Azul Seguros" ou "Seguradora Anterior: ..."
+  if (t.includes('renovação da cia') || t.includes('renovacao da cia')) {
+    const segCiaMatch =
+      /(?:seguradora)[:\s]+([A-Za-zÀ-ÿ\s.-]+?)(?=(?:\s*[|*]?\s*(?:sucursal|ap[oó]lice|item|b[oó]nus)|\n|\||$))/i.exec(
+        text,
+      )
+    if (segCiaMatch) {
+      seguradoraAnt = sanitizarTextoExtraido(segCiaMatch[1])
+    }
+  }
+
+  if (!seguradoraAnt) {
+    const segAntMatch =
+      /(?:seguradora\s+anterior|cia\s+anterior)[*\s|:]+([A-Za-zÀ-ÿ\s.-]+?)(?=(?:\s*[|*]?\s*(?:ap[oó]lice|b[oó]nus|fim)|\n|\||$))/i.exec(
+        text,
+      )
+    if (segAntMatch) {
+      seguradoraAnt = sanitizarTextoExtraido(segAntMatch[1])
+    }
   }
 
   const bonusMatch =
-    /(?:classe\s+de\s+b[oó]nus|classe\s+b[oó]nus|b[oó]nus)[*\s|:]+([0-9]{1,2})/i.exec(text)
+    /(?:classe\s+de\s+b[oó]nus|classe\s+b[oó]nus|b[oó]nus\s+classe|b[oó]nus)[*\s|:]+([0-9]{1,2})/i.exec(
+      text,
+    )
   if (bonusMatch) {
     classeBonus = bonusMatch[1].trim()
   }

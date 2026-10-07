@@ -66,7 +66,15 @@ export async function extrairPropostaDeArquivoPdf(
   const segEncontrada = seguradoras.find((s) => {
     const sNome = s.nome.toLowerCase()
     const pNome = proposta.seguradoraNome.toLowerCase()
-    return sNome.includes(pNome) || pNome.includes(sNome)
+    if (sNome.includes(pNome) || pNome.includes(sNome)) return true
+    // Azul Seguros emitida via Porto Seguro: se a corretora só tiver "Azul" ou "Porto Seguro"
+    if (
+      proposta.formato === 'AZUL_SEGUROS' &&
+      (sNome.includes('azul') || sNome.includes('porto'))
+    ) {
+      return true
+    }
+    return false
   })
   if (segEncontrada) {
     seguradoraId = segEncontrada.id

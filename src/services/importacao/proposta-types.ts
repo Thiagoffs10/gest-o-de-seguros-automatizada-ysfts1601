@@ -5,6 +5,7 @@
 
 export type SeguradoraPropostaFormato =
   | 'PORTO_SEGURO'
+  | 'AZUL_SEGUROS'
   | 'ALLIANZ'
   | 'HDI'
   | 'YELUM'

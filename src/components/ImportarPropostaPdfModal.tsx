@@ -147,7 +147,8 @@ export const ImportarPropostaPdfModal: React.FC<ImportarPropostaPdfModalProps> =
                       Clique para selecionar a Proposta em PDF
                     </p>
                     <p className="text-xs text-slate-500 dark:text-slate-400 mt-1">
-                      Calibrado para: Porto Seguro, Allianz, HDI, Yelum, MAPFRE e Bradesco
+                      Calibrado para: Azul Seguros, Porto Seguro, Allianz, HDI, Yelum, MAPFRE e
+                      Bradesco
                     </p>
                   </div>
                 </div>
