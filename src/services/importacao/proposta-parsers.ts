@@ -60,7 +60,14 @@ const VALORES_INVALIDOS_OU_CABECALHOS = [
   'proponente',
   'condutor',
   'endereço residencial',
+  'endereço',
+  'complemento',
   'veículo',
+  'cidade',
+  'bairro',
+  'uf',
+  'estado',
+  'cep',
 ]
 
 export function isTextoCabecalhoOuInvalido(val?: string | null): boolean {
@@ -293,13 +300,18 @@ function extrairNumeroProposta(text: string, formato: SeguradoraPropostaFormato)
   if (formato === 'AZUL_SEGUROS' || formato === 'PORTO_SEGURO') {
     // 1. Procura se tem rótulo "Proposta" seguido diretamente de número (com ou sem hífen)
     // Cuidado com "Proposta de Seguro Auto" - não é o número
+    // Padrão específico: "12-31784355" ou "Proposta\n12-31784355" ou "Proposta 12-31784355" ou "Versão 0 12-31784355 Proposta"
+    const azulNumHifenMatch = /\b([0-9]{2}-[0-9]{6,10})\b/.exec(text)
+    if (azulNumHifenMatch) {
+      return azulNumHifenMatch[1]
+    }
+
     const azulPropMatch =
       /(?:^|[|\n\s])proposta\s*(?:ap[oó]lice)?\s*[|:\s/]+([0-9]{2}[\s-]?[0-9]{6,10}|[0-9]{4,12})/i.exec(
         text,
       )
     if (azulPropMatch) {
       const clean = azulPropMatch[1].trim()
-      // Ignora se for ano tipo "2026"
       if (clean.replace(/\D/g, '').length >= 6) {
         return clean
       }
@@ -385,17 +397,22 @@ function extrairPremios(text: string): { liquido: number; iof: number; total: nu
   if (pagText) {
     // Caso tabela da Azul / Porto Seguro:
     // "Forma de pagamento Valor líquido IOF Juros Encargos Parcelas Valor parcelas Valor total"
-    // "97-Todas Cartão de Crédito Porto Bank (Existente) R$ 1.486,42 R$ 109,70 R$ 0,00 R$ 0,00 1x R$ 1.596,12 R$ 1.596,12"
-    // Ou com quebras/markdown:
-    // "| 97-Todas Cartão... | R$ 1.486,42 | R$ 109,70 | R$ 0,00 | R$ 0,00 | 1x | R$ 1.596,12 | R$ 1.596,12 |"
-    const linhaValoresMatch =
-      /Cart[ãa]o[^\n\r|]*?(?:R\$\s*([0-9.,]+))\s*(?:[|*]*\s*R\$\s*([0-9.,]+))\s*(?:[|*]*\s*R\$\s*[0-9.,]+)?\s*(?:[|*]*\s*R\$\s*[0-9.,]+)?\s*(?:[|*]*\s*\d{1,2}x)?\s*(?:[|*]*\s*R\$\s*[0-9.,]+)?\s*(?:[|*]*\s*R\$\s*([0-9.,]+))/i.exec(
-        pagText,
-      )
-    if (linhaValoresMatch) {
-      if (linhaValoresMatch[1]) liquido = parseMoeda(linhaValoresMatch[1])
-      if (linhaValoresMatch[2]) iof = parseMoeda(linhaValoresMatch[2])
-      if (linhaValoresMatch[3]) total = parseMoeda(linhaValoresMatch[3])
+    // "97-Todas Cartão de Crédito Porto Bank (Existente)"
+    // "R$ 1.486,42 R$ 109,70 R$ 0,00 R$ 0,00 R$ 1.596,121x R$ 1.596,12" (ou separado por quebras de linha)
+    // Extraímos todos os valores monetários na seção
+    const regexMoedas = /R\$\s*([0-9]{1,3}(?:\.[0-9]{3})*,[0-9]{2})/g
+    const matchesMoeda: number[] = []
+    let m: RegExpExecArray | null
+    while ((m = regexMoedas.exec(pagText)) !== null) {
+      matchesMoeda.push(parseMoeda(m[1]))
+    }
+
+    if (matchesMoeda.length >= 3) {
+      // Normalmente: [valorLiquido, iof, juros, encargos, ..., valorTotal]
+      // Ex: [1486.42, 109.70, 0, 0, 1596.12, 1596.12]
+      liquido = matchesMoeda[0]
+      iof = matchesMoeda[1]
+      total = matchesMoeda[matchesMoeda.length - 1]
     }
 
     if (!liquido) {
@@ -586,9 +603,10 @@ function extrairVeiculo(text: string): PropostaVeiculoExtraido {
     chassi = chassiMatch[1].toUpperCase()
   }
 
-  // FIPE: 000000-0 ou código alfanumérico como "N45179 Fipe" ou "Fipe 45179" ou "Cód. FIPE: 005528-0"
+  // FIPE: 000000-0 ou código alfanumérico como "N45179 Fipe" ou "45179 N Fipe" ou "Fipe 45179" ou "Cód. FIPE: 005528-0"
   const fipeMatch =
     /(?:fipe|c[oó]digo\s+fipe|c[oó]d\.\s*fipe)[*\s|:]+([A-Za-z0-9-]{5,9})/i.exec(text) ||
+    /\b([A-Za-z0-9-]{5,9})\s*(?:[A-Z]\s*)?fipe\b/i.exec(text) ||
     /\b([A-Za-z0-9-]{5,9})\s+fipe\b/i.exec(text)
   if (fipeMatch) {
     codigoFipe = fipeMatch[1].trim()
@@ -860,21 +878,41 @@ function extrairSegurado(
   // "Dados Gerais"
   // "Segurado(a)"
   // "LIVIA LOURENCO FERNANDES DA CUNHA BARROS"
-  // "Nascimento 02/08/1990 057.365.924-95 CPF"
+  // "Nascimento"
+  // "02/08/1990 057.365.924-95"
+  // "CPF"
   // O rótulo "Segurado(a)" pode estar na mesma linha ou em linha separada!
   if (!nome && dadosGeraisText) {
-    const nomeAzulMatch =
-      /segurado\s*(?:\(a\))?[*\s|:]*\n*([A-Za-zÀ-ÿ\s.'-]{4,80}?)(?=(?:\s*[|*]?\s*(?:nascimento|cpf|cnpj|sexo|profiss[ãa]o|endere[çc]o|pa[íi]s)|\n\s*\n|\||$))/i.exec(
+    // 1. Linha imediatamente seguinte a "Segurado(a)" ou na mesma linha
+    const linhaSeguradoMatch =
+      /(?:^|\n)[|* ]*segurado\s*(?:\(a\))?[|* :]*\n+([A-Za-zÀ-ÿ\s.'-]{4,80})(?=\n|$)/i.exec(
         dadosGeraisText,
       )
-    if (nomeAzulMatch) {
-      const raw = sanitizarTextoExtraido(nomeAzulMatch[1])
+    if (linhaSeguradoMatch) {
+      const raw = sanitizarTextoExtraido(linhaSeguradoMatch[1])
       if (
         raw.length > 3 &&
         !isTextoCabecalhoOuInvalido(raw) &&
-        !raw.toLowerCase().includes('corretora')
+        !raw.toLowerCase().includes('corretor')
       ) {
         nome = raw
+      }
+    }
+
+    if (!nome) {
+      const nomeAzulMatch =
+        /segurado\s*(?:\(a\))?[*\s|:]*\n*([A-Za-zÀ-ÿ\s.'-]{4,80}?)(?=(?:\s*[|*]?\s*(?:nascimento|cpf|cnpj|sexo|profiss[ãa]o|endere[çc]o|pa[íi]s)|\n\s*\n|\||$))/i.exec(
+          dadosGeraisText,
+        )
+      if (nomeAzulMatch) {
+        const raw = sanitizarTextoExtraido(nomeAzulMatch[1])
+        if (
+          raw.length > 3 &&
+          !isTextoCabecalhoOuInvalido(raw) &&
+          !raw.toLowerCase().includes('corretor')
+        ) {
+          nome = raw
+        }
       }
     }
   }
@@ -950,12 +988,25 @@ function extrairSegurado(
   // 3. DATA DE NASCIMENTO (Allianz NÃO traz e PJ não possui)
   if (formato !== 'ALLIANZ' && tipoPessoa === 'PF') {
     // Procura primeiro no bloco Dados Gerais / texto útil antes do questionário de risco/condutor
-    const nascMatch =
-      /(?:data\s+de\s+nascimento|nascimento|nasc\.?)[:\s]+(\d{1,2}[/.-]\d{1,2}[/.-]\d{4})/i.exec(
-        dadosGeraisText || textoUtilCliente,
+    // Layouts possíveis:
+    // a) "Nascimento: 02/08/1990"
+    // b) "Nascimento\n02/08/1990 057.365.924-95\nCPF"
+    // c) "Nascimento\n02/08/1990"
+    const escopoNasc = dadosGeraisText || textoUtilCliente
+    const nascLinhaQuebradaMatch =
+      /(?:data\s+de\s+nascimento|nascimento|nasc\.?)[*\s|:]*\n+(\d{1,2}[/.-]\d{1,2}[/.-]\d{4})/i.exec(
+        escopoNasc,
       )
-    if (nascMatch) {
-      dataNasc = parseDataFlexivel(nascMatch[1])
+    if (nascLinhaQuebradaMatch) {
+      dataNasc = parseDataFlexivel(nascLinhaQuebradaMatch[1])
+    } else {
+      const nascMatch =
+        /(?:data\s+de\s+nascimento|nascimento|nasc\.?)[:\s]+(\d{1,2}[/.-]\d{1,2}[/.-]\d{4})/i.exec(
+          escopoNasc,
+        )
+      if (nascMatch) {
+        dataNasc = parseDataFlexivel(nascMatch[1])
+      }
     }
   }
 
@@ -1072,24 +1123,73 @@ function extrairSegurado(
 
   // 6. ENDEREÇO COMPLETO E CEP
   // (a) Caso Azul Seguros / Porto Seguro (bloco "Endereço residencial"):
-  // No layout Azul Tradicional:
-  // "Endereço residencial / R Doralice de Almeida Lyra, 55 / Complemento - / CEP 58037-335 / UF PB / Bairro Jardim Oceania / Cidade João Pessoa"
-  // Ou quebrado por quebra de linha ou barras:
-  // "Endereço residencial"
-  // "R Doralice de Almeida Lyra, 55"
-  // "Complemento -"
-  // "CEP 58037-335"
-  // "UF PB"
-  // "Bairro Jardim Oceania"
-  // "Cidade João Pessoa"
-  const endResidencialMatch =
-    /endere[çc]o\s+residencial[*\s|:/]+\n*([^\n|/]+?)(?=(?:\s*[|*/]?\s*(?:complemento|cep|uf|bairro|cidade|e-mail|telefone)|\n|\||\/|$))/i.exec(
-      textoUtilCliente,
+  // No layout Azul Tradicional (com ou sem tabela):
+  // Rótulos que podem vir em linhas próprias seguidos pelo valor na próxima linha:
+  // "Endereço residencial\nR Doralice de Almeida Lyra, 55\nComplemento\n-\nCEP\n58037-335\nUF\nPB\nBairro\nJardim Oceania\nCidade\nJoão Pessoa"
+  // Ou na mesma linha: "Endereço residencial: R Doralice de Almeida Lyra, 55 / CEP: 58037-335..."
+  const parseCampoRotuloValor = (rotulo: string): string => {
+    // 1. Procura rótulo em linha própria e valor na linha seguinte (garantindo que não seja outro rótulo)
+    const regexLinhaSeguinte = new RegExp(
+      `(?:^|\\n)[|* ]*${rotulo}[|* :]*\\n+([^\\n|]+?)(?=\\n|$)`,
+      'i',
     )
-  if (endResidencialMatch) {
-    const rawEnd = sanitizarTextoExtraido(endResidencialMatch[1])
-    if (rawEnd.length > 3 && !isTextoCabecalhoOuInvalido(rawEnd)) {
-      rua = rawEnd
+    const matchLinha = regexLinhaSeguinte.exec(textoUtilCliente)
+    if (matchLinha) {
+      const val = sanitizarTextoExtraido(matchLinha[1])
+      if (val && !isTextoCabecalhoOuInvalido(val) && val !== '-') {
+        return val
+      }
+    }
+    // 2. Procura rótulo na mesma linha
+    const regexMesmaLinha = new RegExp(
+      `(?:^|\\n|[|/])[|* ]*${rotulo}[|* :]+([^\\n|/]+?)(?=(?:[|*/]?\\s*(?:complemento|cep|uf|bairro|cidade|e-mail|telefone|ve[íi]culo)|\\n|\\||\\/|$))`,
+      'i',
+    )
+    const matchMesma = regexMesmaLinha.exec(textoUtilCliente)
+    if (matchMesma) {
+      const val = sanitizarTextoExtraido(matchMesma[1])
+      if (val && !isTextoCabecalhoOuInvalido(val) && val !== '-') {
+        return val
+      }
+    }
+    return ''
+  }
+
+  // Tentar capturar campos estruturados (Azul / Porto)
+  const azulRua = parseCampoRotuloValor('endere[çc]o(?:\\s+residencial)?')
+  if (azulRua) {
+    rua = azulRua
+  }
+  const azulCep = parseCampoRotuloValor('cep')
+  if (azulCep) {
+    const cepClean = azulCep.replace(/\D/g, '')
+    if (cepClean.length === 8) {
+      cep = `${cepClean.slice(0, 5)}-${cepClean.slice(5)}`
+    }
+  }
+  const azulBairro = parseCampoRotuloValor('bairro')
+  if (azulBairro) {
+    bairro = azulBairro
+  }
+  const azulCidade = parseCampoRotuloValor('cidade')
+  if (azulCidade) {
+    cidade = azulCidade
+  }
+  const azulUf = parseCampoRotuloValor('uf')
+  if (azulUf && azulUf.length === 2) {
+    estado = azulUf.toUpperCase()
+  }
+
+  if (!rua) {
+    const endResidencialMatch =
+      /endere[çc]o\s+residencial[*\s|:/]+\n*([^\n|/]+?)(?=(?:\s*[|*/]?\s*(?:complemento|cep|uf|bairro|cidade|e-mail|telefone)|\n|\||\/|$))/i.exec(
+        textoUtilCliente,
+      )
+    if (endResidencialMatch) {
+      const rawEnd = sanitizarTextoExtraido(endResidencialMatch[1])
+      if (rawEnd.length > 3 && !isTextoCabecalhoOuInvalido(rawEnd)) {
+        rua = rawEnd
+      }
     }
   }
 
@@ -1165,7 +1265,7 @@ function extrairSegurado(
       )
     if (bairroMatch) {
       const b = sanitizarTextoExtraido(bairroMatch[1])
-      if (!isTextoCabecalhoOuInvalido(b)) bairro = b
+      if (!isTextoCabecalhoOuInvalido(b) && b !== '-') bairro = b
     }
   }
 
@@ -1178,16 +1278,20 @@ function extrairSegurado(
         estado = cidadeUfMatch[2].trim().toUpperCase()
       }
     } else {
-      const cidMatch =
-        /(?:cidade)[*\s|:/]+([A-Za-zÀ-ÿ\s.-]+?)(?=(?:\s*[|*/]?\s*(?:uf|estado|e-mail|telefone|ve[íi]culo)|\n|\||\/|$))/i.exec(
-          textoUtilCliente,
-        )
-      if (cidMatch) {
-        const c = sanitizarTextoExtraido(cidMatch[1])
-        if (!isTextoCabecalhoOuInvalido(c)) cidade = c
+      if (!cidade) {
+        const cidMatch =
+          /(?:cidade)[*\s|:/]+([A-Za-zÀ-ÿ\s.-]+?)(?=(?:\s*[|*/]?\s*(?:uf|estado|e-mail|telefone|ve[íi]culo)|\n|\||\/|$))/i.exec(
+            textoUtilCliente,
+          )
+        if (cidMatch) {
+          const c = sanitizarTextoExtraido(cidMatch[1])
+          if (!isTextoCabecalhoOuInvalido(c) && c !== '-') cidade = c
+        }
       }
-      const ufMatch = /(?:uf|estado)[*\s|:/]+([A-Z]{2})\b/i.exec(textoUtilCliente)
-      if (ufMatch) estado = ufMatch[1].trim().toUpperCase()
+      if (!estado) {
+        const ufMatch = /(?:uf|estado)[*\s|:/]+([A-Z]{2})\b/i.exec(textoUtilCliente)
+        if (ufMatch) estado = ufMatch[1].trim().toUpperCase()
+      }
     }
   }
 
@@ -1288,7 +1392,8 @@ function extrairCondutor(
   // No layout Azul Tradicional:
   // "PAULA GABRIELA DE MORAIS NEGREIROS 088.181.234-08"
   // "58037-335"
-  // "Condutor Nascimento 15/10/1996"
+  // "Condutor Nascimento"
+  // "15/10/1996"
   // "CPF"
   const questionarioSecMatch =
     /(?:Question[áa]rio\s+de\s+avalia[çc][ãa]o\s+de\s+risco|Perfil\s+do\s+condutor)[\s\S]*?(?=(?:Coberturas|Assist[êe]ncias|Declara[çc][ãa]o|Termos|Uso\s+Interno|\n{3,}|$))/i.exec(
@@ -1315,12 +1420,20 @@ function extrairCondutor(
     }
 
     // Se achou o bloco mas não por linha direta, procura o nascimento do condutor
-    const nascCondMatch =
-      /(?:condutor\s+nascimento|nascimento\s+condutor|nascimento)[*\s|:]+(\d{1,2}[/.-]\d{1,2}[/.-]\d{4})/i.exec(
+    const nascCondQuebradoMatch =
+      /(?:condutor\s+nascimento|nascimento\s+condutor|condutor[^\n]*\nnascimento)[*\s|:]*\n+(\d{1,2}[/.-]\d{1,2}[/.-]\d{4})/i.exec(
         questSec,
       )
-    if (nascCondMatch) {
-      dataNasc = parseDataFlexivel(nascCondMatch[1])
+    if (nascCondQuebradoMatch) {
+      dataNasc = parseDataFlexivel(nascCondQuebradoMatch[1])
+    } else {
+      const nascCondMatch =
+        /(?:condutor\s+nascimento|nascimento\s+condutor|nascimento)[*\s|:]+(\d{1,2}[/.-]\d{1,2}[/.-]\d{4})/i.exec(
+          questSec,
+        )
+      if (nascCondMatch) {
+        dataNasc = parseDataFlexivel(nascCondMatch[1])
+      }
     }
   }
 

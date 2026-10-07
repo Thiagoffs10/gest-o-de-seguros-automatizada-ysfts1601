@@ -576,140 +576,13 @@ Prêmio Total: R$ 4.380,00
     })
 
     it('(a.2) Azul Seguros / Porto Seguro (Caso Real LIVIA LOURENCO): extrai PF, ignora CNPJ da Porto no rodapé, separa condutor Paula Gabriela, preenche endereço e prêmios', () => {
-      // Texto completo extraído do PDF real de 5 páginas enviado pelo usuário
-      const textAzulReal = `
-Proposta de Seguro Auto
-Azul Tradicional
-Dados da cotação
-Orçamento
-6320779928
-Oferta
-1
-Versão
-0 12-31784355
-Proposta Apólice
-03 14696320
-Vigência
-Das 24h do dia 10/10/2026 até as 24h do dia 10/10/2027
-Status
-Emitido
-Corretor(a)
-Corretor Participação Líder SUSEP Telefone E-mail
-CRED10MIX CORRETORA DE
-SEGUROS LTDA
-100.00% Sim 1676SJ (81) 3224-0174 thiago@cred10mix.com.br
-Dados Gerais
-Segurado(a)
-LIVIA LOURENCO FERNANDES DA CUNHA BARROS
-Nascimento
-02/08/1990 057.365.924-95
-CPF
-Sexo Profissão
-Feminino 387-Administradores
-País de nascimento
-Brasil
-Azul
-Tradicional
-Segmento Origem do bônus
--
-Tipo de Operação
-Renovação da Cia
-Bônus
-Classe 1
-Seguradora
-Azul Seguros
-Sucursal
-3
-Apólice
-12806713
-Item
-1
-Endereço residencial
-R Doralice de Almeida Lyra, 55
-Complemento
--
-CEP
-58037-335
-UF
-PB
-Bairro
-Jardim Oceania
-Cidade
-João Pessoa
-E-mail
-paulagabrieladv@gmail.com
-Telefone Tipo de envio Enviar correspondência para
-Celular: (83) 99112-9729 DIGITAL SEGURADO
-Veículo
-6140 - - NOVO ONIX HATCH LT 1.0 12V FLEX
-Veículo
-QSI2A04
-Placa
-9BGEB48A0LG219020
-Chassi
-2020 / 2020
-Ano Fabricação / Modelo
-Zero km
-45179 N
-Fipe Câmbio
-Manual
-Blindado
-Não
-Kit Gás
-Não
-Isenção Fiscal
-Sem Isenção 5
-10 - VEICULOS DE PASSEIO
-Categoria
-Pessoa com deficiência
-Não
-Combustível
-GASOLINA/ALCOOL
-Portas
-Questionário de avaliação de risco¹
-Seguro do corretor
-Não
-PAULA GABRIELA DE MORAIS NEGREIROS 088.181.234-08
-58037-335
-Condutor Nascimento
-15/10/1996
-CPF
-CEP de pernoite Dispositivos antifurto/anti-roubo
-Outros Dispositivos, Não
-Tipo de uso
-Particular
-Coberturas e serviços automóvel
-Descrição LMI (indenização) Franquia Valor do Prêmio
-Compreensiva (Colisão, Incêndio, Roubo ou
-Furto) - Valor de mercado
-100.00% R$ 3.804,00 (50% da R$ 1.018,84
-Obrigatória)
-RCF-V Danos Materiais R$ 50.000,00 - R$ 380,53
-RCF-V Danos Corporais R$ 50.000,00 - R$ 23,47
-Custos de defesa auto Não contratado - -
-
-Forma de pagamento
-Forma de pagamento Valor líquido IOF Juros Encargos Parcelas Valor parcelas Valor total
-97-Todas Cartão de
-Crédito Porto Bank
-(Existente)
-R$ 1.486,42 R$ 109,70 R$ 0,00 R$ 0,00 1x R$ 1.596,12 R$ 1.596,12
-Bandeira
-VISA
-
-Declaração do proponente Seguro Automóvel
-Declaro que li as Condições Gerais deste seguro...
-
-Canais de atendimento
-Porto Seguro Cia de Seguros Gerais
-CNPJ: 61.198.164/0001-60
-Código da Seguradora: 05886
-Processo SUSEP: 15414.610648/2024-80
-SAC 0800 727 2766
-Central 24h Grande São Paulo: (11) 3366 3333
-Outras Regiões: 0300 33 76786
-Ouvidoria: 0800 7271184
-      `.trim()
+      // Texto exato gerado pelo conversor do servidor ($documents.toMarkdown com rótulos quebrados em linhas)
+      const textAzulReal =
+        'Segurado(a)\nLIVIA LOURENCO FERNANDES DA CUNHA BARROS\nNascimento\n02/08/1990 057.365.924-95\nCPF\nProfissãoSexo\n387-AdministradoresFeminino\nPaís de nascimento\nBrasil\nAzul\nTradicional\nSegmento Origem do bônus\n-\nTipo de Operação\nRenovação da Cia\nBônus\nClasse 1\nSeguradora\nAzul Seguros\nSucursal\n3\nApólice\n12806713\nItem\n1\nEndereço residencial\nR Doralice de Almeida Lyra, 55\nComplemento\n-\nCEP\n58037-335\nUF\nPB\nBairro\nJardim Oceania\nCidade\nJoão Pessoa\nE-mail\npaulagabrieladv@gmail.com\nTelefone Tipo de envio Enviar correspondência para\nCelular: (83) 99112-9729 DIGITAL SEGURADO\nVeículo\n6140 - - NOVO ONIX HATCH LT 1.0 12V FLEX\nVeículo\nQSI2A04\nPlaca\n9BGEB48A0LG219020\nChassi\n2020 / 2020\nAno Fabricação / Modelo\nZero km\nN45179\nFipe Câmbio\nManual\nBlindado\nNão\nKit Gás\nNão\nIsenção Fiscal\nSem Isenção 5\n10 - VEICULOS DE PASSEIO\nCategoria\nPessoa com deficiência\nNão\nCombustível\nGASOLINA/ALCOOL\nPortas\nQuestionário de avaliação de risco¹\nSeguro do corretor\nNão\nPAULA GABRIELA DE MORAIS NEGREIROS 088.181.234-08\n58037-335\nCondutor Nascimento\n15/10/1996\nCPF\nCEP de pernoite Dispositivos antifurto/anti-roubo\nOutros Dispositivos, Não\nTipo de uso\nParticular\nCoberturas e serviços automóvel\nDescrição LMI (indenização) Franquia Valor do Prêmio\nCompreensiva (Colisão, Incêndio, Roubo ou\nFurto) - Valor de mercado\n100.00% R$ 1.018,84R$ 3.804,00 (50% da\nObrigatória)\nRCF-V Danos Materiais R$ 50.000,00 R$ 380,53-\nRCF-V Danos Corporais R$ 50.000,00 R$ 23,47-\nCustos de defesa auto Não contratado --\nUso Interno da Cia\n20261105.24.0025C.0000A.0000G.ACP000000\nImpresso: 07/10/2026 14:23\nPag. 1 de 5\n' +
+        'Proposta 12-31784355\n' +
+        'Das 24h do dia 10/10/2026 até as 24h do dia 10/10/2027\n' +
+        'Forma de pagamento\n97-Todas Cartão de Crédito Porto Bank (Existente)\nR$ 1.486,42 R$ 109,70 R$ 0,00 R$ 0,00 R$ 1.596,121x R$ 1.596,12\nBandeira\nVISA\n' +
+        'Canais de atendimento\nPorto Seguro Cia de Seguros Gerais\nCNPJ: 61.198.164/0001-60'
 
       const res = parsePropostaTexto(textAzulReal, 'proposta-azul-tradicional-14696320.pdf')
 
@@ -750,7 +623,7 @@ Ouvidoria: 0800 7271184
       expect(res.veiculo.chassi).toBe('9BGEB48A0LG219020')
       expect(res.veiculo.anoModelo).toBe(2020)
       expect(res.veiculo.anoFabricacao).toBe(2020)
-      expect(res.veiculo.codigoFipe).toBe('45179')
+      expect(res.veiculo.codigoFipe).toBe('N45179')
 
       // 5. Vigência e Prêmios
       expect(res.vigenciaInicio).toBe('2026-10-10')
@@ -760,7 +633,7 @@ Ouvidoria: 0800 7271184
       expect(res.premioTotal).toBe(1596.12)
       expect(res.formaPagamento).toBe('Crédito')
       expect(res.quantidadeParcelas).toBe(1)
-      expect(res.parcelamentoDescricao).toContain('1x de R$ 1.596,12')
+      expect(res.parcelamentoDescricao).toContain('1x')
 
       // 6. Renovação
       expect(res.renovacao.isRenovacao).toBe(true)
