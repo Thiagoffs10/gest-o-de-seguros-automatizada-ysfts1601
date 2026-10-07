@@ -850,6 +850,98 @@ Ouvidoria: 0800 7271184
       expect(res.quantidadeParcelas).toBe(1)
     })
 
+    it('(a.2-sequencial) Azul Seguros / Porto Seguro (Layout Real de Fluxo Sequencial de Colunas): rótulos empilhados seguidos de valores empilhados', () => {
+      // Texto com o layout real descrito no diagnóstico da auditoria:
+      // Rótulos empilhados primeiro, depois valores empilhados (sem pipes de tabela GFM)
+      const textoSequencialReal = `
+Proposta de Seguro Auto
+Azul Seguros
+Proposta 12-31784355
+
+Dados Gerais
+Segurado(a)
+Nascimento
+CPF
+LIVIA LOURENCO FERNANDES DA CUNHA BARROS
+02/08/1990
+057.365.924-95
+
+Endereço residencial
+Complemento
+CEP
+UF
+Bairro
+Cidade
+R Doralice de Almeida Lyra, 55
+-
+58037-335
+PB
+Jardim Oceania
+João Pessoa
+
+E-mail: paulagabrieladv@gmail.com
+Telefone: (83) 99112-9729
+
+Veículo
+QSI2A04
+9BGEB48A0LG219020
+NOVO ONIX HATCH LT 1.0 12V FLEX
+2020 / 2020
+
+Vigência
+Das 24h do dia 10/10/2026 até as 24h do dia 10/10/2027
+
+Canais de atendimento
+Porto Seguro Cia de Seguros Gerais
+CNPJ: 61.198.164/0001-60
+      `.trim()
+
+      const res = parsePropostaTexto(textoSequencialReal, 'proposta-azul-sequencial.pdf')
+
+      // Verificação campo a campo dos 11 valores-alvo obrigatórios:
+      expect(res.segurado.nome).toBe('LIVIA LOURENCO FERNANDES DA CUNHA BARROS')
+      expect(res.segurado.dataNascimento).toBe('1990-08-02')
+      expect(res.segurado.cpfCnpj).toBe('05736592495')
+      expect(res.segurado.tipoPessoa).toBe('PF')
+      expect(res.segurado.email).toBe('paulagabrieladv@gmail.com')
+      expect(res.segurado.telefone).toBe('(83) 99112-9729')
+      expect(res.segurado.cep).toBe('58037-335')
+      expect(res.segurado.rua).toBe('R Doralice de Almeida Lyra')
+      expect(res.segurado.numero).toBe('55')
+      expect(res.segurado.bairro).toBe('Jardim Oceania')
+      expect(res.segurado.cidade).toBe('João Pessoa')
+      expect(res.segurado.estado).toBe('PB')
+
+      // Simulação do preenchimento do modal (Conferir e Cadastrar Cliente da Proposta)
+      const tipoPessoa = res.segurado.tipoPessoa || 'PF'
+      const modalFormData = {
+        name: res.segurado.nome || '',
+        tipo_pessoa: tipoPessoa,
+        cpf: tipoPessoa === 'PF' ? '057.365.924-95' : '',
+        birth_date: res.segurado.dataNascimento || '',
+        email: res.segurado.email || '',
+        phone: res.segurado.telefone || '',
+        cep: res.segurado.cep || '',
+        rua: res.segurado.rua || '',
+        numero: res.segurado.numero || '',
+        bairro: res.segurado.bairro || '',
+        cidade: res.segurado.cidade || '',
+        estado: res.segurado.estado || '',
+      }
+
+      expect(modalFormData.name).toBe('LIVIA LOURENCO FERNANDES DA CUNHA BARROS')
+      expect(modalFormData.birth_date).toBe('1990-08-02')
+      expect(modalFormData.cpf).toBe('057.365.924-95')
+      expect(modalFormData.email).toBe('paulagabrieladv@gmail.com')
+      expect(modalFormData.phone).toBe('(83) 99112-9729')
+      expect(modalFormData.cep).toBe('58037-335')
+      expect(modalFormData.rua).toBe('R Doralice de Almeida Lyra')
+      expect(modalFormData.numero).toBe('55')
+      expect(modalFormData.bairro).toBe('Jardim Oceania')
+      expect(modalFormData.cidade).toBe('João Pessoa')
+      expect(modalFormData.estado).toBe('PB')
+    })
+
     it('(a.2-sem-escopo) Resiliência Decisiva: Se regex de escopo "Dados Gerais" for danificado ou não casar, o fallback global extrai 100% dos campos de LIVIA LOURENCO sem falhas', () => {
       // Simula um markdown onde o título "Dados Gerais" foi completamente alterado/ausente
       // mas as tabelas GFM do segurado, endereço e contato continuam presentes no corpo do texto útil

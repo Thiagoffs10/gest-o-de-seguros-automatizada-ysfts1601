@@ -809,6 +809,155 @@ function extrairSegurado(
     )
   const dadosGeraisText = dadosGeraisSectionMatch ? dadosGeraisSectionMatch[0] : ''
 
+  // =========================================================================
+  // PARSER DE BLOCO DO SEGURADO SEQUENCIAL (Azul Seguros / Porto Seguro)
+  // Trata layout de fluxo sequencial de colunas:
+  // Variante 1 (rótulos empilhados primeiro, depois valores empilhados):
+  // Segurado(a)
+  // Nascimento
+  // CPF
+  // LIVIA LOURENCO FERNANDES DA CUNHA BARROS
+  // 02/08/1990
+  // 057.365.924-95
+  //
+  // Variante 2 (intercalado):
+  // Segurado(a)
+  // [NOME]
+  // Nascimento
+  // [DATA] [CPF]
+  // CPF
+  // =========================================================================
+  const extrairSeguradoSequencial = (fonteTexto: string) => {
+    const rawLines = fonteTexto.split(/\r?\n/).map((l) => l.trim())
+    const lines = rawLines.filter((l) => l.length > 0)
+
+    const normalizarRotulo = (s: string) =>
+      s
+        .toLowerCase()
+        .replace(/[*_#:|-]/g, '')
+        .trim()
+
+    // 1. Procurar Variante 1: Rótulos empilhados "Segurado(a)" -> "Nascimento" -> "CPF"
+    for (let i = 0; i < lines.length - 2; i++) {
+      const l1 = normalizarRotulo(lines[i])
+      const l2 = normalizarRotulo(lines[i + 1])
+      const l3 = normalizarRotulo(lines[i + 2])
+
+      const isSegurado = l1 === 'segurado(a)' || l1 === 'segurado' || l1 === 'proponente'
+      const isNasc = l2 === 'nascimento' || l2 === 'data de nascimento' || l2.includes('nasc')
+      const isCpf = l3 === 'cpf' || l3 === 'cpf/cnpj'
+
+      if (isSegurado && isNasc && isCpf) {
+        // Encontrou a pilha de rótulos de 3 campos!
+        // As próximas 3 linhas de dados devem ser [NOME], [DATA], [CPF]
+        let valCursor = i + 3
+        const vals: string[] = []
+        while (valCursor < lines.length && vals.length < 3) {
+          const lVal = lines[valCursor]
+          if (!/^\|?(\s*[-:]+\s*\|?)+$/.test(lVal)) {
+            vals.push(lVal)
+          }
+          valCursor++
+        }
+
+        if (vals.length >= 3) {
+          const candNome = sanitizarTextoExtraido(vals[0])
+          const candData = parseDataFlexivel(vals[1])
+          const candCpfClean = vals[2].replace(/\D/g, '')
+
+          if (
+            candNome.length > 3 &&
+            !isTextoCabecalhoOuInvalido(candNome) &&
+            !candNome.toLowerCase().includes('corretor')
+          ) {
+            if (!nome) nome = candNome
+          }
+
+          if (candData && !dataNasc) {
+            dataNasc = candData
+          }
+
+          if (candCpfClean.length === 11 && isValidCpf(candCpfClean)) {
+            if (!cpfCnpj) {
+              cpfCnpj = candCpfClean
+              tipoPessoa = 'PF'
+            }
+          }
+          if (nome && dataNasc && cpfCnpj) return
+        }
+      }
+    }
+
+    // 2. Procurar Variante 2 (Intercalado):
+    // Segurado(a)
+    // [NOME]
+    // Nascimento
+    // [DATA] [CPF] (ou apenas [DATA] e na linha seguinte ou posterior o CPF)
+    // CPF
+    for (let i = 0; i < lines.length - 1; i++) {
+      const l1 = normalizarRotulo(lines[i])
+      if (l1 === 'segurado(a)' || l1 === 'segurado' || l1 === 'proponente') {
+        const candLinhaNome = lines[i + 1]
+        if (candLinhaNome && !isTextoCabecalhoOuInvalido(candLinhaNome)) {
+          const candNome = sanitizarTextoExtraido(candLinhaNome)
+          if (
+            candNome.length > 3 &&
+            !candNome.toLowerCase().includes('corretor') &&
+            !candNome.toLowerCase().includes('seguradora')
+          ) {
+            if (!nome) nome = candNome
+          }
+        }
+
+        // Olhar as próximas 8 linhas para Nascimento e CPF intercalados
+        const janela = lines.slice(i + 1, Math.min(lines.length, i + 10))
+        for (const jl of janela) {
+          // Procurar data e CPF juntos na mesma linha: "02/08/1990 057.365.924-95"
+          const dataCpfMatch =
+            /(\d{1,2}[/.-]\d{1,2}[/.-]\d{4})\s+([0-9]{3}\.[0-9]{3}\.[0-9]{3}-[0-9]{2})/i.exec(jl)
+          if (dataCpfMatch) {
+            if (!dataNasc) dataNasc = parseDataFlexivel(dataCpfMatch[1])
+            const limpo = dataCpfMatch[2].replace(/\D/g, '')
+            if (limpo.length === 11 && isValidCpf(limpo)) {
+              if (!cpfCnpj) {
+                cpfCnpj = limpo
+                tipoPessoa = 'PF'
+              }
+            }
+          } else {
+            // Data avulsa se ainda faltar
+            if (!dataNasc) {
+              const dtM = /^(\d{1,2}[/.-]\d{1,2}[/.-]\d{4})$/.exec(jl.trim())
+              if (dtM) {
+                dataNasc = parseDataFlexivel(dtM[1])
+              }
+            }
+            // CPF avulso se ainda faltar
+            if (!cpfCnpj) {
+              const cpfM = /^([0-9]{3}\.[0-9]{3}\.[0-9]{3}-[0-9]{2})$/.exec(jl.trim())
+              if (cpfM) {
+                const limpo = cpfM[1].replace(/\D/g, '')
+                if (limpo.length === 11 && isValidCpf(limpo)) {
+                  cpfCnpj = limpo
+                  tipoPessoa = 'PF'
+                }
+              }
+            }
+          }
+        }
+        if (nome && (cpfCnpj || dataNasc)) return
+      }
+    }
+  }
+
+  // Executar prioritariamente o parser sequencial do segurado
+  if (dadosGeraisText) {
+    extrairSeguradoSequencial(dadosGeraisText)
+  }
+  if (!nome || !cpfCnpj || !dataNasc) {
+    extrairSeguradoSequencial(textoUtilCliente)
+  }
+
   // REGRA DE OURO 1: Buscar primeiro dentro do bloco SUAS INFORMAÇÕES (Allianz)
   if (suasInfoText) {
     const docSuasInfo = /(?:CPF\/CNPJ|CPF|CNPJ)[*\s|:]+([0-9.\-/]{11,18})/i.exec(suasInfoText)
@@ -1318,6 +1467,156 @@ function extrairSegurado(
   }
 
   // 6. ENDEREÇO COMPLETO E CEP
+  // (0) PARSER DE BLOCO DE ENDEREÇO SEQUENCIAL (Azul Seguros / Porto Seguro)
+  // Layout real onde a conversão gera fluxo de colunas empilhadas (rótulos em sequência seguidos de valores na mesma ordem):
+  // Endereço residencial
+  // Complemento
+  // CEP
+  // UF
+  // Bairro
+  // Cidade
+  // R Doralice de Almeida Lyra, 55
+  // -
+  // 58037-335
+  // PB
+  // Jardim Oceania
+  // João Pessoa
+  const extrairEnderecoSequencial = (fonteTexto: string) => {
+    const rawLines = fonteTexto.split(/\r?\n/).map((l) => l.trim())
+    const lines = rawLines.filter((l) => l.length > 0)
+
+    const normalizarRotulo = (s: string) =>
+      s
+        .toLowerCase()
+        .replace(/[*_#:|-]/g, '')
+        .trim()
+
+    // 1. Detecção baseada na sequência de rótulos seguida por valores
+    for (let i = 0; i < lines.length; i++) {
+      const lNorm = normalizarRotulo(lines[i])
+      if (lNorm === 'endereço residencial' || lNorm === 'endereco residencial') {
+        let idxComplemento = -1
+        let idxCep = -1
+        let idxUf = -1
+        let idxBairro = -1
+        let idxCidade = -1
+
+        for (let k = i + 1; k < Math.min(lines.length, i + 12); k++) {
+          const kNorm = normalizarRotulo(lines[k])
+          if (kNorm === 'complemento' && idxComplemento === -1) idxComplemento = k
+          else if (kNorm === 'cep' && idxCep === -1) idxCep = k
+          else if (kNorm === 'uf' && idxUf === -1) idxUf = k
+          else if (kNorm === 'bairro' && idxBairro === -1) idxBairro = k
+          else if (kNorm === 'cidade' && idxCidade === -1) {
+            idxCidade = k
+            break
+          }
+        }
+
+        if (idxCidade > i) {
+          // Os valores começam após idxCidade!
+          // 1ª valor = rua e número (ex: "R Doralice de Almeida Lyra, 55")
+          // 2ª valor = complemento (ex: "-")
+          // 3ª valor = CEP ("58037-335")
+          // 4ª valor = UF ("PB")
+          // 5ª valor = Bairro ("Jardim Oceania")
+          // 6ª valor = Cidade ("João Pessoa")
+          const valoresPost = lines
+            .slice(idxCidade + 1, idxCidade + 10)
+            .filter(
+              (v) =>
+                !/^\|?(\s*[-:]+\s*\|?)+$/.test(v) && (!isTextoCabecalhoOuInvalido(v) || v === '-'),
+            )
+
+          if (valoresPost.length >= 5) {
+            const valRua = valoresPost[0]
+            let offsetVal = 0
+            if (valoresPost[1] === '-' || (valoresPost[1] && valoresPost[1].length < 5)) {
+              offsetVal = 1
+            }
+            const valCep = valoresPost[offsetVal + 1]
+            const valUf = valoresPost[offsetVal + 2]
+            const valBairro = valoresPost[offsetVal + 3]
+            const valCidade = valoresPost[offsetVal + 4]
+
+            if (valRua && valRua !== '-' && !rua) {
+              const pedacos = valRua.split(',').map((p) => p.trim())
+              rua = pedacos[0] || valRua
+              if (pedacos.length >= 2 && !numero) {
+                numero = pedacos.slice(1).join(', ')
+              }
+            }
+            if (valCep && /^\d{5}-?\d{3}$/.test(valCep.trim()) && !cep) {
+              const cClean = valCep.replace(/\D/g, '')
+              cep = `${cClean.slice(0, 5)}-${cClean.slice(5)}`
+            }
+            if (valUf && /^[A-Za-z]{2}$/.test(valUf.trim()) && !estado) {
+              estado = valUf.trim().toUpperCase()
+            }
+            if (valBairro && valBairro !== '-' && !bairro) {
+              bairro = sanitizarTextoExtraido(valBairro)
+            }
+            if (valCidade && valCidade !== '-' && !cidade) {
+              cidade = sanitizarTextoExtraido(valCidade)
+            }
+
+            if (rua && cep && cidade) return
+          }
+        }
+      }
+    }
+
+    // 2. Detecção resiliente baseada no CEP e UF no fluxo de linhas:
+    // R Doralice de Almeida Lyra, 55
+    // -
+    // 58037-335
+    // PB
+    // Jardim Oceania
+    // João Pessoa
+    for (let j = 0; j < lines.length - 3; j++) {
+      const lineCep = lines[j].trim()
+      const cepMatch = /^([0-9]{5}-[0-9]{3})$/.exec(lineCep)
+      if (cepMatch) {
+        const candUf = lines[j + 1]?.trim().toUpperCase()
+        if (candUf && /^[A-Z]{2}$/.test(candUf)) {
+          if (!cep) cep = cepMatch[1]
+          if (!estado) estado = candUf
+          const candBairro = lines[j + 2]?.trim()
+          const candCidade = lines[j + 3]?.trim()
+          if (candBairro && !isTextoCabecalhoOuInvalido(candBairro) && !bairro) {
+            bairro = sanitizarTextoExtraido(candBairro)
+          }
+          if (candCidade && !isTextoCabecalhoOuInvalido(candCidade) && !cidade) {
+            cidade = sanitizarTextoExtraido(candCidade)
+          }
+          if (!rua) {
+            for (let k = j - 1; k >= Math.max(0, j - 3); k--) {
+              const candRua = lines[k].trim()
+              if (candRua === '-' || isTextoCabecalhoOuInvalido(candRua)) continue
+              if (candRua.length > 5 && !candRua.toLowerCase().includes('endereço')) {
+                const pedacos = candRua.split(',').map((p) => p.trim())
+                rua = pedacos[0] || candRua
+                if (pedacos.length >= 2 && !numero) {
+                  numero = pedacos.slice(1).join(', ')
+                }
+                break
+              }
+            }
+          }
+          if (rua && cep && cidade) return
+        }
+      }
+    }
+  }
+
+  // Executar prioritariamente o parser sequencial de endereço
+  if (dadosGeraisText) {
+    extrairEnderecoSequencial(dadosGeraisText)
+  }
+  if (!rua || !cep || !bairro || !cidade || !estado) {
+    extrairEnderecoSequencial(textoUtilCliente)
+  }
+
   // (a) Caso Azul Seguros / Porto Seguro (bloco "Endereço residencial"):
   // Em tabelas Markdown (Gfm) como gerado pelo $documents.toMarkdown:
   // | Endereço residencial | Complemento | CEP | Bairro | Cidade | UF |
