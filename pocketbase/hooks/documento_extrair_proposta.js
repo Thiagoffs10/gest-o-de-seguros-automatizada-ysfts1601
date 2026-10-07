@@ -26,6 +26,9 @@ routerAdd(
           ' sample=' +
           md.substring(0, 400).replace(/\n/g, '\\n'),
       )
+      console.log('--- TO_MARKDOWN FULL DUMP START ---')
+      console.log(md)
+      console.log('--- TO_MARKDOWN FULL DUMP END ---')
       return e.json(200, {
         success: true,
         fileName: fileName,
