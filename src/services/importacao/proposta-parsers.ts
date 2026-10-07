@@ -27,6 +27,55 @@ import { BRAZILIAN_STATES } from '@/lib/constants'
  * Sanitiza valores de texto extraídos de PDFs (remove artefatos como '|', barras repetidas,
  * colapsa quebras de linha e múltiplos espaços, e executa trim).
  */
+/**
+ * Termos negativos que caracterizam seções de risco, coberturas, perfil de pernoite,
+ * dados da corretora ou termos institucionais. Qualquer ocorrência de CEP cujo contexto
+ * (linhas vizinhas ou células adjacentes) contenha esses termos deve ser descartada como endereço do segurado!
+ */
+export const TERMOS_NEGATIVOS_ENDERECO = [
+  'pernoite',
+  'cep de pernoite',
+  'dispositivos',
+  'antifurto',
+  'anti-roubo',
+  'anti furto',
+  'antiroubo',
+  'compreensiva',
+  'colisão',
+  'colisao',
+  'incêndio',
+  'incendio',
+  'roubo',
+  'furto',
+  'corretor',
+  'corretora',
+  'susep',
+  'participação',
+  'participacao',
+  'líder',
+  'lider',
+  'uso interno',
+  'questionário',
+  'questionario',
+  'avaliação de risco',
+  'avaliacao de risco',
+  'coberturas',
+  'franquia',
+  'lmi',
+  'rcf-v',
+  'danos materiais',
+  'danos corporais',
+  'custos de defesa',
+  'tipo de uso',
+  'particular',
+]
+
+export function contemTermoNegativoEndereco(str?: string | null): boolean {
+  if (!str) return false
+  const s = str.toLowerCase()
+  return TERMOS_NEGATIVOS_ENDERECO.some((termo) => s.includes(termo))
+}
+
 // Cabeçalhos de seções, rótulos de campos, textos de privacidade ou ruídos conhecidos que NUNCA devem ser aceitos como valores (ex: em cidade/bairro/rua/nome)
 const VALORES_INVALIDOS_OU_CABECALHOS = [
   'de dados pessoais',
@@ -93,6 +142,94 @@ export function isTextoCabecalhoOuInvalido(val?: string | null): boolean {
     .trim()
   if (v.length < 2) return true
   return VALORES_INVALIDOS_OU_CABECALHOS.some((termo) => v === termo || v.startsWith(termo))
+}
+
+/**
+ * Validador estrito para nomes de pessoa física (segurado e condutor).
+ * Descarta:
+ * - Nomes de marcas, seguradoras e produtos (Azul, Azul Tradicional, Porto Seguro, Porto Bank, etc.)
+ * - Termos de produtos/coberturas/serviços (Seguros, Seguradora, Tradicional, Compreensiva, etc.)
+ * - Menções a corretores ou órgãos reguladores
+ */
+export function isNomePessoaValido(val?: string | null): boolean {
+  if (!val) return false
+  const clean = sanitizarTextoExtraido(val)
+  if (clean.length < 3 || clean.length > 100) return false
+  if (isTextoCabecalhoOuInvalido(clean)) return false
+
+  const lower = clean.toLowerCase()
+
+  // Marcas e seguradoras conhecidas
+  const marcasProibidas = [
+    'azul',
+    'azul tradicional',
+    'azul seguros',
+    'porto seguro',
+    'porto bank',
+    'allianz',
+    'bradesco',
+    'hdi',
+    'mapfre',
+    'tokio',
+    'tokio marine',
+    'sompo',
+    'yelum',
+    'liberty',
+    'itau',
+    'itaú',
+    'sulamerica',
+    'sul américa',
+    'santander',
+    'caixa seguradora',
+    'bb seguros',
+    'banco do brasil',
+  ]
+
+  for (const marca of marcasProibidas) {
+    if (lower === marca) return false
+    // Se começa ou termina com a marca com limites de palavra
+    if (new RegExp(`(?:^|\\b)${marca}(?:\\b|$)`, 'i').test(lower)) {
+      // Exceção se for um nome próprio real de pessoa que contenha apenas por coincidência substring
+      // Mas Azul Tradicional, Porto Seguro, etc. devem ser 100% rejeitados
+      if (
+        lower.includes('azul tradicional') ||
+        lower.includes('azul seguro') ||
+        lower.includes('porto seguro') ||
+        lower.includes('porto bank') ||
+        lower.includes('allianz') ||
+        lower.includes('bradesco') ||
+        lower.includes('hdi') ||
+        lower.includes('mapfre') ||
+        lower.includes('tokio') ||
+        lower.includes('sompo') ||
+        lower.includes('yelum') ||
+        lower.includes('liberty') ||
+        lower === 'azul'
+      ) {
+        return false
+      }
+    }
+  }
+
+  // Sufixos e termos de produto/empresa/cobertura
+  if (
+    /(?:seguros|seguradora|tradicional|compreensiva|ve[íi]culos?|corretora?|susep|assist[êe]ncia|cobertura|franquia|lider|líder|participa[çc][ãa]o|indadimplente|demonstrativo|question[áa]rio)\b/i.test(
+      lower,
+    )
+  ) {
+    return false
+  }
+
+  // Não pode conter termos de corretor ou uso interno
+  if (lower.includes('corretor') || lower.includes('uso interno')) {
+    return false
+  }
+
+  // Para ser nome de pessoa válido, deve conter ao menos letras e não apenas dígitos/símbolos
+  const letrasOnly = clean.replace(/[^A-Za-zÀ-ÿ]/g, '')
+  if (letrasOnly.length < 3) return false
+
+  return true
 }
 
 /**
@@ -484,6 +621,28 @@ function extrairPremios(text: string): { liquido: number; iof: number; total: nu
 }
 
 function extrairTipoSeguro(text: string): string {
+  // 0. PRIORIDADE ABSOLUTA: Proposta de Seguro Auto ou dados explícitos de veículo (placa/chassi)
+  // Devem cravar "Auto" ANTES de qualquer menção secundária a "Endereço residencial" ou "assistência residencial"!
+  if (
+    /proposta\s+de\s+seguro\s+auto|seguro\s+auto\b|\bauto\s+tradicional\b|\bcoberturas\s+e\s+serviços\s+automóvel\b/i.test(
+      text,
+    )
+  ) {
+    return 'Auto'
+  }
+
+  // Se houver dados de veículo evidentes (placa Mercosul ou antiga com rótulo, ou chassi com 17 chars), é Auto
+  const temPlaca =
+    /(?:placa[*\s|:/]+)\b([A-Z]{3}[-\s]?[0-9][A-Z0-9][0-9]{2})\b/i.test(text) ||
+    /\b([A-Z]{3}[-\s]?[0-9][A-Z0-9][0-9]{2})\s+placa\b/i.test(text)
+  const temChassi =
+    /(?:chassi[*\s|:/]+)\b([A-HJ-NPR-Z0-9]{17})\b/i.test(text) ||
+    /\b([A-HJ-NPR-Z0-9]{17})\s+chassi\b/i.test(text)
+
+  if (temPlaca && temChassi) {
+    return 'Auto'
+  }
+
   // 1. Procura por menção explícita de Ramo / Produto na proposta
   // Ex: "Produto | Ramo: 16 - Condomínio - Modalidade: Simples" ou "Ramo: 16 - Condomínio"
   const ramoMatch =
@@ -513,7 +672,15 @@ function extrairTipoSeguro(text: string): string {
     }
   }
 
-  if (/residencial|allianz\s+residencial/i.test(text) && !/condom[íi]nio/i.test(text)) {
+  // 3. Checagem estrita para Residencial: NÃO deve casar com "Endereço residencial" nem "Assistência residencial"
+  // Deve haver menção a "Seguro Residencial", "Allianz Residencial", "Proposta Residencial", ou "Ramo Residencial"
+  if (
+    /seguro\s+residencial|allianz\s+residencial|proposta\s+residencial|ramo\s*[:\s]*residencial/i.test(
+      text,
+    ) &&
+    !/condom[íi]nio/i.test(text) &&
+    !temPlaca
+  ) {
     return 'Residencial'
   }
   if (/vida|allianz\s+vida/i.test(text)) {
@@ -864,11 +1031,7 @@ function extrairSegurado(
 
         if (vals.length >= 2) {
           const candNome = sanitizarTextoExtraido(vals[0])
-          if (
-            candNome.length > 3 &&
-            !isTextoCabecalhoOuInvalido(candNome) &&
-            !candNome.toLowerCase().includes('corretor')
-          ) {
+          if (isNomePessoaValido(candNome)) {
             if (!nome) nome = candNome
           }
 
@@ -916,13 +1079,9 @@ function extrairSegurado(
       const l1 = normalizarRotulo(lines[i])
       if (l1 === 'segurado(a)' || l1 === 'segurado' || l1 === 'proponente') {
         const candLinhaNome = lines[i + 1]
-        if (candLinhaNome && !isTextoCabecalhoOuInvalido(candLinhaNome)) {
+        if (candLinhaNome) {
           const candNome = sanitizarTextoExtraido(candLinhaNome)
-          if (
-            candNome.length > 3 &&
-            !candNome.toLowerCase().includes('corretor') &&
-            !candNome.toLowerCase().includes('seguradora')
-          ) {
+          if (isNomePessoaValido(candNome)) {
             if (!nome) nome = candNome
           }
         }
@@ -1152,11 +1311,7 @@ function extrairSegurado(
 
         if (h.includes('segurado')) {
           const raw = sanitizarTextoExtraido(val)
-          if (
-            raw.length > 3 &&
-            !isTextoCabecalhoOuInvalido(raw) &&
-            !raw.toLowerCase().includes('corretor')
-          ) {
+          if (isNomePessoaValido(raw)) {
             nome = raw
           }
         }
@@ -1171,11 +1326,7 @@ function extrairSegurado(
         )
       if (linhaSeguradoMatch) {
         const raw = sanitizarTextoExtraido(linhaSeguradoMatch[1])
-        if (
-          raw.length > 3 &&
-          !isTextoCabecalhoOuInvalido(raw) &&
-          !raw.toLowerCase().includes('corretor')
-        ) {
+        if (isNomePessoaValido(raw)) {
           nome = raw
         }
       }
@@ -1188,11 +1339,7 @@ function extrairSegurado(
         )
       if (nomeAzulMatch) {
         const raw = sanitizarTextoExtraido(nomeAzulMatch[1])
-        if (
-          raw.length > 3 &&
-          !isTextoCabecalhoOuInvalido(raw) &&
-          !raw.toLowerCase().includes('corretor')
-        ) {
+        if (isNomePessoaValido(raw)) {
           nome = raw
         }
       }
@@ -1230,7 +1377,11 @@ function extrairSegurado(
       )
     if (nomeSuasInfo) {
       const rawNome = sanitizarTextoExtraido(nomeSuasInfo[1])
-      if (rawNome.length > 3 && rawNome.length < 120 && !isTextoCabecalhoOuInvalido(rawNome)) {
+      if (
+        tipoPessoa === 'PJ'
+          ? !isTextoCabecalhoOuInvalido(rawNome) && !rawNome.toLowerCase().includes('corretora')
+          : isNomePessoaValido(rawNome)
+      ) {
         nome = rawNome
       }
     }
@@ -1242,7 +1393,7 @@ function extrairSegurado(
       /Ol[áa]\s+\*{0,2}([A-ZÀ-ÿ\s]{4,80}?)\*{0,2},\s*(?:Agradecemos|Confira|Essa)/i.exec(text)
     if (olaMatch) {
       const n = sanitizarTextoExtraido(olaMatch[1])
-      if (n.length > 3 && !n.toLowerCase().includes('corretora')) {
+      if (isNomePessoaValido(n)) {
         nome = n
       }
     }
@@ -1256,7 +1407,7 @@ function extrairSegurado(
       )
     if (nomeCondSec) {
       const n = sanitizarTextoExtraido(nomeCondSec[1])
-      if (n.length > 3 && n.length < 100 && !isTextoCabecalhoOuInvalido(n)) {
+      if (isNomePessoaValido(n)) {
         nome = n
       }
     }
@@ -1270,7 +1421,11 @@ function extrairSegurado(
       )
     if (nomeMatch) {
       const n = sanitizarTextoExtraido(nomeMatch[1])
-      if (n.length > 3 && n.length < 100 && !isTextoCabecalhoOuInvalido(n)) {
+      if (
+        tipoPessoa === 'PJ'
+          ? !isTextoCabecalhoOuInvalido(n) && !n.toLowerCase().includes('corretor')
+          : isNomePessoaValido(n)
+      ) {
         nome = n
       }
     }
@@ -1278,7 +1433,8 @@ function extrairSegurado(
 
   // Fallback 3 (Rede de segurança global): Se ainda não encontrou o nome do segurado,
   // capturar o texto imediatamente ANTES da data de nascimento/CPF do segurado
-  // (no fluxo real, o nome do segurado vem adjacente e logo antes de seu nascimento/CPF)
+  // (no fluxo real, o nome do segurado vem adjacente e logo antes de seu nascimento/CPF).
+  // Priorizar candidatos com formato de nome de pessoa (2+ palavras em caixa alta) adjacentes ao CPF/nascimento
   if (!nome) {
     const lines = textoUtilCliente
       .split(/\r?\n/)
@@ -1318,15 +1474,16 @@ function extrairSegurado(
             continue
           }
 
-          if (
-            cand.length > 3 &&
-            cand.length < 80 &&
-            !cand.toLowerCase().includes('corretor') &&
-            !cand.toLowerCase().includes('seguradora') &&
-            !cand.toLowerCase().includes('seguro')
-          ) {
-            nome = sanitizarTextoExtraido(cand)
-            break
+          const candLimpo = sanitizarTextoExtraido(cand)
+          if (isNomePessoaValido(candLimpo)) {
+            // Se tem 2+ palavras, excelente candidato a nome de pessoa física
+            const palavras = candLimpo.split(/\s+/).filter((w) => w.length > 1)
+            if (palavras.length >= 2) {
+              nome = candLimpo
+              break
+            } else if (!nome) {
+              nome = candLimpo
+            }
           }
         }
         if (nome) break
@@ -1716,12 +1873,21 @@ function extrairSegurado(
       const lineCep = lines[j].trim()
       const cepMatch = /(?:^|\b)([0-9]{5}-[0-9]{3})\b/.exec(lineCep)
       if (cepMatch) {
-        // Encontrou CEP! Procurar UF nas próximas 3 linhas
+        // Verificar se a vizinhança (-4 a +4 linhas) contém termos negativos de coberturas/pernoite/corretora
+        const startViz = Math.max(0, j - 4)
+        const endViz = Math.min(lines.length - 1, j + 4)
+        const vizinhança = lines.slice(startViz, endViz + 1).join(' ')
+        if (contemTermoNegativoEndereco(vizinhança)) {
+          // Pular ocorrência espúria de CEP vinculada a coberturas/pernoite/corretor
+          continue
+        }
+
+        // Encontrou CEP válido! Procurar UF nas próximas 3 linhas
         let ufFound = ''
         let idxUfFound = -1
         for (let u = j + 1; u <= Math.min(lines.length - 1, j + 3); u++) {
           const cand = lines[u]?.trim().toUpperCase()
-          if (/^[A-Z]{2}$/.test(cand)) {
+          if (/^[A-Z]{2}$/.test(cand) && BRAZILIAN_STATES.includes(cand)) {
             ufFound = cand
             idxUfFound = u
             break
@@ -1739,6 +1905,7 @@ function extrairSegurado(
             candBairro &&
             !isTextoCabecalhoOuInvalido(candBairro) &&
             candBairro !== '-' &&
+            !contemTermoNegativoEndereco(candBairro) &&
             !bairro
           ) {
             bairro = sanitizarTextoExtraido(candBairro)
@@ -1747,6 +1914,7 @@ function extrairSegurado(
             candCidade &&
             !isTextoCabecalhoOuInvalido(candCidade) &&
             candCidade !== '-' &&
+            !contemTermoNegativoEndereco(candCidade) &&
             !cidade
           ) {
             cidade = sanitizarTextoExtraido(candCidade)
@@ -1756,7 +1924,12 @@ function extrairSegurado(
           if (!rua) {
             for (let k = j - 1; k >= Math.max(0, j - 4); k--) {
               const candRua = lines[k].trim()
-              if (candRua === '-' || isTextoCabecalhoOuInvalido(candRua)) continue
+              if (
+                candRua === '-' ||
+                isTextoCabecalhoOuInvalido(candRua) ||
+                contemTermoNegativoEndereco(candRua)
+              )
+                continue
               const candRuaNorm = normalizarRotulo(candRua)
               if (
                 candRuaNorm.includes('endereço') ||
@@ -2071,9 +2244,12 @@ function extrairSegurado(
   // =========================================================================
   // FALLBACK GLOBAL RESILIENTE ANCORADO NO CEP (Rede de segurança final)
   // Localizar o CEP (\d{5}-\d{3}) no texto útil e, a partir dele, capturar:
-  // - UF adjacente (ex: PB)
-  // - Logradouro e número imediatamente anteriores (ex: R Doralice de Almeida Lyra, 55)
-  // - Bairro e Cidade subsequentes (ex: Jardim Oceania, João Pessoa)
+  // - Rejeitar qualquer ocorrência de CEP cujo contexto contenha termos negativos:
+  //   pernoite, dispositivos, antifurto, anti-roubo, compreensiva, corretor, susep, líder, etc.
+  // - Preferir a ocorrência cujo entorno contém logradouro real
+  //   (linha começando com "R ", "RUA ", "AV ", "AVENIDA ", "TRAVESSA ", "ALAMEDA ")
+  //   e UF válida de 2 letras próxima.
+  // - Separar rua e número pela vírgula: "R Doralice de Almeida Lyra, 55" → rua "R Doralice de Almeida Lyra", numero "55".
   // =========================================================================
   if (!cep || !rua || !cidade || !estado || !bairro) {
     const normalizarRotulo = (s: string) =>
@@ -2085,101 +2261,195 @@ function extrairSegurado(
     const rawLines = textoUtilCliente.split(/\r?\n/).map((l) => l.trim())
     const lines = rawLines.filter((l) => l.length > 0)
 
+    interface CepCandidato {
+      lineIndex: number
+      cep: string
+      temTermoNegativo: boolean
+      score: number
+      uf: string
+      ufIndex: number
+      rua: string
+      numero: string
+      bairro: string
+      cidade: string
+    }
+
+    const candidatosCep: CepCandidato[] = []
+
     for (let j = 0; j < lines.length; j++) {
       const line = lines[j]
       const cepMatch = /\b([0-9]{5}-[0-9]{3})\b/.exec(line)
       if (cepMatch) {
         const foundCep = cepMatch[1]
-        // Se ainda não temos CEP ou se o CEP atual está incompleto
-        if (!cep) cep = foundCep
+
+        // Analisar contexto em janela de linhas vizinhas (-5 a +5 linhas)
+        const startViz = Math.max(0, j - 5)
+        const endViz = Math.min(lines.length - 1, j + 5)
+        const janelaViz = lines.slice(startViz, endViz + 1).join(' ')
+        const temNegativo = contemTermoNegativoEndereco(janelaViz)
+
+        let score = temNegativo ? -100 : 0
+        let ufFound = ''
+        let ufIndex = -1
 
         // 1. Procurar UF adjacente nas linhas subsequentes ou na própria linha
-        let ufIndex = -1
-        if (!estado) {
-          const ufNaLinha = /\b([A-Z]{2})\b/.exec(line.replace(foundCep, ''))
-          if (ufNaLinha && BRAZILIAN_STATES.includes(ufNaLinha[1])) {
-            estado = ufNaLinha[1]
-          } else {
-            for (let u = j + 1; u <= Math.min(lines.length - 1, j + 3); u++) {
-              const candUf = lines[u]
-                .replace(/[*_#:|-]/g, '')
-                .trim()
-                .toUpperCase()
-              if (/^[A-Z]{2}$/.test(candUf) && BRAZILIAN_STATES.includes(candUf)) {
-                estado = candUf
-                ufIndex = u
-                break
-              }
-            }
-          }
-        }
-
-        // 2. Bairro e Cidade subsequentes
-        const startAfter = ufIndex > 0 ? ufIndex : j
-        if (!bairro || !cidade) {
-          const candSubseq: string[] = []
-          for (let s = startAfter + 1; s <= Math.min(lines.length - 1, startAfter + 4); s++) {
-            let lSub = lines[s].replace(/^\|+|\|+$/g, '').trim()
-            lSub = sanitizarTextoExtraido(lSub)
-            const lSubNorm = normalizarRotulo(lSub)
-            if (
-              !lSub ||
-              lSub === '-' ||
-              lSubNorm === 'bairro' ||
-              lSubNorm === 'cidade' ||
-              lSubNorm === 'uf' ||
-              lSubNorm === 'e-mail' ||
-              lSubNorm === 'email' ||
-              lSubNorm === 'telefone' ||
-              lSubNorm.startsWith('dados') ||
-              lSubNorm.startsWith('veículo') ||
-              isTextoCabecalhoOuInvalido(lSub)
-            ) {
-              continue
-            }
-            candSubseq.push(lSub)
-          }
-
-          if (!bairro && candSubseq[0]) {
-            bairro = candSubseq[0]
-          }
-          if (!cidade && candSubseq[1]) {
-            cidade = candSubseq[1]
-          }
-        }
-
-        // 3. Logradouro + número anteriores ao CEP
-        if (!rua) {
-          for (let k = j - 1; k >= Math.max(0, j - 4); k--) {
-            let candRua = lines[k].replace(/^\|+|\|+$/g, '').trim()
-            if (candRua === '-' || isTextoCabecalhoOuInvalido(candRua)) continue
-            const candNorm = normalizarRotulo(candRua)
-            if (
-              candNorm === 'endereço' ||
-              candNorm === 'endereco' ||
-              candNorm === 'endereço residencial' ||
-              candNorm === 'endereco residencial' ||
-              candNorm === 'complemento' ||
-              candNorm === 'cep' ||
-              candNorm === 'uf' ||
-              candNorm.startsWith('segurado') ||
-              candNorm.startsWith('nascimento') ||
-              candNorm.startsWith('cpf')
-            ) {
-              continue
-            }
-            if (candRua.length > 3) {
-              const pedacos = candRua.split(',').map((p) => p.trim())
-              rua = pedacos[0] || candRua
-              if (pedacos.length >= 2 && !numero) {
-                numero = pedacos.slice(1).join(', ')
-              }
+        const ufNaLinha = /\b([A-Z]{2})\b/.exec(line.replace(foundCep, ''))
+        if (ufNaLinha && BRAZILIAN_STATES.includes(ufNaLinha[1])) {
+          ufFound = ufNaLinha[1]
+          score += 20
+        } else {
+          for (let u = j + 1; u <= Math.min(lines.length - 1, j + 4); u++) {
+            const candUf = lines[u]
+              .replace(/[*_#:|-]/g, '')
+              .trim()
+              .toUpperCase()
+            if (/^[A-Z]{2}$/.test(candUf) && BRAZILIAN_STATES.includes(candUf)) {
+              ufFound = candUf
+              ufIndex = u
+              score += 20
               break
             }
           }
         }
 
-        if (cep && rua && cidade) break
+        // 2. Bairro e Cidade subsequentes
+        let candBairro = ''
+        let candCidade = ''
+        const startAfter = ufIndex > 0 ? ufIndex : j
+        const candSubseq: string[] = []
+        for (let s = startAfter + 1; s <= Math.min(lines.length - 1, startAfter + 5); s++) {
+          let lSub = lines[s].replace(/^\|+|\|+$/g, '').trim()
+          lSub = sanitizarTextoExtraido(lSub)
+          const lSubNorm = normalizarRotulo(lSub)
+          if (
+            !lSub ||
+            lSub === '-' ||
+            lSubNorm === 'bairro' ||
+            lSubNorm === 'cidade' ||
+            lSubNorm === 'uf' ||
+            lSubNorm === 'e-mail' ||
+            lSubNorm === 'email' ||
+            lSubNorm === 'telefone' ||
+            lSubNorm.startsWith('dados') ||
+            lSubNorm.startsWith('veículo') ||
+            contemTermoNegativoEndereco(lSub) ||
+            isTextoCabecalhoOuInvalido(lSub)
+          ) {
+            continue
+          }
+          candSubseq.push(lSub)
+        }
+
+        if (candSubseq[0]) {
+          candBairro = candSubseq[0]
+          score += 10
+        }
+        if (candSubseq[1]) {
+          candCidade = candSubseq[1]
+          score += 10
+        }
+
+        // 3. Logradouro + número anteriores ao CEP
+        let candRua = ''
+        let candNumero = ''
+        for (let k = j - 1; k >= Math.max(0, j - 5); k--) {
+          let lRua = lines[k].replace(/^\|+|\|+$/g, '').trim()
+          if (
+            lRua === '-' ||
+            isTextoCabecalhoOuInvalido(lRua) ||
+            contemTermoNegativoEndereco(lRua)
+          ) {
+            continue
+          }
+          const candNorm = normalizarRotulo(lRua)
+          if (
+            candNorm === 'endereço' ||
+            candNorm === 'endereco' ||
+            candNorm === 'endereço residencial' ||
+            candNorm === 'endereco residencial' ||
+            candNorm === 'complemento' ||
+            candNorm === 'cep' ||
+            candNorm === 'uf' ||
+            candNorm.startsWith('segurado') ||
+            candNorm.startsWith('nascimento') ||
+            candNorm.startsWith('cpf')
+          ) {
+            continue
+          }
+
+          if (lRua.length > 3) {
+            // Verificar se começa com prefixos de logradouro real
+            const isLogradouroReal =
+              /^(?:R\s|RUA\s|AV\s|AVENIDA\s|TRAVESSA\s|ALAMEDA\s|RODOVIA\s|ESTRADA\s|PRACA\s|PRAÇA\s)/i.test(
+                lRua,
+              )
+            if (isLogradouroReal) {
+              score += 40
+            }
+
+            const pedacos = lRua.split(',').map((p) => p.trim())
+            candRua = pedacos[0] || lRua
+            if (pedacos.length >= 2) {
+              candNumero = pedacos.slice(1).join(', ')
+              score += 15
+            } else {
+              // Tentar extrair número no final "Rua Tal 55"
+              const numFinalMatch = /\s+(\d+[A-Za-z0-9\s/]*)$/.exec(candRua)
+              if (numFinalMatch && !/^\d{4}$/.test(numFinalMatch[1])) {
+                // não é ano
+                candNumero = numFinalMatch[1].trim()
+                candRua = candRua.substring(0, numFinalMatch.index).trim()
+                score += 10
+              }
+            }
+            break
+          }
+        }
+
+        candidatosCep.push({
+          lineIndex: j,
+          cep: foundCep,
+          temTermoNegativo: temNegativo,
+          score,
+          uf: ufFound,
+          ufIndex,
+          rua: candRua,
+          numero: candNumero,
+          bairro: candBairro,
+          cidade: candCidade,
+        })
+      }
+    }
+
+    // Filtrar candidatos que não tenham termos negativos e ordenar pelo maior score
+    const validos = candidatosCep
+      .filter((c) => !c.temTermoNegativo)
+      .sort((a, b) => b.score - a.score)
+
+    const melhorCandidato = validos[0] || candidatosCep.sort((a, b) => b.score - a.score)[0]
+
+    if (melhorCandidato) {
+      if (!cep) cep = melhorCandidato.cep
+      if (!estado && melhorCandidato.uf) estado = melhorCandidato.uf
+      if (
+        !bairro &&
+        melhorCandidato.bairro &&
+        !contemTermoNegativoEndereco(melhorCandidato.bairro)
+      ) {
+        bairro = melhorCandidato.bairro
+      }
+      if (
+        !cidade &&
+        melhorCandidato.cidade &&
+        !contemTermoNegativoEndereco(melhorCandidato.cidade)
+      ) {
+        cidade = melhorCandidato.cidade
+      }
+      if (!rua && melhorCandidato.rua && !contemTermoNegativoEndereco(melhorCandidato.rua)) {
+        rua = melhorCandidato.rua
+      }
+      if (!numero && melhorCandidato.numero) {
+        numero = melhorCandidato.numero
       }
     }
   }
@@ -2236,12 +2506,7 @@ function extrairCondutor(
     )
     if (condLinhaMatch) {
       const candNome = sanitizarTextoExtraido(condLinhaMatch[1])
-      if (
-        candNome.length > 3 &&
-        !isTextoCabecalhoOuInvalido(candNome) &&
-        !candNome.toLowerCase().includes('corretor') &&
-        !candNome.toLowerCase().includes('seguro')
-      ) {
+      if (isNomePessoaValido(candNome)) {
         nomeCondutor = candNome
         cpfCondutor = condLinhaMatch[2].replace(/\D/g, '')
       }
@@ -2280,7 +2545,7 @@ function extrairCondutor(
         )
       if (nomeCondSec) {
         const raw = sanitizarTextoExtraido(nomeCondSec[1])
-        if (raw.length > 3 && raw.length < 80 && !isTextoCabecalhoOuInvalido(raw)) {
+        if (isNomePessoaValido(raw)) {
           nomeCondutor = raw
         }
       }
@@ -2300,7 +2565,7 @@ function extrairCondutor(
 
     if (condMatch) {
       const cNome = sanitizarTextoExtraido(condMatch[1])
-      if (cNome.length > 3 && cNome.length < 80 && !isTextoCabecalhoOuInvalido(cNome)) {
+      if (isNomePessoaValido(cNome)) {
         nomeCondutor = cNome
       }
     }
@@ -2322,14 +2587,19 @@ function extrairCondutor(
     }
   }
 
-  if (!nomeCondutor && nomeSegurado) {
-    nomeCondutor = nomeSegurado
+  const nomeSeguradoValido = isNomePessoaValido(nomeSegurado) ? nomeSegurado : ''
+
+  if (!nomeCondutor && nomeSeguradoValido) {
+    nomeCondutor = nomeSeguradoValido
     cpfCondutor = cpfSegurado
     mesmo = true
   }
 
+  // Garantir que condutor NUNCA receba "Azul Tradicional" ou qualquer marca/produto
+  const condutorFinal = isNomePessoaValido(nomeCondutor) ? nomeCondutor : nomeSeguradoValido || ''
+
   return {
-    nome: nomeCondutor || nomeSegurado,
+    nome: condutorFinal,
     cpf: cpfCondutor || undefined,
     dataNascimento: dataNasc || undefined,
     parentesco: parentesco || undefined,

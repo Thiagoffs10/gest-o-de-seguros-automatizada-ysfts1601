@@ -1236,6 +1236,144 @@ Prêmio Total: R$ 3.210,00
       expect(res.renovacao.seguradoraAnterior).toBe('Porto Seguro')
       expect(res.renovacao.classeBonus).toBe('8')
     })
+
+    it('(f) Azul Seguros / Porto Seguro (Cenário Exato de Produção com CEP Duplicado e Produto Azul Tradicional): resolve nome correto, endereço residencial real, separa rua/número e crava ramo Auto', () => {
+      // Texto idêntico ao extraído em produção da proposta da cliente LIVIA LOURENCO
+      // com cabeçalho contendo "Azul Tradicional", Corretor com SUSEP,
+      // bloco do Segurado com CEP 58037-335 PB João Pessoa,
+      // e seção de questionário de risco com 2ª ocorrência de 58037-335 ("CEP de pernoite", "Dispositivos antifurto", "Compreensiva"):
+      const textoProducaoAzul = `
+Azul Tradicional
+Orçamento: 6320779928
+Proposta: 12-31784355
+Apólice: 03 14696320
+
+Corretor(a) Corretor Participação Líder SUSEP Telefone E-mail
+CRED10MIX CORRETORA DE 100.00% Sim 1676SJ (81) 3224-0174 thiago@cred10mix.com.br SEGUROS LTDA
+
+Dados Gerais
+Segurado(a)
+Nascimento
+CPF
+LIVIA LOURENCO FERNANDES DA CUNHA BARROS
+02/08/1990
+057.365.924-95
+
+Endereço residencial
+R Doralice de Almeida Lyra, 55
+-
+58037-335
+PB
+Jardim Oceania
+João Pessoa
+
+E-mail: paulagabrieladv@gmail.com
+Telefone Celular: (83) 99112-9729
+
+Veículo
+6140 - - NOVO ONIX HATCH LT 1.0 12V FLEX
+QSI2A04 Placa
+9BGEB48A0LG219020 Chassi
+2020 / 2020
+
+Questionário de avaliação de risco
+PAULA GABRIELA DE MORAIS NEGREIROS 088.181.234-08
+15/10/1996
+Tipo de uso CEP de pernoite Dispositivos anti-furto/anti-roubo
+Particular 58037-335 Outros Dispositivos, Não
+
+Coberturas e serviços automóvel
+Compreensiva (Colisão, Incêndio, Roubo ou Furto)
+100.00% R$ 3.804,00 (50% da R$ 1.018,84)
+
+Forma de pagamento
+97-Todas Cartão de Crédito Porto Bank
+R$ 1.486,42 R$ 109,70 R$ 0,00 R$ 0,00 1x R$ 1.596,12 R$ 1.596,12
+
+Canais de atendimento
+Porto Seguro Cia de Seguros Gerais
+CNPJ: 61.198.164/0001-60
+Uso Interno da Cia
+      `.trim()
+
+      const res = parsePropostaTexto(textoProducaoAzul, 'proposta-azul-producao.pdf')
+
+      // 1. Seguradora e ramo
+      expect(res.seguradoraNome).toBe('Azul Seguros')
+      expect(res.tipoSeguro).toBe('Auto')
+      expect(res.tipoSeguro).not.toBe('Residencial')
+
+      // 2. Segurado (PF) - LIVIA LOURENCO (NÃO o produto "Azul Tradicional" nem "Corretor")
+      expect(res.segurado.nome).toBe('LIVIA LOURENCO FERNANDES DA CUNHA BARROS')
+      expect(res.segurado.nome).not.toBe('Azul Tradicional')
+      expect(res.segurado.cpfCnpj).toBe('05736592495')
+      expect(res.segurado.dataNascimento).toBe('1990-08-02')
+      expect(res.segurado.email).toBe('paulagabrieladv@gmail.com')
+      expect(res.segurado.telefone).toBe('(83) 99112-9729')
+
+      // 3. Endereço residencial correto (NÃO o bloco de pernoite / coberturas / corretor)
+      expect(res.segurado.cep).toBe('58037-335')
+      expect(res.segurado.rua).toBe('R Doralice de Almeida Lyra')
+      expect(res.segurado.numero).toBe('55')
+      expect(res.segurado.bairro).toBe('Jardim Oceania')
+      expect(res.segurado.cidade).toBe('João Pessoa')
+      expect(res.segurado.estado).toBe('PB')
+
+      // Negativas explícitas dos bugs anteriores
+      expect(res.segurado.rua).not.toContain('Corretor')
+      expect(res.segurado.rua).not.toContain('SUSEP')
+      expect(res.segurado.bairro).not.toContain('pernoite')
+      expect(res.segurado.bairro).not.toContain('Dispositivos')
+      expect(res.segurado.cidade).not.toContain('Compreensiva')
+      expect(res.segurado.cidade).not.toContain('Colisão')
+
+      // 4. Condutor Principal (PAULA GABRIELA) - NÃO herda "Azul Tradicional"
+      expect(res.condutorPrincipal.nome).toBe('PAULA GABRIELA DE MORAIS NEGREIROS')
+      expect(res.condutorPrincipal.nome).not.toBe('Azul Tradicional')
+      expect(res.condutorPrincipal.cpf).toBe('08818123408')
+      expect(res.condutorPrincipal.mesmoQueSegurado).toBe(false)
+
+      // 5. Veículo
+      expect(res.veiculo.marcaModelo).toBe('NOVO ONIX HATCH LT 1.0 12V FLEX')
+      expect(res.veiculo.placa).toBe('QSI2A04')
+      expect(res.veiculo.chassi).toBe('9BGEB48A0LG219020')
+      expect(res.veiculo.anoModelo).toBe(2020)
+      expect(res.veiculo.anoFabricacao).toBe(2020)
+
+      // 6. Prêmios e parcelas
+      expect(res.premioLiquido).toBe(1486.42)
+      expect(res.premioTotal).toBe(1596.12)
+      expect(res.quantidadeParcelas).toBe(1)
+
+      // 7. Simulação do preenchimento do ClientFormDialog e conferência do modal
+      const tipoPessoa = res.segurado.tipoPessoa || 'PF'
+      const clienteDraft = {
+        name: res.segurado.nome || '',
+        tipo_pessoa: tipoPessoa,
+        cpf: tipoPessoa === 'PF' ? '057.365.924-95' : '',
+        birth_date: res.segurado.dataNascimento || '',
+        email: res.segurado.email || '',
+        phone: res.segurado.telefone || '',
+        cep: res.segurado.cep || '',
+        rua: res.segurado.rua || '',
+        numero: res.segurado.numero || '',
+        bairro: res.segurado.bairro || '',
+        cidade: res.segurado.cidade || '',
+        estado: res.segurado.estado || '',
+      }
+
+      expect(clienteDraft.name).toBe('LIVIA LOURENCO FERNANDES DA CUNHA BARROS')
+      expect(clienteDraft.birth_date).toBe('1990-08-02')
+      expect(clienteDraft.cpf).toBe('057.365.924-95')
+      expect(clienteDraft.email).toBe('paulagabrieladv@gmail.com')
+      expect(clienteDraft.phone).toBe('(83) 99112-9729')
+      expect(clienteDraft.cep).toBe('58037-335')
+      expect(clienteDraft.rua).toBe('R Doralice de Almeida Lyra')
+      expect(clienteDraft.numero).toBe('55')
+      expect(clienteDraft.bairro).toBe('Jardim Oceania')
+      expect(clienteDraft.cidade).toBe('João Pessoa')
+      expect(clienteDraft.estado).toBe('PB')
+    })
   })
 
   // =========================================================================
