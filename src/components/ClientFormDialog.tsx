@@ -67,13 +67,14 @@ export function ClientFormDialog({
 
   useEffect(() => {
     if (initialData) {
+      const tipo = (initialData.tipo_pessoa as 'PF' | 'PJ') || 'PF'
       setForm({
-        tipo_pessoa: (initialData.tipo_pessoa as 'PF' | 'PJ') || 'PF',
+        tipo_pessoa: tipo,
         name: initialData.name || '',
-        cpf: initialData.cpf || '',
-        cnpj: initialData.cnpj || '',
+        cpf: initialData.cpf ? maskCpf(initialData.cpf) : '',
+        cnpj: initialData.cnpj ? maskCnpj(initialData.cnpj) : '',
         email: initialData.email || '',
-        phone: initialData.phone || '',
+        phone: initialData.phone ? maskPhone(initialData.phone) : '',
         cep: initialData.cep || '',
         rua: initialData.rua || '',
         numero: initialData.numero || '',

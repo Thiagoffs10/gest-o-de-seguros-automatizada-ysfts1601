@@ -1129,6 +1129,67 @@ CNPJ: 61.198.164/0001-60
       expect(res.segurado.estado).toBe('PB')
     })
 
+    it('(a.2-caso-extremo-sem-tabelas-sem-escopo) Rede de segurança final: simula corte prematuro e texto desestruturado sem seção Dados Gerais nem pipes', () => {
+      // Simula caso em que "Dados Gerais" não é isolável, não há pipes de tabela markdown (|),
+      // e os campos vêm em fluxo corrido puro.
+      // Prova que os fallbacks globais resilientes (nome adjacente anterior ao CPF,
+      // nascimento adjacente ao CPF e endereço ancorado no CEP) extraem 100% dos dados.
+      const textoDesestruturadoSemEscopo = `
+# Proposta de Seguro Auto Azul Tradicional
+Orçamento: 6320779928
+Proposta: 12-31784355
+
+Vigência: 10/10/2026 até 10/10/2027
+
+Corretor: CRED10MIX CORRETORA (81) 3224-0174
+
+LIVIA LOURENCO FERNANDES DA CUNHA BARROS
+02/08/1990 057.365.924-95
+
+R Doralice de Almeida Lyra, 55
+58037-335
+PB
+Jardim Oceania
+João Pessoa
+
+paulagabrieladv@gmail.com
+(83) 99112-9729
+
+Veículo: NOVO ONIX HATCH LT 1.0 12V FLEX
+Placa: QSI2A04 Chassi: 9BGEB48A0LG219020
+
+Prêmio Líquido: R$ 1.486,42
+Prêmio Total: R$ 1.596,12
+Parcelas: 1x de R$ 1.596,12
+
+Canais de atendimento
+Porto Seguro Cia de Seguros Gerais CNPJ: 61.198.164/0001-60
+      `.trim()
+
+      const res = parsePropostaTexto(textoDesestruturadoSemEscopo, 'azul-desestruturado.pdf')
+
+      // 1. Segurado via fallback adjacente
+      expect(res.segurado.nome).toBe('LIVIA LOURENCO FERNANDES DA CUNHA BARROS')
+      expect(res.segurado.dataNascimento).toBe('1990-08-02')
+      expect(res.segurado.cpfCnpj).toBe('05736592495')
+      expect(res.segurado.tipoPessoa).toBe('PF')
+
+      // 2. Endereço ancorado no CEP 58037-335
+      expect(res.segurado.cep).toBe('58037-335')
+      expect(res.segurado.rua).toBe('R Doralice de Almeida Lyra')
+      expect(res.segurado.numero).toBe('55')
+      expect(res.segurado.bairro).toBe('Jardim Oceania')
+      expect(res.segurado.cidade).toBe('João Pessoa')
+      expect(res.segurado.estado).toBe('PB')
+
+      // 3. Contatos e outros dados
+      expect(res.segurado.email).toBe('paulagabrieladv@gmail.com')
+      expect(res.segurado.telefone).toBe('(83) 99112-9729')
+      expect(res.numeroProposta).toBe('12-31784355')
+      expect(res.premioLiquido).toBe(1486.42)
+      expect(res.premioTotal).toBe(1596.12)
+    })
+
     it('(d) Yelum: decodifica notação de parcelamento especial "1+11" (12x)', () => {
       const text = `
 YELUM SEGURADORA

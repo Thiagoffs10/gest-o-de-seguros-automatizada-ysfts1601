@@ -21,6 +21,7 @@ import {
 } from './proposta-types'
 import { parseDataFlexivel, parseMoeda } from './extrato-types'
 import { isValidCpf } from '@/lib/document-validators'
+import { BRAZILIAN_STATES } from '@/lib/constants'
 
 /**
  * Sanitiza valores de texto extraídos de PDFs (remove artefatos como '|', barras repetidas,
@@ -1275,6 +1276,64 @@ function extrairSegurado(
     }
   }
 
+  // Fallback 3 (Rede de segurança global): Se ainda não encontrou o nome do segurado,
+  // capturar o texto imediatamente ANTES da data de nascimento/CPF do segurado
+  // (no fluxo real, o nome do segurado vem adjacente e logo antes de seu nascimento/CPF)
+  if (!nome) {
+    const lines = textoUtilCliente
+      .split(/\r?\n/)
+      .map((l) => l.trim())
+      .filter((l) => l.length > 0)
+
+    for (let i = 0; i < lines.length; i++) {
+      const line = lines[i]
+      // Se a linha contém o CPF do segurado ou a data de nascimento seguida de CPF
+      const hasCpfOuNasc =
+        (cpfCnpj && line.replace(/\D/g, '').includes(cpfCnpj)) ||
+        /(\d{1,2}[/.-]\d{1,2}[/.-]\d{4}).*?(\d{3}\.\d{3}\.\d{3}-\d{2})/.test(line) ||
+        /\b\d{3}\.\d{3}\.\d{3}-\d{2}\b/.test(line)
+
+      if (hasCpfOuNasc) {
+        // Olhar para as linhas imediatamente anteriores
+        for (let k = i - 1; k >= Math.max(0, i - 4); k--) {
+          let cand = lines[k]
+          // Remover pipes de tabelas se houver
+          cand = cand.replace(/^\|+|\|+$/g, '').trim()
+          const candNorm = cand
+            .toLowerCase()
+            .replace(/[*_#:|-]/g, '')
+            .trim()
+
+          if (
+            candNorm === 'segurado' ||
+            candNorm === 'segurado(a)' ||
+            candNorm === 'proponente' ||
+            candNorm === 'nascimento' ||
+            candNorm === 'cpf' ||
+            candNorm.startsWith('dados') ||
+            candNorm.startsWith('corretor') ||
+            candNorm.startsWith('vigência') ||
+            isTextoCabecalhoOuInvalido(cand)
+          ) {
+            continue
+          }
+
+          if (
+            cand.length > 3 &&
+            cand.length < 80 &&
+            !cand.toLowerCase().includes('corretor') &&
+            !cand.toLowerCase().includes('seguradora') &&
+            !cand.toLowerCase().includes('seguro')
+          ) {
+            nome = sanitizarTextoExtraido(cand)
+            break
+          }
+        }
+        if (nome) break
+      }
+    }
+  }
+
   // 3. DATA DE NASCIMENTO (Allianz NÃO traz e PJ não possui)
   if (formato !== 'ALLIANZ' && tipoPessoa === 'PF') {
     // Procura primeiro no bloco Dados Gerais / texto útil antes do questionário de risco/condutor
@@ -1339,6 +1398,69 @@ function extrairSegurado(
           )
         if (nascMatch) {
           dataNasc = parseDataFlexivel(nascMatch[1])
+        }
+      }
+    }
+
+    // Fallback 4 (Rede de segurança global): extrair a data adjacente aos 11 dígitos do CPF do segurado
+    // independente do escopo da seção ("02/08/1990" junto de "057.365.924-95" ou "05736592495")
+    if (!dataNasc) {
+      // 1) Caso data e CPF na mesma linha ou separados por espaços/pipes
+      if (cpfCnpj) {
+        const cpfRegexPart =
+          cpfCnpj.length === 11
+            ? `(?:${cpfCnpj.slice(0, 3)}\\.${cpfCnpj.slice(3, 6)}\\.${cpfCnpj.slice(6, 9)}-${cpfCnpj.slice(9)}|${cpfCnpj})`
+            : cpfCnpj
+        const adjacenteMatch = new RegExp(
+          `(\\d{1,2}[/.-]\\d{1,2}[/.-]\\d{4})[\\s|*]*${cpfRegexPart}|${cpfRegexPart}[\\s|*]*(\\d{1,2}[/.-]\\d{1,2}[/.-]\\d{4})`,
+          'i',
+        ).exec(textoUtilCliente)
+
+        if (adjacenteMatch) {
+          const dFound = adjacenteMatch[1] || adjacenteMatch[2]
+          if (dFound) {
+            dataNasc = parseDataFlexivel(dFound)
+          }
+        }
+      }
+
+      // 2) Caso linhas adjacentes no texto geral (data na linha anterior ou posterior ao CPF do segurado)
+      if (!dataNasc) {
+        const lines = textoUtilCliente
+          .split(/\r?\n/)
+          .map((l) => l.trim())
+          .filter((l) => l.length > 0)
+        for (let i = 0; i < lines.length; i++) {
+          const line = lines[i]
+          const isCpfLine = cpfCnpj
+            ? line.replace(/\D/g, '').includes(cpfCnpj)
+            : /\b\d{3}\.\d{3}\.\d{3}-\d{2}\b/.test(line)
+
+          if (isCpfLine) {
+            // Verificar a própria linha
+            const dNaLinha = /(\d{1,2}[/.-]\d{1,2}[/.-]\d{4})/.exec(line)
+            if (dNaLinha) {
+              dataNasc = parseDataFlexivel(dNaLinha[1])
+              break
+            }
+            // Verificar até 3 linhas antes e depois
+            for (let k = Math.max(0, i - 3); k <= Math.min(lines.length - 1, i + 3); k++) {
+              if (k === i) continue
+              const candLine = lines[k]
+              if (/vig[êe]ncia|impresso|emiss[ãa]o/i.test(candLine)) continue
+              const dCand = /(\d{1,2}[/.-]\d{1,2}[/.-]\d{4})/.exec(candLine)
+              if (dCand) {
+                const parsed = parseDataFlexivel(dCand[1])
+                // Checar se não é ano futuro ou vigente (deve ser nascimento < ano atual - 16)
+                const y = parseInt(parsed.split('-')[0], 10)
+                if (y > 1920 && y < new Date().getFullYear() - 15) {
+                  dataNasc = parsed
+                  break
+                }
+              }
+            }
+            if (dataNasc) break
+          }
         }
       }
     }
@@ -1943,6 +2065,122 @@ function extrairSegurado(
     if (rNumMatch) {
       numero = rNumMatch[1].trim()
       rua = rua.substring(0, rNumMatch.index).trim()
+    }
+  }
+
+  // =========================================================================
+  // FALLBACK GLOBAL RESILIENTE ANCORADO NO CEP (Rede de segurança final)
+  // Localizar o CEP (\d{5}-\d{3}) no texto útil e, a partir dele, capturar:
+  // - UF adjacente (ex: PB)
+  // - Logradouro e número imediatamente anteriores (ex: R Doralice de Almeida Lyra, 55)
+  // - Bairro e Cidade subsequentes (ex: Jardim Oceania, João Pessoa)
+  // =========================================================================
+  if (!cep || !rua || !cidade || !estado || !bairro) {
+    const normalizarRotulo = (s: string) =>
+      s
+        .toLowerCase()
+        .replace(/[*_#:|-]/g, '')
+        .trim()
+
+    const rawLines = textoUtilCliente.split(/\r?\n/).map((l) => l.trim())
+    const lines = rawLines.filter((l) => l.length > 0)
+
+    for (let j = 0; j < lines.length; j++) {
+      const line = lines[j]
+      const cepMatch = /\b([0-9]{5}-[0-9]{3})\b/.exec(line)
+      if (cepMatch) {
+        const foundCep = cepMatch[1]
+        // Se ainda não temos CEP ou se o CEP atual está incompleto
+        if (!cep) cep = foundCep
+
+        // 1. Procurar UF adjacente nas linhas subsequentes ou na própria linha
+        let ufIndex = -1
+        if (!estado) {
+          const ufNaLinha = /\b([A-Z]{2})\b/.exec(line.replace(foundCep, ''))
+          if (ufNaLinha && BRAZILIAN_STATES.includes(ufNaLinha[1])) {
+            estado = ufNaLinha[1]
+          } else {
+            for (let u = j + 1; u <= Math.min(lines.length - 1, j + 3); u++) {
+              const candUf = lines[u]
+                .replace(/[*_#:|-]/g, '')
+                .trim()
+                .toUpperCase()
+              if (/^[A-Z]{2}$/.test(candUf) && BRAZILIAN_STATES.includes(candUf)) {
+                estado = candUf
+                ufIndex = u
+                break
+              }
+            }
+          }
+        }
+
+        // 2. Bairro e Cidade subsequentes
+        const startAfter = ufIndex > 0 ? ufIndex : j
+        if (!bairro || !cidade) {
+          const candSubseq: string[] = []
+          for (let s = startAfter + 1; s <= Math.min(lines.length - 1, startAfter + 4); s++) {
+            let lSub = lines[s].replace(/^\|+|\|+$/g, '').trim()
+            lSub = sanitizarTextoExtraido(lSub)
+            const lSubNorm = normalizarRotulo(lSub)
+            if (
+              !lSub ||
+              lSub === '-' ||
+              lSubNorm === 'bairro' ||
+              lSubNorm === 'cidade' ||
+              lSubNorm === 'uf' ||
+              lSubNorm === 'e-mail' ||
+              lSubNorm === 'email' ||
+              lSubNorm === 'telefone' ||
+              lSubNorm.startsWith('dados') ||
+              lSubNorm.startsWith('veículo') ||
+              isTextoCabecalhoOuInvalido(lSub)
+            ) {
+              continue
+            }
+            candSubseq.push(lSub)
+          }
+
+          if (!bairro && candSubseq[0]) {
+            bairro = candSubseq[0]
+          }
+          if (!cidade && candSubseq[1]) {
+            cidade = candSubseq[1]
+          }
+        }
+
+        // 3. Logradouro + número anteriores ao CEP
+        if (!rua) {
+          for (let k = j - 1; k >= Math.max(0, j - 4); k--) {
+            let candRua = lines[k].replace(/^\|+|\|+$/g, '').trim()
+            if (candRua === '-' || isTextoCabecalhoOuInvalido(candRua)) continue
+            const candNorm = normalizarRotulo(candRua)
+            if (
+              candNorm === 'endereço' ||
+              candNorm === 'endereco' ||
+              candNorm === 'endereço residencial' ||
+              candNorm === 'endereco residencial' ||
+              candNorm === 'complemento' ||
+              candNorm === 'cep' ||
+              candNorm === 'uf' ||
+              candNorm.startsWith('segurado') ||
+              candNorm.startsWith('nascimento') ||
+              candNorm.startsWith('cpf')
+            ) {
+              continue
+            }
+            if (candRua.length > 3) {
+              const pedacos = candRua.split(',').map((p) => p.trim())
+              rua = pedacos[0] || candRua
+              if (pedacos.length >= 2 && !numero) {
+                numero = pedacos.slice(1).join(', ')
+              }
+              break
+            }
+          }
+        }
+
+        if (cep && rua && cidade) break
+      }
     }
   }
 

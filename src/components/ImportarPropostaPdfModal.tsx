@@ -30,6 +30,7 @@ import {
   PropostaImportadaConferida,
 } from '@/services/importacao/proposta-service'
 import { formatCurrency, formatBRDate } from '@/lib/utils'
+import { maskDocument } from '@/lib/document-validators'
 
 interface ImportarPropostaPdfModalProps {
   open: boolean
@@ -220,7 +221,9 @@ export const ImportarPropostaPdfModal: React.FC<ImportarPropostaPdfModalProps> =
                   </div>
                   <div>
                     <span className="text-slate-500">CPF/CNPJ:</span>{' '}
-                    {conferida.proposta.segurado.cpfCnpj || '-'}
+                    {conferida.proposta.segurado.cpfCnpj
+                      ? maskDocument(conferida.proposta.segurado.cpfCnpj)
+                      : '-'}
                   </div>
                   <div>
                     <span className="text-slate-500">Condutor Principal:</span>{' '}
