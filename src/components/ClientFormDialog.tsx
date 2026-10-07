@@ -334,34 +334,77 @@ export function ClientFormDialog({
                 value={form.cep}
                 onChange={(e) => set('cep', e.target.value)}
                 onBlur={handleCepBlur}
-                placeholder="00000-000"
+                placeholder="Ex.: 58037-335"
+                className={
+                  initialData && !form.cep
+                    ? 'border-amber-400 bg-amber-50/40 focus-visible:ring-amber-400'
+                    : ''
+                }
               />
             </div>
             <div className="col-span-2">
               <Label className="text-xs font-semibold">Rua / Endereço</Label>
-              <Input value={form.rua} onChange={(e) => set('rua', e.target.value)} />
+              <Input
+                value={form.rua}
+                onChange={(e) => set('rua', e.target.value)}
+                className={
+                  initialData && !form.rua
+                    ? 'border-amber-400 bg-amber-50/40 focus-visible:ring-amber-400'
+                    : ''
+                }
+              />
             </div>
           </div>
           <div className="grid grid-cols-3 gap-2">
             <div>
               <Label className="text-xs font-semibold">Número</Label>
-              <Input value={form.numero} onChange={(e) => set('numero', e.target.value)} />
+              <Input
+                value={form.numero}
+                onChange={(e) => set('numero', e.target.value)}
+                className={
+                  initialData && !form.numero
+                    ? 'border-amber-400 bg-amber-50/40 focus-visible:ring-amber-400'
+                    : ''
+                }
+              />
             </div>
             <div className="col-span-2">
               <Label className="text-xs font-semibold">Bairro</Label>
-              <Input value={form.bairro} onChange={(e) => set('bairro', e.target.value)} />
+              <Input
+                value={form.bairro}
+                onChange={(e) => set('bairro', e.target.value)}
+                className={
+                  initialData && !form.bairro
+                    ? 'border-amber-400 bg-amber-50/40 focus-visible:ring-amber-400'
+                    : ''
+                }
+              />
             </div>
           </div>
           <div className="grid grid-cols-2 gap-2">
             <div>
               <Label className="text-xs font-semibold">Cidade</Label>
-              <Input value={form.cidade} onChange={(e) => set('cidade', e.target.value)} />
+              <Input
+                value={form.cidade}
+                onChange={(e) => set('cidade', e.target.value)}
+                className={
+                  initialData && !form.cidade
+                    ? 'border-amber-400 bg-amber-50/40 focus-visible:ring-amber-400'
+                    : ''
+                }
+              />
             </div>
             <div>
               <Label className="text-xs font-semibold">Estado</Label>
               <Select value={form.estado || ''} onValueChange={(v) => set('estado', v)}>
-                <SelectTrigger>
-                  <SelectValue placeholder="UF" />
+                <SelectTrigger
+                  className={
+                    initialData && !form.estado
+                      ? 'border-amber-400 bg-amber-50/40 focus:ring-amber-400'
+                      : ''
+                  }
+                >
+                  <SelectValue placeholder="Ex.: PB" />
                 </SelectTrigger>
                 <SelectContent>
                   {BRAZILIAN_STATES.map((s) => (

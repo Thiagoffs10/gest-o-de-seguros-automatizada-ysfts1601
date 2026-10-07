@@ -667,6 +667,56 @@ function extrairVeiculo(text: string): PropostaVeiculoExtraido {
   }
 }
 
+function parseTabelaGfmLinhas(
+  headerRegex: RegExp,
+  sourceText: string,
+  callback: (headers: string[], values: string[]) => void,
+) {
+  const lines = sourceText.split(/\r?\n/)
+  for (let i = 0; i < lines.length; i++) {
+    const rawLine = lines[i].trim()
+    if (!rawLine.includes('|')) continue
+    if (!headerRegex.test(rawLine)) continue
+
+    // Localizou cabeçalho. Próximas linhas: procurar divisor | --- | e depois primeira linha de dados
+    let dividerFound = false
+    for (let j = i + 1; j < lines.length; j++) {
+      const nextLine = lines[j].trim()
+      if (!nextLine) {
+        if (dividerFound) break
+        continue
+      }
+      if (!nextLine.includes('|')) break
+
+      // Linha de divisor: composta por |, -, :, e espaços (ex: | --- | :---: | --- |)
+      if (!dividerFound && /^\|?(\s*[-:]+\s*\|?)+$/.test(nextLine)) {
+        dividerFound = true
+        continue
+      }
+
+      if (dividerFound) {
+        // Linha de dados encontrada
+        const rawHeaders = rawLine.split('|')
+        if (rawHeaders.length > 2 && rawLine.startsWith('|') && rawLine.endsWith('|')) {
+          rawHeaders.shift()
+          rawHeaders.pop()
+        }
+        const cleanedHeaders = rawHeaders.map((h) => sanitizarTextoExtraido(h).toLowerCase())
+
+        const rawValues = nextLine.split('|')
+        if (rawValues.length > 2 && nextLine.startsWith('|') && nextLine.endsWith('|')) {
+          rawValues.shift()
+          rawValues.pop()
+        }
+        const cleanedValues = rawValues.map((v) => sanitizarTextoExtraido(v))
+
+        callback(cleanedHeaders, cleanedValues)
+        break
+      }
+    }
+  }
+}
+
 function extrairSegurado(
   text: string,
   formato: SeguradoraPropostaFormato,
@@ -687,14 +737,14 @@ function extrairSegurado(
   // Isolar o bloco delimitado "SUAS INFORMAÇÕES" do cliente, quando presente.
   // Suporta marcações markdown como "#", "##", "**", tabelas markdown (|) e espaços.
   const suasInfoSectionMatch =
-    /(?:#+\s*|\*{0,2})SUAS\s+INFORMA[ÇC][ÕO]ES\*{0,2}[\s\S]*?(?=(?:(?:#+\s*|\*{0,2})INFORMA[ÇC][ÕO]ES\s+DO|(?:#+\s*|\*{0,2})INFORMA[ÇC][ÕO]ES\s+DE|(?:#+\s*|\*{0,2})INFORMA[ÇC][ÕO]ES\s+DA|COBERTURAS|OFERTA|DECLARA[ÇC][ÃA]O|P[áa]gina|\n{3,}|$))/i.exec(
+    /(?:#+\s*|\*{0,2})SUAS\s+INFORMA[ÇC][ÕO]ES\*{0,2}[\s\S]*?(?=(?:(?:#+\s*|\*{0,2})INFORMA[ÇC][ÕO]ES\s+DO|(?:#+\s*|\*{0,2})INFORMA[ÇC][ÕO]ES\s+DE|(?:#+\s*|\*{0,2})INFORMA[ÇC][ÕO]ES\s+DA|COBERTURAS|OFERTA|DECLARA[ÇC][ÃA]O|P[áa]gina|$))/i.exec(
       text,
     )
   const suasInfoText = suasInfoSectionMatch ? suasInfoSectionMatch[0] : ''
 
   // Isolar a seção do Condutor Principal para fallback de documento/nome quando mesmo condutor
   const condPrincipalSectionMatch =
-    /(?:#+\s*|\*{0,2})INFORMA[ÇC][ÕO]ES\s+DO\s+CONDUTOR(?:\s+PRINCIPAL)?\*{0,2}[\s\S]*?(?=(?:(?:#+\s*|\*{0,2})INFORMA[ÇC][ÕO]ES\s+DO|(?:#+\s*|\*{0,2})INFORMA[ÇC][ÕO]ES\s+DE|(?:#+\s*|\*{0,2})INFORMA[ÇC][ÕO]ES\s+DA|COBERTURAS|OFERTA|DECLARA[ÇC][ÃA]O|P[áa]gina|\n{3,}|$))/i.exec(
+    /(?:#+\s*|\*{0,2})INFORMA[ÇC][ÕO]ES\s+DO\s+CONDUTOR(?:\s+PRINCIPAL)?\*{0,2}[\s\S]*?(?=(?:(?:#+\s*|\*{0,2})INFORMA[ÇC][ÕO]ES\s+DO|(?:#+\s*|\*{0,2})INFORMA[ÇC][ÕO]ES\s+DE|(?:#+\s*|\*{0,2})INFORMA[ÇC][ÕO]ES\s+DA|COBERTURAS|OFERTA|DECLARA[ÇC][ÃA]O|P[áa]gina|$))/i.exec(
       text,
     )
   const condPrincipalText = condPrincipalSectionMatch ? condPrincipalSectionMatch[0] : ''
@@ -738,7 +788,7 @@ function extrairSegurado(
 
   // Isolar o bloco "Dados Gerais" (Azul Tradicional / Porto Seguro) se presente
   const dadosGeraisSectionMatch =
-    /(?:#+\s*|\*{0,2})Dados\s+Gerais\*{0,2}[\s\S]*?(?=(?:(?:#+\s*|\*{0,2})(?:Ve[íi]culo|Question[áa]rio|Coberturas|Declara[çc][ãa]o|Termos)|\n{3,}|$))/i.exec(
+    /(?:#+\s*|\*{0,2})Dados\s+Gerais\*{0,2}[\s\S]*?(?=(?:(?:#+\s*|\*{0,2})(?:Ve[íi]culo|Question[áa]rio|Coberturas|Declara[çc][ãa]o|Termos)|$))/i.exec(
       textoUtilCliente,
     )
   const dadosGeraisText = dadosGeraisSectionMatch ? dadosGeraisSectionMatch[0] : ''
@@ -761,17 +811,41 @@ function extrairSegurado(
   // REGRA DE OURO 2: Buscar dentro de DADOS GERAIS (Azul Seguros / Porto Seguro)
   // No layout Azul Tradicional:
   // "Nascimento 02/08/1990 057.365.924-95 CPF" ou "057.365.924-95 CPF" ou "CPF 057.365.924-95"
+  // E também via tabela GFM (| Segurado(a) | Nascimento | CPF |)
   if (!cpfCnpj && dadosGeraisText) {
-    const cpfNaLinha =
-      /(?:cpf[*\s|:]+([0-9.\-/]{11,14})|([0-9]{3}\.[0-9]{3}\.[0-9]{3}-[0-9]{2})\s*(?:[|*]*\s*cpf)?)/i.exec(
-        dadosGeraisText,
-      )
-    if (cpfNaLinha) {
-      const docRaw = cpfNaLinha[1] || cpfNaLinha[2]
-      const docLimpo = docRaw.replace(/\D/g, '')
-      if (docLimpo.length === 11 && isValidCpf(docLimpo)) {
-        cpfCnpj = docLimpo
-        tipoPessoa = 'PF'
+    parseTabelaGfmLinhas(/segurado\s*(?:\(a\))?/i, dadosGeraisText, (headers, values) => {
+      headers.forEach((h, idx) => {
+        const val = values[idx] || ''
+        if (!val || val === '-' || isTextoCabecalhoOuInvalido(val)) return
+
+        if (h.includes('cpf')) {
+          const limpo = val.replace(/\D/g, '')
+          if (limpo.length === 11 && isValidCpf(limpo)) {
+            cpfCnpj = limpo
+            tipoPessoa = 'PF'
+          }
+        } else if (h.includes('cnpj')) {
+          const limpo = val.replace(/\D/g, '')
+          if (limpo.length === 14 && !isCnpjSeguradoraOuInvalido(limpo)) {
+            cpfCnpj = limpo
+            tipoPessoa = 'PJ'
+          }
+        }
+      })
+    })
+
+    if (!cpfCnpj) {
+      const cpfNaLinha =
+        /(?:cpf[*\s|:]+([0-9.\-/]{11,14})|([0-9]{3}\.[0-9]{3}\.[0-9]{3}-[0-9]{2})\s*(?:[|*]*\s*cpf)?)/i.exec(
+          dadosGeraisText,
+        )
+      if (cpfNaLinha) {
+        const docRaw = cpfNaLinha[1] || cpfNaLinha[2]
+        const docLimpo = docRaw.replace(/\D/g, '')
+        if (docLimpo.length === 11 && isValidCpf(docLimpo)) {
+          cpfCnpj = docLimpo
+          tipoPessoa = 'PF'
+        }
       }
     }
     if (!cpfCnpj) {
@@ -879,21 +953,23 @@ function extrairSegurado(
   // | --- | --- | --- |
   // | LIVIA LOURENCO FERNANDES DA CUNHA BARROS | 02/08/1990 | 057.365.924-95 |
   if (!nome && dadosGeraisText) {
-    // Parser específico de tabela markdown para Segurado(a) / Nascimento / CPF
-    const tabelaSeguradoMatch =
-      /\|\s*segurado\s*(?:\(a\))?\s*\|[^\n]*\n\|(?:\s*[-:]+\s*\|)+\s*\n\|\s*([^|\n]+?)\s*\|/i.exec(
-        dadosGeraisText,
-      )
-    if (tabelaSeguradoMatch) {
-      const raw = sanitizarTextoExtraido(tabelaSeguradoMatch[1])
-      if (
-        raw.length > 3 &&
-        !isTextoCabecalhoOuInvalido(raw) &&
-        !raw.toLowerCase().includes('corretor')
-      ) {
-        nome = raw
-      }
-    }
+    parseTabelaGfmLinhas(/segurado\s*(?:\(a\))?/i, dadosGeraisText, (headers, values) => {
+      headers.forEach((h, idx) => {
+        const val = values[idx] || ''
+        if (!val || val === '-' || isTextoCabecalhoOuInvalido(val)) return
+
+        if (h.includes('segurado')) {
+          const raw = sanitizarTextoExtraido(val)
+          if (
+            raw.length > 3 &&
+            !isTextoCabecalhoOuInvalido(raw) &&
+            !raw.toLowerCase().includes('corretor')
+          ) {
+            nome = raw
+          }
+        }
+      })
+    })
 
     // 1. Linha imediatamente seguinte a "Segurado(a)" ou na mesma linha
     if (!nome) {
@@ -1004,13 +1080,30 @@ function extrairSegurado(
     // Procura primeiro no bloco Dados Gerais / texto útil antes do questionário de risco/condutor
     const escopoNasc = dadosGeraisText || textoUtilCliente
 
-    // 1. Em tabelas Markdown (ex: | Segurado(a) | Nascimento | CPF | ... | LIVIA ... | 02/08/1990 | 057... |)
-    const nascTabelaMatch =
-      /\|\s*[^|\n]*\b(?:data\s+de\s+nascimento|nascimento|nasc\.?)\b[^|\n]*\|[^\n]*\n\|(?:\s*[-:]+\s*\|)+\s*\n\|[^|\n]*\|\s*(\d{1,2}[/.-]\d{1,2}[/.-]\d{4})\s*\|/i.exec(
-        escopoNasc,
-      )
-    if (nascTabelaMatch) {
-      dataNasc = parseDataFlexivel(nascTabelaMatch[1])
+    // 1. Em tabelas Markdown tolerantes mapeadas pelo cabeçalho
+    if (dadosGeraisText) {
+      parseTabelaGfmLinhas(/segurado\s*(?:\(a\))?/i, dadosGeraisText, (headers, values) => {
+        headers.forEach((h, idx) => {
+          const val = values[idx] || ''
+          if (!val || val === '-' || isTextoCabecalhoOuInvalido(val)) return
+
+          if (h.includes('nascimento') || h.includes('nasc')) {
+            const dt = parseDataFlexivel(val)
+            if (dt) dataNasc = dt
+          }
+        })
+      })
+    }
+
+    // Fallback regex de tabela de nascimento
+    if (!dataNasc) {
+      const nascTabelaMatch =
+        /\|\s*[^|\n]*\b(?:data\s+de\s+nascimento|nascimento|nasc\.?)\b[^|\n]*\|[^\n]*\n\|(?:\s*[-:]+\s*\|)+\s*\n\|[^|\n]*\|\s*(\d{1,2}[/.-]\d{1,2}[/.-]\d{4})\s*\|/i.exec(
+          escopoNasc,
+        )
+      if (nascTabelaMatch) {
+        dataNasc = parseDataFlexivel(nascTabelaMatch[1])
+      }
     }
 
     // 2. Célula markdown em qualquer tabela ou linha: "| 02/08/1990 |" dentro de Dados Gerais
@@ -1064,7 +1157,20 @@ function extrairSegurado(
     return ''
   }
 
-  if (suasInfoText) {
+  // Busca em tabelas GFM contendo "E-mail"
+  parseTabelaGfmLinhas(/\be-?mail\b/i, textoUtilCliente, (headers, values) => {
+    headers.forEach((h, idx) => {
+      const val = values[idx] || ''
+      if (!val || val === '-' || isTextoCabecalhoOuInvalido(val)) return
+
+      if (h.includes('e-mail') || h.includes('email')) {
+        const em = searchForEmail(val)
+        if (em) email = em
+      }
+    })
+  })
+
+  if (!email && suasInfoText) {
     email = searchForEmail(suasInfoText)
   }
   if (!email) {
@@ -1112,7 +1218,22 @@ function extrairSegurado(
     return false
   }
 
-  if (suasInfoText) {
+  // Busca prioritária em tabela GFM contendo "Telefone" ou "Celular" (ex: Azul Seguros | E-mail | Telefone | Tipo de envio |)
+  parseTabelaGfmLinhas(/\b(?:telefone|celular)\b/i, textoUtilCliente, (headers, values) => {
+    headers.forEach((h, idx) => {
+      const val = values[idx] || ''
+      if (!val || val === '-' || isTextoCabecalhoOuInvalido(val)) return
+
+      if (h.includes('telefone') || h.includes('celular') || h.includes('tel')) {
+        const cleanDigits = val.replace(/\D/g, '')
+        if (!isTelefoneInstitucionalOuInvalido(cleanDigits) && cleanDigits.length >= 8) {
+          telefone = normalizarTelefoneComDDD(val)
+        }
+      }
+    })
+  })
+
+  if (!telefone && suasInfoText) {
     // "Tel: 81998747908" ou "**Tel:** 81998747908" ou "| Tel | 81998747908 |"
     const telSuas =
       /(?:Tel|Telefone|Celular)[*\s|:]+(\(?[0-9]{2}\)?\s*[0-9]{4,5}[-\s]?[0-9]{4}|[0-9]{8,11})/i.exec(
@@ -1160,30 +1281,19 @@ function extrairSegurado(
   // | Endereço residencial | Complemento | CEP | Bairro | Cidade | UF |
   // | --- | --- | --- | --- | --- | --- |
   // | R Doralice de Almeida Lyra, 55 | - | 58037-335 | Jardim Oceania | João Pessoa | PB |
-  const parseTabelaMarkdownColunas = (
-    headerRegex: RegExp,
-    callback: (headers: string[], values: string[]) => void,
-  ) => {
-    const tableRegex = /\|([^\n]+)\|\s*\n\|(?:\s*[-:]+\s*\|)+\s*\n\|([^\n]+)\|/gi
-    let match: RegExpExecArray | null
-    while ((match = tableRegex.exec(textoUtilCliente)) !== null) {
-      const headerLine = match[1]
-      if (headerRegex.test(headerLine)) {
-        const headers = headerLine.split('|').map((h) => sanitizarTextoExtraido(h).toLowerCase())
-        const values = match[2].split('|').map((v) => sanitizarTextoExtraido(v))
-        callback(headers, values)
-        break
-      }
-    }
-  }
-
-  parseTabelaMarkdownColunas(/endere[çc]o\s+residencial/i, (headers, values) => {
+  parseTabelaGfmLinhas(/endere[çc]o\s+residencial/i, textoUtilCliente, (headers, values) => {
     headers.forEach((h, idx) => {
       const val = values[idx] || ''
       if (!val || val === '-' || isTextoCabecalhoOuInvalido(val)) return
 
       if (h.includes('endereço') || h.includes('endereco')) {
-        rua = val
+        const pedacos = val.split(',').map((p) => p.trim())
+        rua = pedacos[0] || val
+        if (pedacos.length >= 2 && !numero) {
+          numero = pedacos.slice(1).join(', ')
+        }
+      } else if (h.includes('complemento')) {
+        // Mantém complemento se necessário
       } else if (h.includes('cep')) {
         const cClean = val.replace(/\D/g, '')
         if (cClean.length === 8) {

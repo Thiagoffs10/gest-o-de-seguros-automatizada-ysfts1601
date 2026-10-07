@@ -802,9 +802,39 @@ Ouvidoria: 0800 7271184
       expect(res.segurado.email).toBe('paulagabrieladv@gmail.com')
       expect(res.segurado.rua).toBe('R Doralice de Almeida Lyra')
       expect(res.segurado.numero).toBe('55')
+      expect(res.segurado.bairro).toBe('Jardim Oceania')
       expect(res.segurado.cidade).toBe('João Pessoa')
       expect(res.segurado.estado).toBe('PB')
       expect(res.segurado.cep).toBe('58037-335')
+
+      // Validação do fluxo de montagem do objeto cliente para initialData do ClientFormDialog
+      const tipoPessoa = res.segurado.tipoPessoa || 'PF'
+      const clienteDraft = {
+        name: res.segurado.nome || '',
+        tipo_pessoa: tipoPessoa,
+        cpf: tipoPessoa === 'PF' ? '057.365.924-95' : '',
+        birth_date: res.segurado.dataNascimento || '',
+        email: res.segurado.email || '',
+        phone: res.segurado.telefone || '',
+        cep: res.segurado.cep || '',
+        rua: res.segurado.rua || '',
+        numero: res.segurado.numero || '',
+        bairro: res.segurado.bairro || '',
+        cidade: res.segurado.cidade || '',
+        estado: res.segurado.estado || '',
+      }
+
+      expect(clienteDraft.name).toBe('LIVIA LOURENCO FERNANDES DA CUNHA BARROS')
+      expect(clienteDraft.birth_date).toBe('1990-08-02')
+      expect(clienteDraft.cpf).toBe('057.365.924-95')
+      expect(clienteDraft.email).toBe('paulagabrieladv@gmail.com')
+      expect(clienteDraft.phone).toContain('(83) 99112-9729')
+      expect(clienteDraft.cep).toBe('58037-335')
+      expect(clienteDraft.rua).toBe('R Doralice de Almeida Lyra')
+      expect(clienteDraft.numero).toBe('55')
+      expect(clienteDraft.bairro).toBe('Jardim Oceania')
+      expect(clienteDraft.cidade).toBe('João Pessoa')
+      expect(clienteDraft.estado).toBe('PB')
 
       expect(res.condutorPrincipal.nome).toBe('PAULA GABRIELA DE MORAIS NEGREIROS')
       expect(res.condutorPrincipal.cpf).toBe('08818123408')
