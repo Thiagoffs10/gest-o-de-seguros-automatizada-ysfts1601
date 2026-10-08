@@ -67,6 +67,7 @@ describe('Teste de Ponta a Ponta com o PDF Real da Azul Seguros', () => {
 
     // Invocar o parser com o texto real retornado
     const proposta = parsePropostaTexto(markdown, 'Azul_Proposta_6320779928.pdf')
+    expect(proposta.segurado.nome).toBe('LIVIA LOURENCO FERNANDES DA CUNHA BARROS')
 
     // Se falhar, imprimimos o que veio para conferir
     console.log('RESULTADO DA EXTRAÇÃO:', JSON.stringify(proposta.segurado, null, 2))
