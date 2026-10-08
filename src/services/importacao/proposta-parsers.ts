@@ -347,10 +347,72 @@ export function parsePropostaTexto(text: string, nomeArquivo: string = ''): Prop
   const vigencias = extrairVigencias(text)
   const premios = extrairPremios(text)
   const parcelamento = extrairParcelamento(text, formato)
-  const veiculo = extrairVeiculo(text)
-  const segurado = extrairSegurado(text, formato)
-  const condutor = extrairCondutor(text, segurado.nome, segurado.cpfCnpj)
-  const renovacao = extrairRenovacao(text)
+  let veiculo = extrairVeiculo(text)
+  let segurado = extrairSegurado(text, formato)
+  let condutor = extrairCondutor(text, segurado.nome, segurado.cpfCnpj)
+  let renovacao = extrairRenovacao(text)
+
+  // CASCATA ESPECIALIZADA PARA AZUL SEGUROS / PORTO SEGURO (Leitor Inline de grupos em negrito)
+  // Ativado quando o markdown real vem com seções em uma única linha com rótulos em negrito emendados
+  if (formato === 'AZUL_SEGUROS' || formato === 'PORTO_SEGURO') {
+    const inlineData = extrairPropostaInlineAzul(text)
+    if (inlineData) {
+      // 1. Segurado inline (se identificou nome válido)
+      if (inlineData.segurado) {
+        segurado = {
+          ...segurado,
+          nome: inlineData.segurado.nome || segurado.nome,
+          dataNascimento: inlineData.segurado.dataNascimento || segurado.dataNascimento,
+          cpfCnpj: inlineData.segurado.cpfCnpj || segurado.cpfCnpj,
+          tipoPessoa: inlineData.segurado.tipoPessoa || segurado.tipoPessoa,
+          rua: inlineData.segurado.rua || segurado.rua,
+          numero: inlineData.segurado.numero || segurado.numero,
+          cep: inlineData.segurado.cep || segurado.cep,
+          bairro: inlineData.segurado.bairro || segurado.bairro,
+          cidade: inlineData.segurado.cidade || segurado.cidade,
+          estado: inlineData.segurado.estado || segurado.estado,
+          email: inlineData.segurado.email || segurado.email,
+          telefone: inlineData.segurado.telefone || segurado.telefone,
+        }
+      }
+
+      // 2. Condutor inline (se identificou nome válido)
+      if (inlineData.condutor && inlineData.condutor.nome) {
+        condutor = {
+          ...condutor,
+          nome: inlineData.condutor.nome,
+          cpf: inlineData.condutor.cpf || condutor.cpf,
+          dataNascimento: inlineData.condutor.dataNascimento || condutor.dataNascimento,
+          mesmoQueSegurado: inlineData.condutor.mesmoQueSegurado,
+        }
+      }
+
+      // 3. Veículo inline (se identificou marcaModelo sem vazamento de rótulos/profissão)
+      if (inlineData.veiculo) {
+        veiculo = {
+          ...veiculo,
+          marcaModelo: inlineData.veiculo.marcaModelo || veiculo.marcaModelo,
+          placa: inlineData.veiculo.placa || veiculo.placa,
+          chassi: inlineData.veiculo.chassi || veiculo.chassi,
+          codigoFipe: inlineData.veiculo.codigoFipe || veiculo.codigoFipe,
+          anoFabricacao: inlineData.veiculo.anoFabricacao || veiculo.anoFabricacao,
+          anoModelo: inlineData.veiculo.anoModelo || veiculo.anoModelo,
+        }
+      }
+
+      // 4. Renovação inline
+      if (inlineData.renovacao) {
+        renovacao = {
+          ...renovacao,
+          isRenovacao: inlineData.renovacao.isRenovacao,
+          seguradoraAnterior:
+            inlineData.renovacao.seguradoraAnterior || renovacao.seguradoraAnterior,
+          apoliceAnterior: inlineData.renovacao.apoliceAnterior || renovacao.apoliceAnterior,
+          classeBonus: inlineData.renovacao.classeBonus || renovacao.classeBonus,
+        }
+      }
+    }
+  }
 
   // Lista de campos faltantes obrigatórios para destaque no formulário
   const camposFaltantes: Array<{ campo: string; label: string; motivo: string }> = []
@@ -2765,5 +2827,407 @@ function extrairRenovacao(text: string): PropostaRenovacaoExtraida {
     apoliceAnterior: apoliceAnt || undefined,
     seguradoraAnterior: seguradoraAnt || undefined,
     classeBonus: classeBonus || undefined,
+  }
+}
+
+// =========================================================================
+// LEITOR INLINE DA VARIANTE AZUL SEGUROS / PORTO SEGURO
+// Trata o formato em que cada seção vem em UMA ÚNICA LINHA,
+// com grupos de rótulos em negrito ("**Rótulo1 Rótulo2...**") seguidos
+// inline pelos seus valores correspondentes.
+// =========================================================================
+
+interface SegmentoNegritoInline {
+  rotulo: string
+  valores: string
+}
+
+function parseSegmentosNegrito(linha: string): SegmentoNegritoInline[] {
+  const segmentos: SegmentoNegritoInline[] = []
+  // Expressão regular que casa cada grupo de negrito e o texto seguinte até o próximo negrito ou fim de linha
+  const regex = /\*\*([^*]+)\*\*([^*]*)/g
+  let match: RegExpExecArray | null
+  while ((match = regex.exec(linha)) !== null) {
+    segmentos.push({
+      rotulo: match[1].trim(),
+      valores: match[2].trim(),
+    })
+  }
+  return segmentos
+}
+
+export function extrairPropostaInlineAzul(text: string): {
+  segurado?: Partial<PropostaClienteExtraido>
+  condutor?: Partial<PropostaCondutorExtraido>
+  veiculo?: Partial<PropostaVeiculoExtraido>
+  renovacao?: Partial<PropostaRenovacaoExtraida>
+} | null {
+  const linhas = text.split(/\r?\n/)
+
+  let seguradoRes: Partial<PropostaClienteExtraido> | undefined
+  let condutorRes: Partial<PropostaCondutorExtraido> | undefined
+  let veiculoRes: Partial<PropostaVeiculoExtraido> | undefined
+  let renovacaoRes: Partial<PropostaRenovacaoExtraida> | undefined
+
+  for (const rawLinha of linhas) {
+    const linha = rawLinha.trim()
+    if (!linha || !linha.includes('**')) continue
+
+    const segmentos = parseSegmentosNegrito(linha)
+    if (segmentos.length === 0) continue
+
+    // 1. SEÇÃO SEGURADO / PROFISSÃO (Linha 1)
+    // Ex: **Dados Gerais** **Segurado(a) Nascimento CPF** LIVIA LOURENCO FERNANDES DA CUNHA BARROS 02/08/1990 057.365.924-95 **Sexo Profissão País de nascimento** Feminino 387-Administradores Brasil
+    for (const seg of segmentos) {
+      const rotuloLower = seg.rotulo.toLowerCase()
+
+      // SEGURADO(A): grupo cujos rótulos incluem "Segurado(a)" ou "Segurado"
+      if (rotuloLower.includes('segurado')) {
+        const trecho = seg.valores.trim()
+        if (trecho) {
+          // Extração dirigida por valor:
+          // nome = todos os tokens antes do primeiro token que casa com data dd/mm/aaaa
+          // dataNascimento = esse token
+          // cpfCnpj = token seguinte (CPF com ou sem máscara)
+          const dataMatch = /(\d{1,2}[/.-]\d{1,2}[/.-]\d{4})/.exec(trecho)
+          if (dataMatch) {
+            const idxData = dataMatch.index
+            const rawNome = trecho.substring(0, idxData).trim()
+            const dataNascRaw = dataMatch[1]
+            const posAposData = idxData + dataNascRaw.length
+            const resto = trecho.substring(posAposData).trim()
+
+            const cpfMatch = /([0-9]{3}\.?[0-9]{3}\.?[0-9]{3}-?[0-9]{2})/.exec(resto)
+            const cpfEncontrado = cpfMatch ? cpfMatch[1].replace(/\D/g, '') : ''
+
+            if (isNomePessoaValido(rawNome)) {
+              seguradoRes = {
+                ...seguradoRes,
+                nome: rawNome,
+                dataNascimento: parseDataFlexivel(dataNascRaw),
+                cpfCnpj: cpfEncontrado || undefined,
+                tipoPessoa: 'PF',
+              }
+            }
+          }
+        }
+      }
+
+      // 2. ENDEREÇO RESIDENCIAL & CONTATO (Linha 2)
+      // Ex: **Endereço residencial Complemento CEP Bairro Cidade UF** R Doralice de Almeida Lyra, 55-58037-335 Jardim Oceania João Pessoa PB **E-mail Telefone Tipo de envio Enviar correspondência para** paulagabrieladv@gmail.com Celular: (83) 99112-9729 DIGITAL SEGURADO
+      if (
+        rotuloLower.includes('endereço residencial') ||
+        rotuloLower.includes('endereco residencial')
+      ) {
+        const trechoEnd = seg.valores.trim()
+        if (trechoEnd) {
+          // CEP = primeira ocorrência de /\d{5}-?\d{3}/ (atenção: vem colado ao número por hífen "55-58037-335")
+          const cepMatch = /(\d{5}-?\d{3})/.exec(trechoEnd)
+          if (cepMatch) {
+            const rawCep = cepMatch[1].replace(/\D/g, '')
+            const cepFormatado = `${rawCep.slice(0, 5)}-${rawCep.slice(5)}`
+            const idxCep = cepMatch.index
+
+            // Texto ANTES do CEP: "R Doralice de Almeida Lyra, 55-" ou "R Doralice de Almeida Lyra, 55"
+            let textoAntes = trechoEnd.substring(0, idxCep).trim()
+            textoAntes = textoAntes.replace(/-+$/, '').trim()
+
+            let rua = textoAntes
+            let numero = ''
+
+            // Separar rua e número: número = dígitos finais após vírgula ou espaço
+            const numVirgulaMatch = /,\s*(\d+[A-Za-z0-9\s/]*)$/.exec(textoAntes)
+            if (numVirgulaMatch) {
+              numero = numVirgulaMatch[1].trim()
+              rua = textoAntes.substring(0, numVirgulaMatch.index).trim()
+            } else {
+              const numEspacoMatch = /\s+(\d+[A-Za-z0-9/]*)$/.exec(textoAntes)
+              if (numEspacoMatch && !/^\d{4}$/.test(numEspacoMatch[1])) {
+                numero = numEspacoMatch[1].trim()
+                rua = textoAntes.substring(0, numEspacoMatch.index).trim()
+              }
+            }
+
+            // Texto APÓS o CEP: " Jardim Oceania João Pessoa PB"
+            const textoApos = trechoEnd.substring(idxCep + cepMatch[0].length).trim()
+
+            // UF = último token de 2 letras maiúsculas do trecho ("PB")
+            let estado = ''
+            let bairro = ''
+            let cidade = ''
+
+            const ufMatch = /\b([A-Z]{2})\b\s*$/.exec(textoApos)
+            if (ufMatch && BRAZILIAN_STATES.includes(ufMatch[1])) {
+              estado = ufMatch[1]
+            }
+
+            // Bairro e Cidade: tokens ENTRE o CEP e a UF
+            let miolo = textoApos
+            if (estado) {
+              miolo = miolo.replace(new RegExp(`\\b${estado}\\b\\s*$`), '').trim()
+            }
+
+            // Heurística robusta de split Bairro / Cidade:
+            // Ex: "Jardim Oceania João Pessoa"
+            // Casos conhecidos de capitais/cidades compostas brasileiras ou divisão proporcional:
+            if (miolo) {
+              const tokens = miolo.split(/\s+/).filter(Boolean)
+              if (tokens.length >= 2) {
+                // Checar se as 2 últimas palavras formam cidade conhecida comum (ex: João Pessoa, São Paulo, etc.)
+                const ultimas2 = tokens.slice(-2).join(' ')
+                const ultimas3 = tokens.length >= 3 ? tokens.slice(-3).join(' ') : ''
+
+                const cidadesCompostas = [
+                  'joão pessoa',
+                  'joao pessoa',
+                  'são paulo',
+                  'sao paulo',
+                  'rio de janeiro',
+                  'belo horizonte',
+                  'porto alegre',
+                  'salvador',
+                  'curitiba',
+                  'recife',
+                  'fortaleza',
+                  'brasília',
+                  'brasilia',
+                  'campina grande',
+                  'jaboatão dos guararapes',
+                  'olinda',
+                  'paulista',
+                ]
+
+                if (ultimas3 && cidadesCompostas.includes(ultimas3.toLowerCase())) {
+                  cidade = ultimas3
+                  bairro = tokens.slice(0, -3).join(' ')
+                } else if (cidadesCompostas.includes(ultimas2.toLowerCase())) {
+                  cidade = ultimas2
+                  bairro = tokens.slice(0, -2).join(' ')
+                } else if (tokens.length === 2) {
+                  bairro = tokens[0]
+                  cidade = tokens[1]
+                } else if (tokens.length === 3) {
+                  bairro = tokens[0]
+                  cidade = tokens.slice(1).join(' ')
+                } else {
+                  // Mais de 3 tokens: metade inicial para bairro, metade final para cidade
+                  const mid = Math.floor(tokens.length / 2)
+                  bairro = tokens.slice(0, mid).join(' ')
+                  cidade = tokens.slice(mid).join(' ')
+                }
+              } else if (tokens.length === 1) {
+                cidade = tokens[0]
+              }
+            }
+
+            seguradoRes = {
+              ...seguradoRes,
+              cep: cepFormatado,
+              rua: rua || undefined,
+              numero: numero || undefined,
+              bairro: bairro || undefined,
+              cidade: cidade || undefined,
+              estado: estado || undefined,
+            }
+          }
+        }
+      }
+
+      // E-MAIL & TELEFONE (Linha 2 segundo grupo)
+      // **E-mail Telefone Tipo de envio Enviar correspondência para** paulagabrieladv@gmail.com Celular: (83) 99112-9729 DIGITAL SEGURADO
+      if (rotuloLower.includes('e-mail') && rotuloLower.includes('telefone')) {
+        const trechoCont = seg.valores.trim()
+        if (trechoCont) {
+          const emMatch = /\b([a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,})\b/.exec(trechoCont)
+          if (emMatch) {
+            seguradoRes = {
+              ...seguradoRes,
+              email: emMatch[1],
+            }
+          }
+          const telMatch =
+            /(?:celular|tel|telefone)?[:\s]*(\(?[0-9]{2}\)?\s*[0-9]{4,5}[-\s]?[0-9]{4})/i.exec(
+              trechoCont,
+            )
+          if (telMatch) {
+            seguradoRes = {
+              ...seguradoRes,
+              telefone: telMatch[1].trim(),
+            }
+          }
+        }
+      }
+
+      // 3. VEÍCULO (Linha 3)
+      // Ex: **Veículo** **Placa Chassi Veículo Ano Fabricação / Modelo** QSI2A04 9BGEB48A0LG219020 6140 - - NOVO ONIX HATCH LT 1.0 12V FLEX 2020 / 2020 **Fipe Zero km Câmbio Blindado Kit Gás Pessoa com deficiência Isenção Fiscal Portas** 45179 N Manual Não Não Não Sem Isenção 5 **Combustível Categoria** GASOLINA/ALCOOL 10 - VEICULOS DE PASSEIO
+      if (
+        rotuloLower.includes('placa') &&
+        rotuloLower.includes('chassi') &&
+        rotuloLower.includes('veículo')
+      ) {
+        const trechoVeic = seg.valores.trim()
+        if (trechoVeic) {
+          // Placa
+          let placa = ''
+          const placaM = /\b([A-Z]{3}[0-9][A-Z0-9][0-9]{2})\b/.exec(trechoVeic)
+          if (placaM) placa = placaM[1]
+
+          // Chassi
+          let chassi = ''
+          const chassiM = /\b([A-HJ-NPR-Z0-9]{17})\b/.exec(trechoVeic)
+          if (chassiM) chassi = chassiM[1]
+
+          // Anos
+          let anoFab = 0
+          let anoMod = 0
+          const anoM = /\b(19\d{2}|20\d{2})\s*\/\s*(19\d{2}|20\d{2})\b/.exec(trechoVeic)
+          if (anoM) {
+            anoFab = parseInt(anoM[1], 10)
+            anoMod = parseInt(anoM[2], 10)
+          }
+
+          // marcaModelo = tokens entre o padrão "6140 - -" (código numérico seguido de hífens isolados) e o padrão "2020 / 2020"
+          let marcaModelo = ''
+          const modeloPattern =
+            /(?:\d{3,5}\s*-\s*-?\s*)([A-Za-z0-9\s.\-/+]+?)(?=\s*\b(?:19\d{2}|20\d{2})\s*\/\s*(?:19\d{2}|20\d{2})\b|$)/i.exec(
+              trechoVeic,
+            )
+          if (modeloPattern) {
+            marcaModelo = modeloPattern[1].trim()
+          } else {
+            // Fallback caso não tenha código "6140 - -": remove placa, chassi e anos
+            let cleaned = trechoVeic
+            if (placa) cleaned = cleaned.replace(placa, '')
+            if (chassi) cleaned = cleaned.replace(chassi, '')
+            if (anoM) cleaned = cleaned.replace(anoM[0], '')
+            cleaned = cleaned.replace(/^\s*\d{3,5}\s*-\s*-?\s*/, '').trim()
+            if (cleaned.length > 3) {
+              marcaModelo = cleaned
+            }
+          }
+
+          veiculoRes = {
+            ...veiculoRes,
+            placa: placa || undefined,
+            chassi: chassi || undefined,
+            marcaModelo: marcaModelo || undefined,
+            anoFabricacao: anoFab || undefined,
+            anoModelo: anoMod || undefined,
+          }
+        }
+      }
+
+      // FIPE no grupo seguinte: **Fipe Zero km Câmbio...** 45179 N Manual...
+      if (rotuloLower.startsWith('fipe')) {
+        const trechoFipe = seg.valores.trim()
+        if (trechoFipe) {
+          // Primeiro número/token: "45179"
+          const fipeM = /^([A-Za-z0-9-]{4,9})/.exec(trechoFipe)
+          if (fipeM) {
+            veiculoRes = {
+              ...veiculoRes,
+              codigoFipe: fipeM[1],
+            }
+          }
+        }
+      }
+
+      // 4. CONDUTOR PRINCIPAL (Linha 4)
+      // Ex: **Questionário de avaliação de risco¹** **Condutor Nascimento CPF** PAULA GABRIELA DE MORAIS NEGREIROS 15/10/1996 088.181.234-08
+      // IMPORTANTE: ancorar estritamente no grupo de negrito cujos rótulos incluem "Condutor" + "Nascimento" + "CPF"
+      if (
+        rotuloLower.includes('condutor') &&
+        rotuloLower.includes('nascimento') &&
+        rotuloLower.includes('cpf')
+      ) {
+        const trechoCond = seg.valores.trim()
+        if (trechoCond) {
+          const dataMatch = /(\d{1,2}[/.-]\d{1,2}[/.-]\d{4})/.exec(trechoCond)
+          if (dataMatch) {
+            const idxData = dataMatch.index
+            const rawNome = trechoCond.substring(0, idxData).trim()
+            const dataNascRaw = dataMatch[1]
+            const posAposData = idxData + dataNascRaw.length
+            const resto = trechoCond.substring(posAposData).trim()
+
+            const cpfMatch = /([0-9]{3}\.?[0-9]{3}\.?[0-9]{3}-?[0-9]{2})/.exec(resto)
+            const cpfEncontrado = cpfMatch ? cpfMatch[1].replace(/\D/g, '') : ''
+
+            if (isNomePessoaValido(rawNome)) {
+              condutorRes = {
+                nome: rawNome,
+                dataNascimento: parseDataFlexivel(dataNascRaw),
+                cpf: cpfEncontrado || undefined,
+                mesmoQueSegurado: false,
+              }
+            }
+          }
+        }
+      }
+
+      // 5. RENOVAÇÃO & SEGURADORA ANTERIOR (Linha 6)
+      // Ex: **Tipo de Operação Segmento Bônus Origem do bônus** Renovação da Cia Azul Classe 1- Tradicional **Seguradora Sucursal Apólice Item** Azul Seguros 3 12806713 1
+      if (rotuloLower.includes('tipo de operação') || rotuloLower.includes('tipo de operacao')) {
+        const trechoOperacao = seg.valores.trim()
+        const isRenovacao = /renova[çc][ãa]o/i.test(trechoOperacao)
+        let classeBonus = ''
+        const bonusM = /classe\s*(\d{1,2})/i.exec(trechoOperacao)
+        if (bonusM) classeBonus = bonusM[1]
+
+        renovacaoRes = {
+          ...renovacaoRes,
+          isRenovacao: isRenovacao || true,
+          classeBonus: classeBonus || undefined,
+        }
+      }
+
+      if (
+        rotuloLower.includes('seguradora') &&
+        rotuloLower.includes('sucursal') &&
+        rotuloLower.includes('apólice')
+      ) {
+        const trechoSeg = seg.valores.trim()
+        if (trechoSeg) {
+          // seguradoraAnterior = tokens alfabéticos antes do primeiro token numérico -> "Azul Seguros"
+          // numeroApolice = o número de 8 dígitos -> "12806713"
+          const tokens = trechoSeg.split(/\s+/).filter(Boolean)
+          const seguradoraTokens: string[] = []
+          let apoliceEncontrada = ''
+
+          for (const tok of tokens) {
+            // Se o token for inteiramente numérico
+            if (/^\d+$/.test(tok)) {
+              // Se tiver 6 a 12 dígitos, é forte candidato a número de apólice (ex: 12806713)
+              if (tok.length >= 6 && !apoliceEncontrada) {
+                apoliceEncontrada = tok
+              }
+            } else if (!apoliceEncontrada && seguradoraTokens.length < 4) {
+              // Se ainda não encontrou número longo de apólice e o token é textual
+              seguradoraTokens.push(tok)
+            }
+          }
+
+          const seguradoraNome = seguradoraTokens.join(' ').trim()
+
+          renovacaoRes = {
+            ...renovacaoRes,
+            isRenovacao: true,
+            seguradoraAnterior: seguradoraNome || undefined,
+            apoliceAnterior: apoliceEncontrada || undefined,
+          }
+        }
+      }
+    }
+  }
+
+  if (!seguradoRes && !condutorRes && !veiculoRes && !renovacaoRes) {
+    return null
+  }
+
+  return {
+    segurado: seguradoRes,
+    condutor: condutorRes,
+    veiculo: veiculoRes,
+    renovacao: renovacaoRes,
   }
 }
