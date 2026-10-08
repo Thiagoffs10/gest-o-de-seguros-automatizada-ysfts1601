@@ -7,5 +7,5 @@ migrate(
       console.log('ERR:', e)
     }
   },
-  (app) => {}
+  (app) => {},
 )

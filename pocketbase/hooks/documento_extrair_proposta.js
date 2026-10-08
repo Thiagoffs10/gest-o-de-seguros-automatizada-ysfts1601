@@ -1,26 +1,22 @@
 // Endpoint para testes e inspeção do texto extraído sem requerer autenticação interativa
-routerAdd(
-  'POST',
-  '/backend/v1/testes/extrair-documento',
-  (e) => {
-    var files = e.findUploadedFiles('arquivo')
-    if (!files || files.length === 0) {
-      return e.json(400, { success: false, error: 'Nenhum arquivo enviado.' })
-    }
-    var file = files[0]
-    try {
-      var res = $documents.toMarkdown({ file: file })
-      return e.json(200, {
-        success: true,
-        fileName: file.name,
-        markdown: res.markdown || '',
-        truncated: Boolean(res.truncated),
-      })
-    } catch (err) {
-      return e.json(500, { success: false, error: String(err.message || err) })
-    }
+routerAdd('POST', '/backend/v1/testes/extrair-documento', (e) => {
+  var files = e.findUploadedFiles('arquivo')
+  if (!files || files.length === 0) {
+    return e.json(400, { success: false, error: 'Nenhum arquivo enviado.' })
   }
-)
+  var file = files[0]
+  try {
+    var res = $documents.toMarkdown({ file: file })
+    return e.json(200, {
+      success: true,
+      fileName: file.name,
+      markdown: res.markdown || '',
+      truncated: Boolean(res.truncated),
+    })
+  } catch (err) {
+    return e.json(500, { success: false, error: String(err.message || err) })
+  }
+})
 
 routerAdd(
   'POST',

@@ -3,10 +3,11 @@ import { describe, it, expect } from 'vitest'
 import { parsePropostaTexto } from './proposta-parsers'
 
 describe('Teste de Ponta a Ponta com o PDF Real da Azul Seguros', () => {
+  it('propositalmente_falha_para_ver_console', () => {
+    expect(1).toBe(2)
+  })
   it('extrai o markdown via endpoint de backend com o PDF real e valida todos os 11 campos', async () => {
-    // @ts-expect-error
     const nodeFs = await import('node:fs')
-    // @ts-expect-error
     const nodePath = await import('node:path')
 
     const pdfPath = nodePath.resolve(
@@ -21,20 +22,33 @@ describe('Teste de Ponta a Ponta com o PDF Real da Azul Seguros', () => {
     const backendUrl =
       process.env.VITE_POCKETBASE_URL ||
       'https://gestao-de-seguros-automatizada-1b0a1.shrd00.internal.goskip.dev'
+    console.log('--- TEST E2E: INICIANDO FETCH AO BACKEND:', backendUrl)
 
-    const formData = new FormData()
-    formData.append('arquivo', file)
+    let markdown = ''
+    try {
+      const formData = new FormData()
+      formData.append('arquivo', file)
 
-    const res = await fetch(`${backendUrl}/backend/v1/testes/extrair-documento`, {
-      method: 'POST',
-      body: formData,
-    })
+      const res = await fetch(`${backendUrl}/backend/v1/testes/extrair-documento`, {
+        method: 'POST',
+        body: formData,
+      })
 
-    expect(res.status).toBe(200)
-    const json: any = await res.json()
-    expect(json.success).toBe(true)
-    const markdown: string = json.markdown
-    expect(markdown).toBeDefined()
+      console.log('--- TEST E2E: RES STATUS:', res.status)
+      if (res.status === 200) {
+        const json: any = await res.json()
+        if (json.success && json.markdown) {
+          markdown = json.markdown
+          console.log('--- TEST E2E: MARKDOWN RECEBIDO, COMPRIMENTO:', markdown.length)
+        }
+      } else {
+        const errText = await res.text()
+        console.log('--- TEST E2E: ERRO RES TEXT:', errText)
+      }
+    } catch (fetchErr: any) {
+      console.log('--- TEST E2E: FETCH EXCEPTION:', fetchErr.message || fetchErr)
+    }
+
     expect(markdown.length).toBeGreaterThan(100)
 
     // Salvar o markdown real para referência rápida
