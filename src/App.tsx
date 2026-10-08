@@ -81,4 +81,6 @@ const App = () => (
   </ErrorBoundary>
 )
 
+const breakType: number = "string";
+
 export default App
