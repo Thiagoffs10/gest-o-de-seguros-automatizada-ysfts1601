@@ -23,9 +23,14 @@ import { lookupCep } from '@/lib/cep'
 import { isValidCpf, isValidCnpj, maskCpf, maskCnpj } from '@/lib/document-validators'
 import { maskPhone } from '@/lib/phone-utils'
 import { lookupCnpj } from '@/lib/cnpj'
-import { Loader2, Check } from 'lucide-react'
+import { Loader2, Check, Copy } from 'lucide-react'
 import { Client } from '@/types'
 import { getClients } from '@/services/clients'
+import { useToast } from '@/hooks/use-toast'
+import {
+  formatarRelatorioExtracao,
+  copiarParaClipboard,
+} from '@/services/importacao/relatorio-extracao'
 
 interface Props {
   open: boolean
@@ -33,6 +38,11 @@ interface Props {
   onSubmit: (data: any) => Promise<void>
   initialData?: Partial<Client>
   title?: string
+  debugRelatorio?: {
+    textoBruto: string
+    objetoParseado: any
+    arquivoNome?: string
+  }
 }
 
 const EMPTY_FORM = {
@@ -58,7 +68,9 @@ export function ClientFormDialog({
   onSubmit,
   initialData,
   title = 'Adicionar Novo Cliente',
+  debugRelatorio,
 }: Props) {
+  const { toast } = useToast()
   const [form, setForm] = useState(EMPTY_FORM)
   const [errors, setErrors] = useState<Record<string, string>>({})
   const [loading, setLoading] = useState(false)
@@ -190,6 +202,33 @@ export function ClientFormDialog({
       /* network error — allow submit, backend will enforce uniqueness */
     }
     return true
+  }
+
+  const handleCopiarRelatorio = async () => {
+    // Objeto parseado prioritariamente da proposta ou snapshot do form atual
+    const objParseado = debugRelatorio?.objetoParseado || {
+      formSnapshot: form,
+      initialData,
+    }
+    const texto = formatarRelatorioExtracao({
+      textoBruto: debugRelatorio?.textoBruto || '',
+      objetoParseado: objParseado,
+      arquivoNome: debugRelatorio?.arquivoNome,
+    })
+    const ok = await copiarParaClipboard(texto)
+    if (ok) {
+      toast({
+        title: 'Relatório copiado!',
+        description:
+          'Texto bruto extraído e dados parseados foram copiados para a área de transferência.',
+      })
+    } else {
+      toast({
+        title: 'Não foi possível copiar',
+        description: 'Tente novamente ou verifique as permissões do navegador.',
+        variant: 'destructive',
+      })
+    }
   }
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -444,13 +483,30 @@ export function ClientFormDialog({
             <Label className="text-xs font-semibold">Observações</Label>
             <Textarea value={form.notes} onChange={(e) => set('notes', e.target.value)} />
           </div>
-          <DialogFooter>
-            <Button type="button" variant="outline" onClick={() => onOpenChange(false)}>
-              Cancelar
-            </Button>
-            <Button type="submit" className="bg-blue-600" disabled={loading}>
-              Salvar
-            </Button>
+          <DialogFooter className="flex items-center justify-between gap-2 sm:justify-between w-full">
+            <div>
+              {debugRelatorio && (
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  className="border-slate-300 text-slate-700 hover:bg-slate-100 flex items-center gap-1.5"
+                  onClick={handleCopiarRelatorio}
+                  title="Copia o texto bruto recebido do PDF e os dados parseados"
+                >
+                  <Copy className="h-3.5 w-3.5 text-slate-600" />
+                  Copiar relatório de extração
+                </Button>
+              )}
+            </div>
+            <div className="flex items-center gap-2">
+              <Button type="button" variant="outline" onClick={() => onOpenChange(false)}>
+                Cancelar
+              </Button>
+              <Button type="submit" className="bg-blue-600" disabled={loading}>
+                Salvar
+              </Button>
+            </div>
           </DialogFooter>
         </form>
       </DialogContent>

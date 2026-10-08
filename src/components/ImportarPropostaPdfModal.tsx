@@ -22,8 +22,13 @@ import {
   Calendar,
   DollarSign,
   ShieldAlert,
+  Copy,
 } from 'lucide-react'
 import { useToast } from '@/hooks/use-toast'
+import {
+  formatarRelatorioExtracao,
+  copiarParaClipboard,
+} from '@/services/importacao/relatorio-extracao'
 import { Seguradora, Client, Policy } from '@/types'
 import {
   extrairPropostaDeArquivoPdf,
@@ -77,6 +82,29 @@ export const ImportarPropostaPdfModal: React.FC<ImportarPropostaPdfModalProps> =
       })
     } finally {
       setCarregando(false)
+    }
+  }
+
+  const handleCopiarRelatorio = async () => {
+    if (!conferida) return
+    const texto = formatarRelatorioExtracao({
+      textoBruto: conferida.rawMarkdown || '',
+      objetoParseado: conferida.proposta,
+      arquivoNome: conferida.arquivoNome,
+    })
+    const ok = await copiarParaClipboard(texto)
+    if (ok) {
+      toast({
+        title: 'Relatório copiado!',
+        description:
+          'Texto bruto extraído e dados parseados foram copiados para a área de transferência.',
+      })
+    } else {
+      toast({
+        title: 'Não foi possível copiar',
+        description: 'Tente novamente ou verifique as permissões do navegador.',
+        variant: 'destructive',
+      })
     }
   }
 
@@ -326,9 +354,22 @@ export const ImportarPropostaPdfModal: React.FC<ImportarPropostaPdfModalProps> =
         <DialogFooter className="pt-3 border-t">
           {conferida ? (
             <div className="flex items-center justify-between w-full">
-              <Button variant="outline" size="sm" onClick={resetState}>
-                Trocar arquivo
-              </Button>
+              <div className="flex items-center gap-2">
+                <Button variant="outline" size="sm" onClick={resetState}>
+                  Trocar arquivo
+                </Button>
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  className="border-slate-300 text-slate-700 hover:bg-slate-100 flex items-center gap-1.5"
+                  onClick={handleCopiarRelatorio}
+                  title="Copia o texto bruto do PDF e o JSON extraído para investigação"
+                >
+                  <Copy className="h-3.5 w-3.5 text-slate-600" />
+                  Copiar relatório de extração
+                </Button>
+              </div>
               <Button
                 size="sm"
                 className="bg-blue-600 hover:bg-blue-700 text-white"

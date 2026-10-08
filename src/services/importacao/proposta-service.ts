@@ -22,6 +22,8 @@ export interface PropostaImportadaConferida {
   apoliceDuplicadaMotivo?: string
   seguradoraIdCorrespondente?: string
   renovacaoPolicyCorrespondente?: Policy
+  rawMarkdown?: string
+  arquivoNome?: string
 }
 
 /**
@@ -60,6 +62,34 @@ export async function extrairPropostaDeArquivoPdf(
 
   // Parse determinístico
   const proposta = parsePropostaTexto(markdown, file.name)
+
+  // LOG DE DEBUG no console para auditoria imediata no navegador
+  console.log('[DEBUG_PROPOSTA_EXTRAIDA] Arquivo:', file.name)
+  console.log('[DEBUG_PROPOSTA_EXTRAIDA] Comprimento Markdown:', markdown.length)
+  console.log('[DEBUG_PROPOSTA_EXTRAIDA] Objeto parseado:', proposta)
+
+  // PERSISTÊNCIA NO SERVIDOR (collection importacao_debug)
+  try {
+    const appVersion = '0.0.193'
+    pb.collection('importacao_debug')
+      .create({
+        arquivo_nome: file.name,
+        texto_bruto: markdown,
+        objeto_parseado: proposta,
+        app_version: appVersion,
+      })
+      .then((rec) => {
+        console.log('[DEBUG_PROPOSTA_EXTRAIDA] Registro salvo em importacao_debug:', rec.id)
+      })
+      .catch((saveErr) => {
+        console.warn(
+          '[DEBUG_PROPOSTA_EXTRAIDA] Não foi possível salvar em importacao_debug:',
+          saveErr,
+        )
+      })
+  } catch (e) {
+    console.warn('[DEBUG_PROPOSTA_EXTRAIDA] Erro ao disparar salvamento debug:', e)
+  }
 
   // 1. Encontrar seguradora cadastrada correspondente
   let seguradoraId = ''
@@ -185,5 +215,7 @@ export async function extrairPropostaDeArquivoPdf(
     apoliceDuplicadaMotivo,
     seguradoraIdCorrespondente: seguradoraId || undefined,
     renovacaoPolicyCorrespondente,
+    rawMarkdown: markdown,
+    arquivoNome: file.name,
   }
 }

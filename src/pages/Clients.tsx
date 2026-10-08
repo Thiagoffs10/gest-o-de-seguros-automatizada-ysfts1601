@@ -470,6 +470,15 @@ export default function Clients() {
               ? 'Conferir e Cadastrar Cliente da Proposta'
               : 'Adicionar Novo Cliente'
         }
+        debugRelatorio={
+          propostaOrigemImportada
+            ? {
+                textoBruto: propostaOrigemImportada.rawMarkdown || '',
+                objetoParseado: propostaOrigemImportada.proposta,
+                arquivoNome: propostaOrigemImportada.arquivoNome,
+              }
+            : undefined
+        }
         onSubmit={async (formData) => {
           try {
             let savedClient: Client
