@@ -1035,6 +1035,19 @@ CNPJ: 61.198.164/0001-60
       expect(res.segurado.cidade).toBe('João Pessoa')
       expect(res.segurado.estado).toBe('PB')
 
+      // Validação de Veículo, Vigências, Condutor Principal e Prêmios
+      expect(res.veiculo.marcaModelo).toBe('NOVO ONIX HATCH LT 1.0 12V FLEX')
+      expect(res.veiculo.placa).toBe('QSI2A04')
+      expect(res.veiculo.chassi).toBe('9BGEB48A0LG219020')
+      expect(res.vigenciaInicio).toBe('2026-10-10')
+      expect(res.vigenciaFim).toBe('2027-10-10')
+      expect(res.condutorPrincipal.nome).toBe('PAULA GABRIELA DE MORAIS NEGREIROS')
+      expect(res.condutorPrincipal.cpf).toBe('08818123408')
+      expect(res.condutorPrincipal.dataNascimento).toBe('1996-10-15')
+      expect(res.condutorPrincipal.mesmoQueSegurado).toBe(false)
+      expect(res.premioLiquido).toBe(1486.42)
+      expect(res.premioTotal).toBe(1596.12)
+
       // Simulação do preenchimento do modal (Conferir e Cadastrar Cliente da Proposta)
       const tipoPessoa = res.segurado.tipoPessoa || 'PF'
       const modalFormData = {
@@ -1127,6 +1140,11 @@ CNPJ: 61.198.164/0001-60
       expect(res.segurado.bairro).toBe('Jardim Oceania')
       expect(res.segurado.cidade).toBe('João Pessoa')
       expect(res.segurado.estado).toBe('PB')
+      expect(res.veiculo.marcaModelo).toBe('NOVO ONIX HATCH LT 1.0 12V FLEX')
+      expect(res.veiculo.placa).toBe('QSI2A04')
+      expect(res.veiculo.chassi).toBe('9BGEB48A0LG219020')
+      expect(res.vigenciaInicio).toBe('2026-10-10')
+      expect(res.vigenciaFim).toBe('2027-10-10')
     })
 
     it('(a.2-caso-extremo-sem-tabelas-sem-escopo) Rede de segurança final: simula corte prematuro e texto desestruturado sem seção Dados Gerais nem pipes', () => {
@@ -1331,6 +1349,7 @@ Uso Interno da Cia
       expect(res.condutorPrincipal.nome).toBe('PAULA GABRIELA DE MORAIS NEGREIROS')
       expect(res.condutorPrincipal.nome).not.toBe('Azul Tradicional')
       expect(res.condutorPrincipal.cpf).toBe('08818123408')
+      expect(res.condutorPrincipal.dataNascimento).toBe('1996-10-15')
       expect(res.condutorPrincipal.mesmoQueSegurado).toBe(false)
 
       // 5. Veículo

@@ -68,6 +68,19 @@ export const TERMOS_NEGATIVOS_ENDERECO = [
   'custos de defesa',
   'tipo de uso',
   'particular',
+  'orçamento',
+  'orcamento',
+  'versão',
+  'versao',
+  'oferta',
+  'proposta',
+  'apólice',
+  'apolice',
+  'status',
+  'vigência',
+  'vigencia',
+  '24h',
+  'das 24h',
 ]
 
 export function contemTermoNegativoEndereco(str?: string | null): boolean {
@@ -500,8 +513,11 @@ function extrairVigencias(text: string): { inicio: string; fim: string } {
   let inicio = ''
   let fim = ''
 
-  // Padrão: "Vigência: de 24/09/2026 até 24/09/2027" ou "às 24:00 de ..."
+  // 1. Padrão com rótulo "Vigência" colado ou próximo
   const vigMatch =
+    /(?:vig[êe]ncia[*\s|:]+)?(?:das?\s+[0-9]{1,2}h(?:[0-9]{2})?\s+do?\s+dia\s+)(\d{1,2}[/.-]\d{1,2}[/.-]\d{4})(?:\s+at[ée]\s+(?:as?\s+[0-9]{1,2}h(?:[0-9]{2})?\s+do?\s+dia\s+)?|\s+[aà]\s+|\s+ao?\s+dia\s+)(\d{1,2}[/.-]\d{1,2}[/.-]\d{4})/i.exec(
+      text,
+    ) ||
     /vig[êe]ncia[:\s]+(?:das?\s+[0-9]{1,2}h(?:[0-9]{2})?\s+do?\s+dia\s+)?(\d{1,2}[/.-]\d{1,2}[/.-]\d{4})(?:\s+at[ée]|\s+[aà]\s+|\s+ao?\s+dia\s+)(?:das?\s+[0-9]{1,2}h(?:[0-9]{2})?\s+do?\s+dia\s+)?(\d{1,2}[/.-]\d{1,2}[/.-]\d{4})/i.exec(
       text,
     )
@@ -510,6 +526,18 @@ function extrairVigencias(text: string): { inicio: string; fim: string } {
     inicio = parseDataFlexivel(vigMatch[1])
     fim = parseDataFlexivel(vigMatch[2])
   } else {
+    // 2. Padrão tolerante a "Das 24h do dia X até as 24h do dia Y" mesmo sem rótulo colado
+    const das24hMatch =
+      /das?\s+24h(?:\s*00)?\s+do\s+dia\s+(\d{1,2}[/.-]\d{1,2}[/.-]\d{4})\s+at[ée]\s+as?\s+24h(?:\s*00)?\s+do\s+dia\s+(\d{1,2}[/.-]\d{1,2}[/.-]\d{4})/i.exec(
+        text,
+      )
+    if (das24hMatch) {
+      inicio = parseDataFlexivel(das24hMatch[1])
+      fim = parseDataFlexivel(das24hMatch[2])
+    }
+  }
+
+  if (!inicio || !fim) {
     // Procura por "Início de vigência" e "Fim de vigência"
     const iniMatch =
       /(?:in[íi]cio\s+da?\s+vig[êe]ncia|vig[êe]ncia\s+in[íi]cio)[:\s]+(\d{1,2}[/.-]\d{1,2}[/.-]\d{4})/i.exec(
@@ -809,30 +837,68 @@ function extrairVeiculo(text: string): PropostaVeiculoExtraido {
     }
   }
 
+  // Termos inválidos para marca/modelo (fotos, inspeção, picasa, etc.)
+  const isModeloValido = (m: string): boolean => {
+    if (!m || m.length < 3 || m.length > 80) return false
+    if (isTextoCabecalhoOuInvalido(m)) return false
+    const lower = m.toLowerCase()
+    if (
+      lower.includes('picasa') ||
+      lower.includes('inspeção') ||
+      lower.includes('inspecao') ||
+      lower.includes('vistoria') ||
+      lower.includes('foto') ||
+      lower.includes('fotografia') ||
+      lower.includes('camera') ||
+      lower.includes('câmera')
+    ) {
+      return false
+    }
+    return true
+  }
+
   // Marca / Modelo:
-  // 1. Caso Azul Seguros: "6140 - - NOVO ONIX HATCH LT 1.0 12V FLEX" ou "Veículo / 6140 - - NOVO ONIX..."
-  const azulVeicMatch =
-    /(?:ve[íi]culo[*\s|:/]+)?(?:\d{3,5}\s*-\s*-?\s*)?([A-Z0-9\s.\-/+]{6,60}?\b(?:ONIX|GOL|POLO|COROLLA|CIVIC|COMPASS|RENEGADE|CRETA|TRACKER|HB20|ARGO|MOBI|T-CROSS|NIVUS|KICKS|DUSTER|KWID|STRADA|TORO|HILUX|S10|RANGER|FIESTA|FOCUS|CRUZE|FIT|CITY|HR-V|WR-V|YARIS|ETIOS|SANDERO|LOGAN|CLIO|208|2008|C3|C4|TAOS|TIGUAN|SW4|BMW|AUDI|MERCEDES)[A-Z0-9\s.\-/+]*?)(?=(?:\s*[|*]?\s*(?:ve[íi]culo|produto|ano|placa|chassi|c[oó]d|vers[ãa]o|fipe)|\n|\||$))/i.exec(
+  // 1. Prioridade máxima: Linha com código numérico Porto/Azul (\d{3,5}\s*-\s*-?\s*...)
+  const azulCodigoMatch =
+    /(?:^|[|\n\s])(?:\d{3,5}\s*-\s*-?\s*)([A-Z0-9\s.\-/+]{4,70})(?=(?:\s*[|*]?\s*(?:ve[íi]culo|produto|ano|placa|chassi|c[oó]d|vers[ãa]o|fipe)|\n|\||$))/i.exec(
       text,
     )
-
-  if (azulVeicMatch) {
-    let clean = sanitizarTextoExtraido(azulVeicMatch[1])
-    clean = clean.replace(/^\d{3,5}\s*-\s*-?\s*/, '').trim()
-    if (clean.length > 3 && clean.length < 80 && !isTextoCabecalhoOuInvalido(clean)) {
+  if (azulCodigoMatch) {
+    const clean = sanitizarTextoExtraido(azulCodigoMatch[1])
+      .replace(/^\d{3,5}\s*-\s*-?\s*/, '')
+      .trim()
+    if (isModeloValido(clean)) {
       marcaModelo = clean
     }
   }
 
-  // Fallback padrão Marca / Modelo
+  // 2. Caso Marca/Modelo conhecido (ONIX, GOL, POLO, etc.)
+  if (!marcaModelo) {
+    const azulVeicMatch =
+      /(?:ve[íi]culo[*\s|:/]+)?(?:\d{3,5}\s*-\s*-?\s*)?([A-Z0-9\s.\-/+]{4,60}?\b(?:ONIX|GOL|POLO|COROLLA|CIVIC|COMPASS|RENEGADE|CRETA|TRACKER|HB20|ARGO|MOBI|T-CROSS|NIVUS|KICKS|DUSTER|KWID|STRADA|TORO|HILUX|S10|RANGER|FIESTA|FOCUS|CRUZE|FIT|CITY|HR-V|WR-V|YARIS|ETIOS|SANDERO|LOGAN|CLIO|208|2008|C3|C4|TAOS|TIGUAN|SW4|BMW|AUDI|MERCEDES)[A-Z0-9\s.\-/+]*?)(?=(?:\s*[|*]?\s*(?:ve[íi]culo|produto|ano|placa|chassi|c[oó]d|vers[ãa]o|fipe)|\n|\||$))/i.exec(
+        text,
+      )
+
+    if (azulVeicMatch) {
+      let clean = sanitizarTextoExtraido(azulVeicMatch[1])
+      clean = clean.replace(/^\d{3,5}\s*-\s*-?\s*/, '').trim()
+      if (isModeloValido(clean)) {
+        marcaModelo = clean
+      }
+    }
+  }
+
+  // 3. Fallback padrão Marca / Modelo
   if (!marcaModelo) {
     const modMatch =
       /(?:ve[íi]culo|modelo|marca\/modelo)[*\s|:]+([A-Za-z0-9\s.\-/+]+?)(?=(?:\s*[|*]?\s*(?:produto|ano|placa|chassi|c[oó]d|vers[ãa]o|fipe)|\n|\||$))/i.exec(
         text,
       )
     if (modMatch) {
-      const rawMod = sanitizarTextoExtraido(modMatch[1]).replace(/^\d{3,5}\s*-\s*-?\s*/, '')
-      if (rawMod.length > 3 && rawMod.length < 80 && !isTextoCabecalhoOuInvalido(rawMod)) {
+      const rawMod = sanitizarTextoExtraido(modMatch[1])
+        .replace(/^\d{3,5}\s*-\s*-?\s*/, '')
+        .trim()
+      if (isModeloValido(rawMod)) {
         marcaModelo = rawMod
       }
     }
@@ -1030,10 +1096,10 @@ function extrairSegurado(
         }
 
         if (vals.length >= 2) {
-          const candNome = sanitizarTextoExtraido(vals[0])
-          if (isNomePessoaValido(candNome)) {
-            if (!nome) nome = candNome
-          }
+          // Identificar qual linha é a data de nascimento e qual é o CPF
+          let foundDate = ''
+          let foundCpf = ''
+          let foundNomeCand = ''
 
           // Se vals[1] contiver Data e CPF combinados ("02/08/1990 057.365.924-95")
           const combinedMatch =
@@ -1041,27 +1107,31 @@ function extrairSegurado(
               vals[1],
             )
           if (combinedMatch) {
-            if (!dataNasc) dataNasc = parseDataFlexivel(combinedMatch[1])
-            const candCpfClean = combinedMatch[2].replace(/\D/g, '')
-            if (candCpfClean.length === 11 && isValidCpf(candCpfClean)) {
-              if (!cpfCnpj) {
-                cpfCnpj = candCpfClean
-                tipoPessoa = 'PF'
-              }
-            }
+            foundDate = parseDataFlexivel(combinedMatch[1])
+            foundCpf = combinedMatch[2].replace(/\D/g, '')
+            foundNomeCand = sanitizarTextoExtraido(vals[0])
           } else if (vals.length >= 3) {
-            const candData = parseDataFlexivel(vals[1])
-            const candCpfClean = vals[2].replace(/\D/g, '')
-
-            if (candData && !dataNasc) {
-              dataNasc = candData
+            const dMatch = /(\d{1,2}[/.-]\d{1,2}[/.-]\d{4})/.exec(vals[1])
+            const cMatch = /([0-9]{3}\.[0-9]{3}\.[0-9]{3}-[0-9]{2})/.exec(vals[2])
+            if (dMatch && cMatch) {
+              foundDate = parseDataFlexivel(dMatch[1])
+              foundCpf = cMatch[1].replace(/\D/g, '')
+              foundNomeCand = sanitizarTextoExtraido(vals[0])
             }
+          }
 
-            if (candCpfClean.length === 11 && isValidCpf(candCpfClean)) {
-              if (!cpfCnpj) {
-                cpfCnpj = candCpfClean
-                tipoPessoa = 'PF'
-              }
+          // Se encontramos o par data + CPF, associamos imediatamente o nome que antecede esse par
+          if (foundCpf && isValidCpf(foundCpf)) {
+            cpfCnpj = foundCpf
+            tipoPessoa = 'PF'
+            if (foundDate) dataNasc = foundDate
+            if (foundNomeCand && isNomePessoaValido(foundNomeCand)) {
+              nome = foundNomeCand
+            }
+          } else {
+            const candNome = sanitizarTextoExtraido(vals[0])
+            if (isNomePessoaValido(candNome)) {
+              if (!nome) nome = candNome
             }
           }
           if (nome && dataNasc && cpfCnpj) return
@@ -1818,7 +1888,7 @@ function extrairSegurado(
           // 5ª valor = Bairro ("Jardim Oceania")
           // 6ª valor = Cidade ("João Pessoa")
           const valoresPost = lines
-            .slice(idxCidade + 1, idxCidade + 10)
+            .slice(idxCidade + 1, idxCidade + 12)
             .filter(
               (v) =>
                 !/^\|?(\s*[-:]+\s*\|?)+$/.test(v) && (!isTextoCabecalhoOuInvalido(v) || v === '-'),
@@ -1835,24 +1905,24 @@ function extrairSegurado(
             const valBairro = valoresPost[offsetVal + 3]
             const valCidade = valoresPost[offsetVal + 4]
 
-            if (valRua && valRua !== '-' && !rua) {
+            if (valRua && valRua !== '-' && !contemTermoNegativoEndereco(valRua)) {
               const pedacos = valRua.split(',').map((p) => p.trim())
               rua = pedacos[0] || valRua
-              if (pedacos.length >= 2 && !numero) {
+              if (pedacos.length >= 2) {
                 numero = pedacos.slice(1).join(', ')
               }
             }
-            if (valCep && /^\d{5}-?\d{3}$/.test(valCep.trim()) && !cep) {
+            if (valCep && /^\d{5}-?\d{3}$/.test(valCep.trim())) {
               const cClean = valCep.replace(/\D/g, '')
               cep = `${cClean.slice(0, 5)}-${cClean.slice(5)}`
             }
-            if (valUf && /^[A-Za-z]{2}$/.test(valUf.trim()) && !estado) {
+            if (valUf && /^[A-Za-z]{2}$/.test(valUf.trim())) {
               estado = valUf.trim().toUpperCase()
             }
-            if (valBairro && valBairro !== '-' && !bairro) {
+            if (valBairro && valBairro !== '-' && !contemTermoNegativoEndereco(valBairro)) {
               bairro = sanitizarTextoExtraido(valBairro)
             }
-            if (valCidade && valCidade !== '-' && !cidade) {
+            if (valCidade && valCidade !== '-' && !contemTermoNegativoEndereco(valCidade)) {
               cidade = sanitizarTextoExtraido(valCidade)
             }
 
@@ -1861,28 +1931,31 @@ function extrairSegurado(
         }
       }
     }
-
     // 2. Detecção resiliente baseada no CEP e UF no fluxo de linhas:
-    // R Doralice de Almeida Lyra, 55
-    // -
-    // 58037-335
-    // PB
-    // Jardim Oceania
-    // João Pessoa
+    // A ocorrência só é válida se o bloco circundante contiver os rótulos reais de endereço residencial
+    // (Endereço residencial/Complemento/Bairro/Cidade/UF) e NÃO contiver termos negativos
     for (let j = 0; j < lines.length - 1; j++) {
       const lineCep = lines[j].trim()
       const cepMatch = /(?:^|\b)([0-9]{5}-[0-9]{3})\b/.exec(lineCep)
       if (cepMatch) {
-        // Verificar se a vizinhança (-4 a +4 linhas) contém termos negativos de coberturas/pernoite/corretora
-        const startViz = Math.max(0, j - 4)
-        const endViz = Math.min(lines.length - 1, j + 4)
+        // Verificar se a vizinhança (-8 a +8 linhas) contém rótulos de endereço residencial
+        const startViz = Math.max(0, j - 8)
+        const endViz = Math.min(lines.length - 1, j + 8)
         const vizinhança = lines.slice(startViz, endViz + 1).join(' ')
         if (contemTermoNegativoEndereco(vizinhança)) {
-          // Pular ocorrência espúria de CEP vinculada a coberturas/pernoite/corretor
+          // Pular ocorrência espúria de CEP vinculada a coberturas/pernoite/corretor/vigência
           continue
         }
 
-        // Encontrou CEP válido! Procurar UF nas próximas 3 linhas
+        // Deve conter indicativo real de endereço residencial no bloco
+        const temRotuloEndereco = /endere[çc]o\s+residencial|endere[çc]o|bairro|cidade/i.test(
+          vizinhança,
+        )
+        if (!temRotuloEndereco) {
+          continue
+        }
+
+        // Encontrou CEP em contexto legítimo de endereço! Procurar UF nas próximas 3 linhas
         let ufFound = ''
         let idxUfFound = -1
         for (let u = j + 1; u <= Math.min(lines.length - 1, j + 3); u++) {
@@ -2245,11 +2318,9 @@ function extrairSegurado(
   // FALLBACK GLOBAL RESILIENTE ANCORADO NO CEP (Rede de segurança final)
   // Localizar o CEP (\d{5}-\d{3}) no texto útil e, a partir dele, capturar:
   // - Rejeitar qualquer ocorrência de CEP cujo contexto contenha termos negativos:
-  //   pernoite, dispositivos, antifurto, anti-roubo, compreensiva, corretor, susep, líder, etc.
-  // - Preferir a ocorrência cujo entorno contém logradouro real
-  //   (linha começando com "R ", "RUA ", "AV ", "AVENIDA ", "TRAVESSA ", "ALAMEDA ")
-  //   e UF válida de 2 letras próxima.
-  // - Separar rua e número pela vírgula: "R Doralice de Almeida Lyra, 55" → rua "R Doralice de Almeida Lyra", numero "55".
+  //   pernoite, coberturas, assistência, cotação, orçamento, vigência, etc.
+  // - A ocorrência do CEP só vale se o bloco contiver os rótulos reais de endereço residencial:
+  //   (Endereço residencial/Complemento/Bairro/Cidade/UF)
   // =========================================================================
   if (!cep || !rua || !cidade || !estado || !bairro) {
     const normalizarRotulo = (s: string) =>
@@ -2265,6 +2336,7 @@ function extrairSegurado(
       lineIndex: number
       cep: string
       temTermoNegativo: boolean
+      temRotulosEndereco: boolean
       score: number
       uf: string
       ufIndex: number
@@ -2282,13 +2354,16 @@ function extrairSegurado(
       if (cepMatch) {
         const foundCep = cepMatch[1]
 
-        // Analisar contexto em janela de linhas vizinhas (-5 a +5 linhas)
-        const startViz = Math.max(0, j - 5)
-        const endViz = Math.min(lines.length - 1, j + 5)
+        // Analisar contexto em janela de linhas vizinhas (-8 a +8 linhas)
+        const startViz = Math.max(0, j - 8)
+        const endViz = Math.min(lines.length - 1, j + 8)
         const janelaViz = lines.slice(startViz, endViz + 1).join(' ')
         const temNegativo = contemTermoNegativoEndereco(janelaViz)
+        const temRotulos = /endere[çc]o\s+residencial|endere[çc]o|bairro|cidade/i.test(janelaViz)
 
         let score = temNegativo ? -100 : 0
+        if (temRotulos) score += 30
+
         let ufFound = ''
         let ufIndex = -1
 
@@ -2396,7 +2471,6 @@ function extrairSegurado(
               // Tentar extrair número no final "Rua Tal 55"
               const numFinalMatch = /\s+(\d+[A-Za-z0-9\s/]*)$/.exec(candRua)
               if (numFinalMatch && !/^\d{4}$/.test(numFinalMatch[1])) {
-                // não é ano
                 candNumero = numFinalMatch[1].trim()
                 candRua = candRua.substring(0, numFinalMatch.index).trim()
                 score += 10
@@ -2410,6 +2484,7 @@ function extrairSegurado(
           lineIndex: j,
           cep: foundCep,
           temTermoNegativo: temNegativo,
+          temRotulosEndereco: temRotulos,
           score,
           uf: ufFound,
           ufIndex,
@@ -2421,12 +2496,14 @@ function extrairSegurado(
       }
     }
 
-    // Filtrar candidatos que não tenham termos negativos e ordenar pelo maior score
+    // Filtrar candidatos que não tenham termos negativos e que possuam rótulos reais de endereço residencial
     const validos = candidatosCep
-      .filter((c) => !c.temTermoNegativo)
+      .filter((c) => !c.temTermoNegativo && c.temRotulosEndereco)
       .sort((a, b) => b.score - a.score)
 
-    const melhorCandidato = validos[0] || candidatosCep.sort((a, b) => b.score - a.score)[0]
+    const melhorCandidato =
+      validos[0] ||
+      candidatosCep.filter((c) => !c.temTermoNegativo).sort((a, b) => b.score - a.score)[0]
 
     if (melhorCandidato) {
       if (!cep) cep = melhorCandidato.cep
@@ -2526,6 +2603,22 @@ function extrairCondutor(
         )
       if (nascCondMatch) {
         dataNasc = parseDataFlexivel(nascCondMatch[1])
+      }
+    }
+
+    // Procurar data de nascimento isolada caso ainda não capturada
+    if (!dataNasc) {
+      const linesQuest = questSec.split(/\r?\n/)
+      for (const lq of linesQuest) {
+        const dM = /^\s*(\d{1,2}[/.-]\d{1,2}[/.-]\d{4})\s*$/.exec(lq)
+        if (dM) {
+          const parsed = parseDataFlexivel(dM[1])
+          const y = parseInt(parsed.split('-')[0], 10)
+          if (y > 1920 && y < new Date().getFullYear() - 15) {
+            dataNasc = parsed
+            break
+          }
+        }
       }
     }
   }
