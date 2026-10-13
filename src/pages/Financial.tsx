@@ -2630,6 +2630,7 @@ export default function Financial() {
                 <th className="p-3">Parceiro</th>
                 <th className="p-3 text-right">Líquido</th>
                 <th className="p-3 text-right">Repasse (R$)</th>
+                <th className="p-3 text-right">Repasse (%)</th>
                 <th className="p-3 text-center">Pago</th>
                 <th className="p-3">Data Pagto</th>
                 <th className="p-3">Forma</th>
@@ -2639,65 +2640,83 @@ export default function Financial() {
             <tbody className="divide-y divide-slate-100">
               {metrics.partnerPols.length === 0 ? (
                 <tr>
-                  <td colSpan={9} className="text-center p-6 text-slate-500">
+                  <td colSpan={10} className="text-center p-6 text-slate-500">
                     Nenhuma proposta/apólice de parceiro encontrada.
                   </td>
                 </tr>
               ) : (
-                paginatedPartnerPols.map((p) => (
-                  <tr key={p.id} className="hover:bg-slate-50/80">
-                    <td
-                      className="p-3 font-bold text-slate-900"
-                      title={p.policy_number ? `Apólice: ${p.policy_number}` : undefined}
-                    >
-                      <div className="flex flex-col">
-                        <span>{p.numero_proposta || p.policy_number || '-'}</span>
-                        {p.policy_number &&
-                          p.numero_proposta &&
-                          p.policy_number !== p.numero_proposta && (
-                            <span className="text-[10px] text-slate-400 font-normal">
-                              Apólice: {p.policy_number}
-                            </span>
+                paginatedPartnerPols.map((p) => {
+                  const valorLiquido = Number(p.valor_liquido || p.premium_amount || 0)
+                  const valorRepasse = Number(p.valor_repasse || 0)
+                  const pctGravado =
+                    p.percentual_repasse != null && Number(p.percentual_repasse) > 0
+                      ? Number(p.percentual_repasse)
+                      : null
+                  const pctCalculado =
+                    pctGravado != null
+                      ? pctGravado
+                      : valorLiquido > 0 && valorRepasse > 0
+                        ? Math.round((valorRepasse / valorLiquido) * 100 * 10) / 10
+                        : null
+
+                  return (
+                    <tr key={p.id} className="hover:bg-slate-50/80">
+                      <td
+                        className="p-3 font-bold text-slate-900"
+                        title={p.policy_number ? `Apólice: ${p.policy_number}` : undefined}
+                      >
+                        <div className="flex flex-col">
+                          <span>{p.numero_proposta || p.policy_number || '-'}</span>
+                          {p.policy_number &&
+                            p.numero_proposta &&
+                            p.policy_number !== p.numero_proposta && (
+                              <span className="text-[10px] text-slate-400 font-normal">
+                                Apólice: {p.policy_number}
+                              </span>
+                            )}
+                        </div>
+                      </td>{' '}
+                      <td className="p-3">{p.expand?.client?.name || '-'}</td>
+                      <td className="p-3">{p.expand?.parceiro?.nome || '-'}</td>
+                      <td className="p-3 text-right font-bold">R$ {fmtMoney(valorLiquido)}</td>
+                      <td className="p-3 text-right font-bold text-blue-600">
+                        R$ {fmtMoney(valorRepasse)}
+                      </td>
+                      <td className="p-3 text-right font-medium text-slate-700 whitespace-nowrap">
+                        {pctCalculado != null ? `${fmtPercent(pctCalculado)}%` : '—'}
+                      </td>
+                      <td className="p-3 text-center">
+                        <Badge className={p.pago_parceiro ? 'bg-emerald-500' : 'bg-amber-500'}>
+                          {p.pago_parceiro ? 'Pago' : 'Pendente'}
+                        </Badge>
+                      </td>
+                      <td className="p-3 text-xs">
+                        {formatDateDisplay(p.data_pagamento_parceiro)}
+                      </td>
+                      <td className="p-3 text-xs">{p.forma_pagamento_repasse || '-'}</td>
+                      <td className="p-3 text-right">
+                        <div className="flex items-center justify-end gap-1">
+                          {can('policies', 'update') && !p.pago_parceiro && (
+                            <Button
+                              size="sm"
+                              variant="ghost"
+                              className="text-emerald-600"
+                              title="Pagar Repasse"
+                              onClick={() => handleQuickPayRepasse(p.id)}
+                            >
+                              <Check className="w-4 h-4" />
+                            </Button>
                           )}
-                      </div>
-                    </td>{' '}
-                    <td className="p-3">{p.expand?.client?.name || '-'}</td>
-                    <td className="p-3">{p.expand?.parceiro?.nome || '-'}</td>
-                    <td className="p-3 text-right font-bold">
-                      R$ {fmtMoney(p.valor_liquido || p.premium_amount || 0)}
-                    </td>
-                    <td className="p-3 text-right font-bold text-blue-600">
-                      R$ {fmtMoney(p.valor_repasse || 0)}
-                    </td>
-                    <td className="p-3 text-center">
-                      <Badge className={p.pago_parceiro ? 'bg-emerald-500' : 'bg-amber-500'}>
-                        {p.pago_parceiro ? 'Pago' : 'Pendente'}
-                      </Badge>
-                    </td>
-                    <td className="p-3 text-xs">{formatDateDisplay(p.data_pagamento_parceiro)}</td>
-                    <td className="p-3 text-xs">{p.forma_pagamento_repasse || '-'}</td>
-                    <td className="p-3 text-right">
-                      <div className="flex items-center justify-end gap-1">
-                        {can('policies', 'update') && !p.pago_parceiro && (
-                          <Button
-                            size="sm"
-                            variant="ghost"
-                            className="text-emerald-600"
-                            title="Pagar Repasse"
-                            onClick={() => handleQuickPayRepasse(p.id)}
-                          >
-                            <Check className="w-4 h-4" />
-                          </Button>
-                        )}
-                        {can('policies', 'update') && (
-                          <Button size="sm" variant="ghost" onClick={() => setEditPolicy(p)}>
-                            <Edit2 className="w-3.5 h-3.5" />
-                          </Button>
-                        )}
-                      </div>
-                    </td>
-                  </tr>
-                ))
+                          {can('policies', 'update') && (
+                            <Button size="sm" variant="ghost" onClick={() => setEditPolicy(p)}>
+                              <Edit2 className="w-3.5 h-3.5" />
+                            </Button>
+                          )}
+                        </div>
+                      </td>
+                    </tr>
+                  )
+                })
               )}
             </tbody>
           </table>
