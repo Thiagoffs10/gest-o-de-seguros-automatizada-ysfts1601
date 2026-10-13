@@ -238,6 +238,28 @@ export function computeTotalNet(policies: Policy[]): number {
   )
 }
 
+/**
+ * Comissão média ponderada trabalhada no conjunto de apólices:
+ * (Soma das comissões previstas ÷ Soma dos prêmios líquidos) × 100.
+ * Retorna null se a soma dos prêmios líquidos for <= 0 ou se não houver apólices.
+ */
+export function computeAverageCommissionPercent(
+  policies: Policy[],
+  expectedCommissionTotal?: number,
+): number | null {
+  if (!policies || policies.length === 0) return null
+  const totalNet = computeTotalNet(policies)
+  if (totalNet <= 0) return null
+
+  const totalComm =
+    expectedCommissionTotal !== undefined
+      ? expectedCommissionTotal
+      : policies.reduce((s, p) => s + calcNetCommission(p), 0)
+
+  if (totalComm <= 0) return 0
+  return Math.round((totalComm / totalNet) * 100 * 10) / 10
+}
+
 export function getPartnerPolicies(policies: Policy[]): Policy[] {
   return policies.filter(
     (p) =>

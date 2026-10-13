@@ -18,6 +18,10 @@ export interface ConciliacaoReportData {
   pendencias: string[]
   dataFechamento?: string
   usuarioFechamento?: string
+  // Novos campos do fechamento de conciliação:
+  totalVendidoBruto?: number
+  totalVendidoLiquido?: number
+  comissaoMedia?: number | null
   policies?: {
     clienteNome: string
     seguradoraNome: string
@@ -25,6 +29,7 @@ export interface ConciliacaoReportData {
     tipoSeguro: string
     numeroApolice: string
     valorLiquido: number
+    valorBruto?: number
     comissaoPrevista: number
     comissaoRecebida: number
     statusComissao: 'Recebida' | 'Pendente'
@@ -54,6 +59,11 @@ export function generateConciliacaoPDF(data: ConciliacaoReportData) {
 
   const fmt = (v: number) =>
     v.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })
+
+  const fmtPct = (v: number | null | undefined) =>
+    v != null
+      ? `${v.toLocaleString('pt-BR', { minimumFractionDigits: 1, maximumFractionDigits: 1 })}%`
+      : '—'
 
   const mesNome = MONTH_NAMES[data.mes - 1] || ''
   const pendenciasHtml =
@@ -157,7 +167,26 @@ table.data-table tr:nth-child(even){background:#f8fafc}
 
 <div class="section">
   <div class="section-title">Resumo Financeiro da Conciliação</div>
-  <div class="cards-grid">
+  <div class="cards-grid" style="grid-template-columns: repeat(4, 1fr);">
+    <div class="card">
+      <div class="card-label">Total Vendido Bruto</div>
+      <div class="card-value blue">${data.totalVendidoBruto != null ? `R$ ${fmt(data.totalVendidoBruto)}` : '—'}</div>
+    </div>
+    <div class="card">
+      <div class="card-label">Total Vendido Líquido</div>
+      <div class="card-value blue">${data.totalVendidoLiquido != null ? `R$ ${fmt(data.totalVendidoLiquido)}` : '—'}</div>
+    </div>
+    <div class="card">
+      <div class="card-label">Comissão Média Trabalhada</div>
+      <div class="card-value green">${fmtPct(data.comissaoMedia)}</div>
+    </div>
+    <div class="card">
+      <div class="card-label">Total de Apólices</div>
+      <div class="card-value">${data.totalApolices}</div>
+    </div>
+  </div>
+
+  <div class="cards-grid" style="grid-template-columns: repeat(3, 1fr); margin-top: 10px;">
     <div class="card">
       <div class="card-label">Comissões Previstas</div>
       <div class="card-value">R$ ${fmt(data.comissaoPrevista)}</div>
@@ -170,15 +199,23 @@ table.data-table tr:nth-child(even){background:#f8fafc}
       <div class="card-label">Comissões Pendentes</div>
       <div class="card-value ${data.comissaoPendente > 0 ? 'amber' : ''}">R$ ${fmt(data.comissaoPendente)}</div>
     </div>
-    <div class="card">
-      <div class="card-label">Total de Apólices</div>
-      <div class="card-value">${data.totalApolices}</div>
-    </div>
   </div>
 
   <div class="summary-box">
     <table class="summary-table">
       <tbody>
+        <tr>
+          <td class="label">Total Vendido Bruto (Prêmio Total c/ IOF):</td>
+          <td class="val">${data.totalVendidoBruto != null ? `R$ ${fmt(data.totalVendidoBruto)}` : '—'}</td>
+        </tr>
+        <tr>
+          <td class="label">Total Vendido Líquido (Prêmio Líquido):</td>
+          <td class="val">${data.totalVendidoLiquido != null ? `R$ ${fmt(data.totalVendidoLiquido)}` : '—'}</td>
+        </tr>
+        <tr>
+          <td class="label">Comissão Média Trabalhada no Mês:</td>
+          <td class="val" style="color:#16a34a">${fmtPct(data.comissaoMedia)}</td>
+        </tr>
         <tr>
           <td class="label">Total Comissões Previstas:</td>
           <td class="val">R$ ${fmt(data.comissaoPrevista)}</td>

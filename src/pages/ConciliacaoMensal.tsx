@@ -53,6 +53,9 @@ import {
   computeExpectedCommissions,
   computeExpectedRepasses,
   computeCosts,
+  computeTotalGross,
+  computeTotalNet,
+  computeAverageCommissionPercent,
 } from '@/lib/financial-calcs'
 import { generateConciliacaoPDF } from '@/lib/conciliacao-pdf'
 
@@ -146,6 +149,11 @@ export default function ConciliacaoMensal() {
   const m = useMemo(() => {
     // Produção do mês selecionado (início da vigência no período)
     const periodPolicies = policies.filter((p) => isDateInPeriod(period, p.start_date))
+
+    // Totais de Vendas da Produção do Mês (Auditoria: batem exatamente com as apólices listadas)
+    const totalVendidoBruto = computeTotalGross(periodPolicies)
+    const totalVendidoLiquido = computeTotalNet(periodPolicies)
+
     // Comissão prevista de produção do período + previsões de endosso ativas na competência do período
     let expectedComm = computeExpectedCommissions(policies, period)
     for (const prev of comissoesPrevistas) {
@@ -278,6 +286,9 @@ export default function ConciliacaoMensal() {
     const lucroPrevisto = expectedComm - expectedRepasses - totalCustos
     const lucroReal = receivedComm - paidRepasses - paidCustos
 
+    // Comissão média trabalhada naquele mês (média ponderada pelo prêmio líquido: total comissões previstas ÷ total líquido × 100)
+    const comissaoMedia = computeAverageCommissionPercent(periodPolicies, expectedComm)
+
     // PENDÊNCIAS QUE DISPARAM ALERTA E POP-UP:
     // Apenas comissões VENCIDAS sem baixa geram pendência e alerta no fechamento!
     // Comissões futuras são fluxo normal e NÃO disparam pop-up.
@@ -303,6 +314,9 @@ export default function ConciliacaoMensal() {
     return {
       totalApolices: periodPolicies.length,
       periodPolicies,
+      totalVendidoBruto,
+      totalVendidoLiquido,
+      comissaoMedia,
       expectedComm,
       receivedComm,
       pendingComm,
@@ -595,6 +609,7 @@ export default function ConciliacaoMensal() {
         tipoSeguro: p.tipo_de_seguro || p.coverage_type || '-',
         numeroApolice: `${prefixo}${baseNum}`,
         valorLiquido: p.valor_liquido || p.premium_amount || 0,
+        valorBruto: p.valor_bruto || 0,
         comissaoPrevista,
         comissaoRecebida,
         statusComissao,
@@ -607,6 +622,9 @@ export default function ConciliacaoMensal() {
       mes,
       ano,
       totalApolices: m.totalApolices,
+      totalVendidoBruto: m.totalVendidoBruto,
+      totalVendidoLiquido: m.totalVendidoLiquido,
+      comissaoMedia: m.comissaoMedia,
       comissaoPrevista: m.expectedComm,
       comissaoRecebida: m.receivedComm,
       comissaoPendente: m.pendingComm,
@@ -646,6 +664,9 @@ export default function ConciliacaoMensal() {
       // Resumo numérico consolidado (sem objetos grandes como arrays de apólices)
       const resumoObj = {
         totalApolices: m.totalApolices,
+        totalVendidoBruto: m.totalVendidoBruto,
+        totalVendidoLiquido: m.totalVendidoLiquido,
+        comissaoMedia: m.comissaoMedia,
         expectedComm: m.expectedComm,
         receivedComm: m.receivedComm,
         pendingComm: m.pendingComm,
@@ -755,6 +776,30 @@ export default function ConciliacaoMensal() {
             onClick={() => setDetailModalType('producao')}
           />
           <Row
+            label="Total Vendido Bruto (com IOF)"
+            value={m.totalApolices > 0 ? `R$ ${fmt(m.totalVendidoBruto)}` : '—'}
+            clickable
+            onClick={() => setDetailModalType('producao')}
+          />
+          <Row
+            label="Total Vendido Líquido"
+            value={m.totalApolices > 0 ? `R$ ${fmt(m.totalVendidoLiquido)}` : '—'}
+            clickable
+            onClick={() => setDetailModalType('producao')}
+          />
+          <Row
+            label="Comissão Média Trabalhada"
+            value={
+              m.comissaoMedia != null
+                ? `${m.comissaoMedia.toLocaleString('pt-BR', { minimumFractionDigits: 1, maximumFractionDigits: 1 })}%`
+                : '—'
+            }
+            green={m.comissaoMedia != null && m.comissaoMedia > 0}
+            bold
+            clickable
+            onClick={() => setDetailModalType('producao')}
+          />
+          <Row
             label="Comissão Prevista"
             value={`R$ ${fmt(m.expectedComm)}`}
             clickable
@@ -856,6 +901,32 @@ export default function ConciliacaoMensal() {
       hint: 'Demonstrativo consolidado de fechamento',
       content: (
         <>
+          <div className="mb-2 pb-2 border-b space-y-1">
+            <Row
+              label="Total Vendido Bruto"
+              value={m.totalApolices > 0 ? `R$ ${fmt(m.totalVendidoBruto)}` : '—'}
+              clickable
+              onClick={() => setDetailModalType('producao')}
+            />
+            <Row
+              label="Total Vendido Líquido"
+              value={m.totalApolices > 0 ? `R$ ${fmt(m.totalVendidoLiquido)}` : '—'}
+              clickable
+              onClick={() => setDetailModalType('producao')}
+            />
+            <Row
+              label="Comissão Média Trabalhada"
+              value={
+                m.comissaoMedia != null
+                  ? `${m.comissaoMedia.toLocaleString('pt-BR', { minimumFractionDigits: 1, maximumFractionDigits: 1 })}%`
+                  : '—'
+              }
+              green={m.comissaoMedia != null && m.comissaoMedia > 0}
+              bold
+              clickable
+              onClick={() => setDetailModalType('producao')}
+            />
+          </div>
           <Row
             label="Receita (Comissões Recebidas)"
             value={`R$ ${fmt(m.receivedComm)}`}
@@ -950,22 +1021,62 @@ export default function ConciliacaoMensal() {
       </div>
 
       {isClosed && (
-        <div className="flex items-center justify-between p-3 bg-emerald-50 border border-emerald-200 rounded-lg">
-          <div className="flex items-center gap-2 text-sm text-emerald-800">
-            <Lock className="w-4 h-4" />
-            <span>
-              Mês fechado em{' '}
-              {conciliacao?.data_fechamento
-                ? formatBRDate(conciliacao.data_fechamento.split(' ')[0])
-                : '-'}{' '}
-              por {conciliacao?.usuario_fechamento || '-'}
-            </span>
+        <div className="p-4 bg-emerald-50 border border-emerald-200 rounded-lg space-y-3">
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-2 text-sm text-emerald-900 font-semibold">
+              <Lock className="w-4 h-4 text-emerald-700" />
+              <span>
+                Mês fechado em{' '}
+                {conciliacao?.data_fechamento
+                  ? formatBRDate(conciliacao.data_fechamento.split(' ')[0])
+                  : '-'}{' '}
+                por {conciliacao?.usuario_fechamento || '-'}
+              </span>
+            </div>
+            {isAdmin && (
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={handleReopen}
+                disabled={actionLoading}
+                className="bg-white hover:bg-emerald-100 border-emerald-300 text-emerald-900"
+              >
+                <Unlock className="w-4 h-4 mr-1" /> Reabrir Mês
+              </Button>
+            )}
           </div>
-          {isAdmin && (
-            <Button variant="outline" size="sm" onClick={handleReopen} disabled={actionLoading}>
-              <Unlock className="w-4 h-4 mr-1" /> Reabrir Mês
-            </Button>
-          )}
+
+          {/* Cards de Resumo do Fechamento */}
+          <div className="grid grid-cols-2 sm:grid-cols-4 gap-2.5 pt-1">
+            <div className="bg-white/80 border border-emerald-200 rounded-md p-2.5">
+              <span className="text-[11px] font-medium text-slate-500 block">
+                Total Vendido Bruto
+              </span>
+              <span className="text-sm font-bold text-slate-900">
+                {m.totalApolices > 0 ? `R$ ${fmt(m.totalVendidoBruto)}` : '—'}
+              </span>
+            </div>
+            <div className="bg-white/80 border border-emerald-200 rounded-md p-2.5">
+              <span className="text-[11px] font-medium text-slate-500 block">
+                Total Vendido Líquido
+              </span>
+              <span className="text-sm font-bold text-slate-900">
+                {m.totalApolices > 0 ? `R$ ${fmt(m.totalVendidoLiquido)}` : '—'}
+              </span>
+            </div>
+            <div className="bg-white/80 border border-emerald-200 rounded-md p-2.5">
+              <span className="text-[11px] font-medium text-slate-500 block">Comissão Média</span>
+              <span className="text-sm font-bold text-emerald-700">
+                {m.comissaoMedia != null
+                  ? `${m.comissaoMedia.toLocaleString('pt-BR', { minimumFractionDigits: 1, maximumFractionDigits: 1 })}%`
+                  : '—'}
+              </span>
+            </div>
+            <div className="bg-white/80 border border-emerald-200 rounded-md p-2.5">
+              <span className="text-[11px] font-medium text-slate-500 block">Lucro Real</span>
+              <span className="text-sm font-bold text-blue-700">R$ {fmt(m.lucroReal)}</span>
+            </div>
+          </div>
         </div>
       )}
 
