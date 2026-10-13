@@ -470,6 +470,11 @@ export function parsePropostaTexto(text: string, nomeArquivo: string = ''): Prop
   // Lista de campos faltantes obrigatórios para destaque no formulário
   const camposFaltantes: Array<{ campo: string; label: string; motivo: string }> = []
 
+  // Seguro Condomínio é empresarial/PJ (não exige condutor nem veículo nem birth_date)
+  if (tipoSeguro === 'Condomínio') {
+    // Para Condomínio, nunca exigir condutor nem veículo
+  }
+
   if (!segurado.dataNascimento && segurado.tipoPessoa === 'PF') {
     camposFaltantes.push({
       campo: 'birth_date',

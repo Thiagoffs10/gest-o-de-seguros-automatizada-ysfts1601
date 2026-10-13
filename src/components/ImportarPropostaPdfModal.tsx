@@ -241,7 +241,7 @@ export const ImportarPropostaPdfModal: React.FC<ImportarPropostaPdfModalProps> =
               <Card>
                 <CardContent className="p-3 space-y-1">
                   <div className="font-semibold text-slate-700 flex items-center gap-1">
-                    <UserCheck className="h-3.5 w-3.5" /> Segurado & Condutor
+                    <UserCheck className="h-3.5 w-3.5" /> {conferida.proposta.tipoSeguro === 'Condomínio' ? 'Segurado' : 'Segurado & Condutor'}
                   </div>
                   <div>
                     <span className="text-slate-500">Segurado:</span>{' '}
@@ -253,18 +253,20 @@ export const ImportarPropostaPdfModal: React.FC<ImportarPropostaPdfModalProps> =
                       ? maskDocument(conferida.proposta.segurado.cpfCnpj)
                       : '-'}
                   </div>
-                  <div>
-                    <span className="text-slate-500">Condutor Principal:</span>{' '}
-                    <strong>{conferida.proposta.condutorPrincipal.nome || '-'}</strong>
-                    {!conferida.proposta.condutorPrincipal.mesmoQueSegurado && (
-                      <Badge
-                        variant="outline"
-                        className="ml-1 text-[10px] text-blue-600 border-blue-200"
-                      >
-                        Condutor distinto do segurado
-                      </Badge>
-                    )}
-                  </div>
+                  {conferida.proposta.tipoSeguro !== 'Condomínio' && (
+                    <div>
+                      <span className="text-slate-500">Condutor Principal:</span>{' '}
+                      <strong>{conferida.proposta.condutorPrincipal.nome || '-'}</strong>
+                      {!conferida.proposta.condutorPrincipal.mesmoQueSegurado && (
+                        <Badge
+                          variant="outline"
+                          className="ml-1 text-[10px] text-blue-600 border-blue-200"
+                        >
+                          Condutor distinto do segurado
+                        </Badge>
+                      )}
+                    </div>
+                  )}
                 </CardContent>
               </Card>
 
@@ -299,7 +301,19 @@ export const ImportarPropostaPdfModal: React.FC<ImportarPropostaPdfModalProps> =
                       <span className="text-slate-500">Local de Risco / Endereço:</span>{' '}
                       <strong>
                         {conferida.proposta.segurado.rua
-                          ? `${conferida.proposta.segurado.rua}${conferida.proposta.segurado.numero ? `, ${conferida.proposta.segurado.numero}` : ''} - ${conferida.proposta.segurado.bairro || ''} (${conferida.proposta.segurado.cidade || ''}/${conferida.proposta.segurado.estado || ''})`
+                          ? [
+                              conferida.proposta.segurado.rua +
+                                (conferida.proposta.segurado.numero
+                                  ? `, ${conferida.proposta.segurado.numero}`
+                                  : ''),
+                              conferida.proposta.segurado.bairro,
+                              conferida.proposta.segurado.cep,
+                              conferida.proposta.segurado.cidade && conferida.proposta.segurado.estado
+                                ? `${conferida.proposta.segurado.cidade}/${conferida.proposta.segurado.estado}`
+                                : conferida.proposta.segurado.cidade || conferida.proposta.segurado.estado,
+                            ]
+                              .filter(Boolean)
+                              .join(' - ')
                           : 'Conforme proposta'}
                       </strong>
                     </div>
