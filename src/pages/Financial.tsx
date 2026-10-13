@@ -116,6 +116,9 @@ import {
 const fmtMoney = (v: number) =>
   v.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })
 
+const fmtPercent = (v: number) =>
+  v.toLocaleString('pt-BR', { minimumFractionDigits: 1, maximumFractionDigits: 2 })
+
 export default function Financial() {
   const { toast } = useToast()
   const { can } = usePermissions()
@@ -2088,6 +2091,8 @@ export default function Financial() {
                     <th className="p-3 w-8"></th>
                     <th className="p-3">Apólice / Cliente</th>
                     <th className="p-3">Seguradora</th>
+                    <th className="p-3 text-right">Valor Líquido Seguro</th>
+                    <th className="p-3 text-right">Comissão (%)</th>
                     <th className="p-3 text-right">Comissão Prevista</th>
                     <th className="p-3 text-right">Já Recebido</th>
                     <th className="p-3 text-right">Saldo a Receber</th>
@@ -2098,7 +2103,7 @@ export default function Financial() {
                 <tbody className="divide-y divide-slate-100">
                   {tablePolicies.length === 0 ? (
                     <tr>
-                      <td colSpan={8} className="text-center p-6 text-slate-500">
+                      <td colSpan={10} className="text-center p-6 text-slate-500">
                         Nenhuma apólice encontrada.
                       </td>
                     </tr>
@@ -2188,6 +2193,23 @@ export default function Financial() {
                       const segNome = p.expand?.seguradora?.nome || p.insurance_company || '-'
                       const tipoSeguro = p.tipo_de_seguro || p.coverage_type || '-'
 
+                      // Valor líquido cadastrado do seguro e taxa % cadastrada
+                      const valorLiquidoSeguro =
+                        p.valor_liquido != null && Number(p.valor_liquido) > 0
+                          ? Number(p.valor_liquido)
+                          : p.premium_amount != null && Number(p.premium_amount) > 0
+                            ? Number(p.premium_amount)
+                            : 0
+
+                      const taxaCadastrada =
+                        p.commission_percent != null && Number(p.commission_percent) > 0
+                          ? Number(p.commission_percent)
+                          : valorLiquidoSeguro > 0 && previsto > 0
+                            ? Math.round(
+                                ((previsto + Number(p.iss || 0)) / valorLiquidoSeguro) * 100 * 100,
+                              ) / 100
+                            : 0
+
                       return (
                         <React.Fragment key={p.id}>
                           {/* LINHA PRINCIPAL ESSENCIAL */}
@@ -2235,7 +2257,13 @@ export default function Financial() {
                               </div>
                             </td>
                             <td className="p-3 font-medium text-slate-800">{segNome}</td>
-                            <td className="p-3 text-right font-bold text-slate-900">
+                            <td className="p-3 text-right font-medium text-slate-900 whitespace-nowrap">
+                              {valorLiquidoSeguro > 0 ? `R$ ${fmtMoney(valorLiquidoSeguro)}` : '—'}
+                            </td>
+                            <td className="p-3 text-right font-medium text-slate-700 whitespace-nowrap">
+                              {taxaCadastrada > 0 ? `${fmtPercent(taxaCadastrada)}%` : '—'}
+                            </td>
+                            <td className="p-3 text-right font-bold text-slate-900 whitespace-nowrap">
                               R$ {fmtMoney(previsto)}
                             </td>
                             <td className="p-3 text-right">
@@ -2358,7 +2386,7 @@ export default function Financial() {
                           {/* LINHA EXPANSÍVEL: DETALHAMENTO COMPLETO (PARCELAS, IMPOSTOS, DATAS, PRÊMIO, REPASSE) */}
                           {isExpanded && (
                             <tr className="bg-slate-50/90 border-b border-slate-200">
-                              <td colSpan={8} className="p-4 pl-11">
+                              <td colSpan={10} className="p-4 pl-11">
                                 <div className="space-y-3 text-xs text-slate-700">
                                   {/* Grid de Detalhes Cadastrais e Financeiros */}
                                   <div className="grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-6 gap-3 p-3 bg-white rounded-md border border-slate-200/80">
