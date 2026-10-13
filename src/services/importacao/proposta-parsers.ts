@@ -343,14 +343,67 @@ export function parsePropostaTexto(text: string, nomeArquivo: string = ''): Prop
   const seguradoraNome = nomesMap[formato]
 
   // Extrações comuns por Regex
-  const numeroProposta = extrairNumeroProposta(text, formato)
-  const vigencias = extrairVigencias(text)
-  const premios = extrairPremios(text)
-  const parcelamento = extrairParcelamento(text, formato)
+  let numeroProposta = extrairNumeroProposta(text, formato)
+  let numeroApolice = ''
+  let vigencias = extrairVigencias(text)
+  let premios = extrairPremios(text)
+  let parcelamento = extrairParcelamento(text, formato)
+  let tipoSeguro = extrairTipoSeguro(text)
   let veiculo = extrairVeiculo(text)
   let segurado = extrairSegurado(text, formato)
   let condutor = extrairCondutor(text, segurado.nome, segurado.cpfCnpj)
   let renovacao = extrairRenovacao(text)
+
+  // CASCATA ESPECIALIZADA PARA ALLIANZ CONDOMÍNIO (Layout Novo / Direto)
+  // Acionado quando o texto contém "allianz condomínio" E ("essa é a proposta do seu seguro" OU "suas informações")
+  const tLower = text.toLowerCase()
+  if (tLower.includes('allianz condomínio') || tLower.includes('allianz condominio')) {
+    if (
+      tLower.includes('essa é a proposta do seu seguro') ||
+      tLower.includes('essa e a proposta do seu seguro') ||
+      tLower.includes('suas informações') ||
+      tLower.includes('suas informacoes')
+    ) {
+      const allianzCond = extrairAllianzCondominioCliente(text)
+      if (allianzCond) {
+        tipoSeguro = 'Condomínio'
+        if (allianzCond.numeroProposta) {
+          numeroProposta = allianzCond.numeroProposta
+        }
+        if (allianzCond.numeroApolice) {
+          numeroApolice = allianzCond.numeroApolice
+        }
+        if (allianzCond.vigenciaInicio && allianzCond.vigenciaFim) {
+          vigencias = {
+            inicio: allianzCond.vigenciaInicio,
+            fim: allianzCond.vigenciaFim,
+          }
+        }
+        if (allianzCond.segurado) {
+          segurado = {
+            ...segurado,
+            ...allianzCond.segurado,
+          }
+        }
+        // Condomínio não tem condutor nem veículo
+        condutor = {
+          nome: '',
+          cpf: undefined,
+          dataNascimento: undefined,
+          parentesco: undefined,
+          mesmoQueSegurado: false,
+        }
+        veiculo = {
+          marcaModelo: '',
+          placa: '',
+          chassi: '',
+          codigoFipe: '',
+          anoFabricacao: undefined,
+          anoModelo: undefined,
+        }
+      }
+    }
+  }
 
   // CASCATA ESPECIALIZADA PARA AZUL SEGUROS / PORTO SEGURO (Leitor Inline de grupos em negrito)
   // Ativado quando o markdown real vem com seções em uma única linha com rótulos em negrito emendados
@@ -444,8 +497,6 @@ export function parsePropostaTexto(text: string, nomeArquivo: string = ''): Prop
     })
   }
 
-  const tipoSeguro = extrairTipoSeguro(text)
-
   // Sanitizar todos os campos textuais do segurado
   const seguradoSanitizado: PropostaClienteExtraido = {
     ...segurado,
@@ -494,7 +545,7 @@ export function parsePropostaTexto(text: string, nomeArquivo: string = ''): Prop
     formato,
     seguradoraNome,
     numeroProposta: sanitizarTextoExtraido(numeroProposta),
-    numeroApolice: '', // No momento da proposta fica vazia aguardando emissão
+    numeroApolice: sanitizarTextoExtraido(numeroApolice),
     tipoSeguro,
     vigenciaInicio: vigencias.inicio,
     vigenciaFim: vigencias.fim,
@@ -575,12 +626,12 @@ function extrairVigencias(text: string): { inicio: string; fim: string } {
   let inicio = ''
   let fim = ''
 
-  // 1. Padrão com rótulo "Vigência" colado ou próximo
+  // 1. Padrão com rótulo "Vigência" colado ou próximo (suporta formato Allianz "das 24H de DD/MM/AAAA às 24H de DD/MM/AAAA")
   const vigMatch =
-    /(?:vig[êe]ncia[*\s|:]+)?(?:das?\s+[0-9]{1,2}h(?:[0-9]{2})?\s+do?\s+dia\s+)(\d{1,2}[/.-]\d{1,2}[/.-]\d{4})(?:\s+at[ée]\s+(?:as?\s+[0-9]{1,2}h(?:[0-9]{2})?\s+do?\s+dia\s+)?|\s+[aà]\s+|\s+ao?\s+dia\s+)(\d{1,2}[/.-]\d{1,2}[/.-]\d{4})/i.exec(
+    /(?:vig[êe]ncia[*\s|:]+)?(?:das?\s+[0-9]{1,2}h(?:[0-9]{2})?\s+(?:do?\s+dia\s+|de\s+))(\d{1,2}[/.-]\d{1,2}[/.-]\d{4})(?:\s+at[ée]\s+(?:as?\s+[0-9]{1,2}h(?:[0-9]{2})?\s+(?:do?\s+dia\s+|de\s+))?|\s+[aààs]\s+(?:as?\s+[0-9]{1,2}h(?:[0-9]{2})?\s+(?:do?\s+dia\s+|de\s+))?|\s+ao?\s+dia\s+)(\d{1,2}[/.-]\d{1,2}[/.-]\d{4})/i.exec(
       text,
     ) ||
-    /vig[êe]ncia[:\s]+(?:das?\s+[0-9]{1,2}h(?:[0-9]{2})?\s+do?\s+dia\s+)?(\d{1,2}[/.-]\d{1,2}[/.-]\d{4})(?:\s+at[ée]|\s+[aà]\s+|\s+ao?\s+dia\s+)(?:das?\s+[0-9]{1,2}h(?:[0-9]{2})?\s+do?\s+dia\s+)?(\d{1,2}[/.-]\d{1,2}[/.-]\d{4})/i.exec(
+    /vig[êe]ncia[:\s]+(?:das?\s+[0-9]{1,2}h(?:[0-9]{2})?\s+(?:do?\s+dia\s+|de\s+)?)?(\d{1,2}[/.-]\d{1,2}[/.-]\d{4})(?:\s+at[ée]|\s+[aààs]\s+|\s+ao?\s+dia\s+)(?:das?\s+[0-9]{1,2}h(?:[0-9]{2})?\s+(?:do?\s+dia\s+|de\s+)?)?(\d{1,2}[/.-]\d{1,2}[/.-]\d{4})/i.exec(
       text,
     )
 
@@ -588,9 +639,9 @@ function extrairVigencias(text: string): { inicio: string; fim: string } {
     inicio = parseDataFlexivel(vigMatch[1])
     fim = parseDataFlexivel(vigMatch[2])
   } else {
-    // 2. Padrão tolerante a "Das 24h do dia X até as 24h do dia Y" mesmo sem rótulo colado
+    // 2. Padrão tolerante a "Das 24h do dia/de X até/às as 24h do dia/de Y" mesmo sem rótulo colado
     const das24hMatch =
-      /das?\s+24h(?:\s*00)?\s+do\s+dia\s+(\d{1,2}[/.-]\d{1,2}[/.-]\d{4})\s+at[ée]\s+as?\s+24h(?:\s*00)?\s+do\s+dia\s+(\d{1,2}[/.-]\d{1,2}[/.-]\d{4})/i.exec(
+      /das?\s+24h(?:\s*00)?\s+(?:do\s+dia|de)\s+(\d{1,2}[/.-]\d{1,2}[/.-]\d{4})\s+(?:at[ée]|às|as)\s+as?\s*(?:24h(?:\s*00)?\s+(?:do\s+dia|de)\s+)?(\d{1,2}[/.-]\d{1,2}[/.-]\d{4})/i.exec(
         text,
       )
     if (das24hMatch) {
@@ -2827,6 +2878,212 @@ function extrairRenovacao(text: string): PropostaRenovacaoExtraida {
     apoliceAnterior: apoliceAnt || undefined,
     seguradoraAnterior: seguradoraAnt || undefined,
     classeBonus: classeBonus || undefined,
+  }
+}
+
+// =========================================================================
+// EXTRATOR ESPECIALIZADO: ALLIANZ CONDOMÍNIO (Layout Novo / Direto)
+// =========================================================================
+
+export function extrairAllianzCondominioCliente(text: string): {
+  numeroProposta?: string
+  numeroApolice?: string
+  vigenciaInicio?: string
+  vigenciaFim?: string
+  segurado?: Partial<PropostaClienteExtraido>
+} | null {
+  // 1. Número da Proposta
+  // Ex: "Nº. da Proposta: 141342045" ou "Nº. da Proposta: **141342045**"
+  let numeroProposta: string | undefined
+  const propMatch =
+    /n[ºo.]?\s+da\s+proposta[*\s|:]+([0-9]{6,15})\b/i.exec(text) ||
+    /n[ºo.]?\s+proposta[*\s|:]+([0-9]{6,15})\b/i.exec(text)
+  if (propMatch) {
+    numeroProposta = propMatch[1].trim()
+  }
+
+  // 2. Número da Apólice
+  // Ex: "Nº. da Apólice: 517720262P160080398" ou "Nº. da Apólice: **517720262P160080398**"
+  let numeroApolice: string | undefined
+  const apoliceMatch =
+    /n[ºo.]?\s+da\s+ap[oó]lice[*\s|:]+([A-Za-z0-9]{8,25})\b/i.exec(text) ||
+    /ap[oó]lice[*\s|:]+([A-Za-z0-9]{8,25})\b/i.exec(text)
+  if (apoliceMatch) {
+    const rawApol = apoliceMatch[1].trim()
+    // Evita falsos positivos como palavras genéricas
+    if (/[0-9]/.test(rawApol) && rawApol.length >= 8) {
+      numeroApolice = rawApol
+    }
+  }
+
+  // 3. Vigência
+  // Ex: "Vigência: das 24H de 25/10/2026 às 24H de 25/10/2027"
+  let vigenciaInicio: string | undefined
+  let vigenciaFim: string | undefined
+  const vigMatch =
+    /vig[êe]ncia[*\s|:]+das?\s+[0-9]{1,2}h(?:[0-9]{2})?\s+(?:de|do\s+dia)\s+(\d{1,2}[/.-]\d{1,2}[/.-]\d{4})\s+(?:at[ée]|às|as)\s+[0-9]{1,2}h(?:[0-9]{2})?\s+(?:de|do\s+dia)\s+(\d{1,2}[/.-]\d{1,2}[/.-]\d{4})/i.exec(
+      text,
+    )
+  if (vigMatch) {
+    vigenciaInicio = parseDataFlexivel(vigMatch[1])
+    vigenciaFim = parseDataFlexivel(vigMatch[2])
+  }
+
+  // 4. Seção SUAS INFORMAÇÕES
+  // Isolar de "SUAS INFORMAÇÕES" até "INFORMAÇÕES DO SEGURO" ou "COBERTURAS"
+  const suasInfoMatch =
+    /(?:#+\s*|\*{0,2})SUAS\s+INFORMA[ÇC][ÕO]ES\*{0,2}[\s\S]*?(?=(?:(?:#+\s*|\*{0,2})INFORMA[ÇC][ÕO]ES\s+DO\s+SEGURO|(?:#+\s*|\*{0,2})COBERTURAS|(?:#+\s*|\*{0,2})INFORMA[ÇC][ÕO]ES\s+DE\s+PAGAMENTO|$))/i.exec(
+      text,
+    )
+
+  const sectionText = suasInfoMatch ? suasInfoMatch[0] : ''
+
+  const segurado: Partial<PropostaClienteExtraido> = {
+    tipoPessoa: 'PJ',
+  }
+
+  const isTermoInvalidoNomeCondominio = (val: string): boolean => {
+    const v = val.toLowerCase()
+    return (
+      v.includes('local de risco') ||
+      v.includes('inspeção prévia') ||
+      v.includes('inspecao previa') ||
+      v.includes('seguradora') ||
+      v.includes('proponente') ||
+      v.includes('assinatura') ||
+      v.includes('corretora') ||
+      v.includes('cláusula') ||
+      v.includes('clausula') ||
+      isTextoCabecalhoOuInvalido(val)
+    )
+  }
+
+  if (sectionText) {
+    // (a) Nome: valor IMEDIATAMENTE após "**Nome:**" ou "Nome:"
+    const nomeMatch =
+      /(?:^|[|\n\s])\*{0,2}Nome:\*{0,2}\s*([^\n|*]+?)(?=(?:\s+\*{0,2}CNPJ:|\s+\*{0,2}CPF:|\s*\||\n|$))/i.exec(
+        sectionText,
+      )
+    if (nomeMatch) {
+      const candNome = sanitizarTextoExtraido(nomeMatch[1])
+      if (candNome && !isTermoInvalidoNomeCondominio(candNome)) {
+        segurado.nome = candNome
+      }
+    }
+
+    // (b) CNPJ: "CNPJ: 57.349.112/0001-70"
+    const cnpjMatch =
+      /\*{0,2}CNPJ:\*{0,2}\s*([0-9]{2}\.[0-9]{3}\.[0-9]{3}\/[0-9]{4}-[0-9]{2}|[0-9]{14})\b/i.exec(
+        sectionText,
+      )
+    if (cnpjMatch) {
+      const cleanCnpj = cnpjMatch[1].replace(/\D/g, '')
+      if (cleanCnpj.length === 14) {
+        segurado.cpfCnpj = cleanCnpj
+        segurado.tipoPessoa = 'PJ'
+      }
+    }
+
+    // (c) Email: "E-mail: condominio@moriacontadores.com.br"
+    const emailMatch =
+      /\*{0,2}E-?mail:\*{0,2}\s*([a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,})/i.exec(
+        sectionText,
+      )
+    if (emailMatch) {
+      segurado.email = emailMatch[1].trim()
+    }
+
+    // (d) Telefone: "Tel: 985852935" ou "(81) 98585-2935"
+    const telMatch =
+      /\*{0,2}(?:Tel|Telefone|Celular):\*{0,2}\s*(\(?[0-9]{2}\)?\s*[0-9]{4,5}[-\s]?[0-9]{4}|[0-9]{8,11})\b/i.exec(
+        sectionText,
+      )
+    if (telMatch) {
+      const rawDigits = telMatch[1].replace(/\D/g, '')
+      if (rawDigits.length === 8 || rawDigits.length === 9) {
+        // Verificar DDD da cidade/UF na seção ou documento (OLINDA/PE -> 81)
+        if (/OLINDA|RECIFE|\bPE\b/i.test(text)) {
+          const comDdd = `81${rawDigits}`
+          if (comDdd.length === 11) {
+            segurado.telefone = `(${comDdd.slice(0, 2)}) ${comDdd.slice(2, 7)}-${comDdd.slice(7)}`
+          } else if (comDdd.length === 10) {
+            segurado.telefone = `(${comDdd.slice(0, 2)}) ${comDdd.slice(2, 6)}-${comDdd.slice(6)}`
+          }
+        }
+      } else if (rawDigits.length === 11) {
+        segurado.telefone = `(${rawDigits.slice(0, 2)}) ${rawDigits.slice(2, 7)}-${rawDigits.slice(7)}`
+      } else if (rawDigits.length === 10) {
+        segurado.telefone = `(${rawDigits.slice(0, 2)}) ${rawDigits.slice(2, 6)}-${rawDigits.slice(6)}`
+      }
+    }
+
+    // (e) Endereço de correspondência: rua + número
+    // Ex: "Endereço de correspondência: R. CORONEL JOÃO RIBEIRO, 1287"
+    const endCorrespMatch =
+      /\*{0,2}Endere[çc]o\s+de\s+correspond[êe]ncia:\*{0,2}\s*([^\n|]+)/i.exec(
+        sectionText,
+      )
+    if (endCorrespMatch) {
+      const rawEnd = sanitizarTextoExtraido(endCorrespMatch[1])
+      const virgulaMatch = /^(.*?),\s*(\d+[A-Za-z0-9\s/]*)$/.exec(rawEnd)
+      if (virgulaMatch) {
+        segurado.rua = virgulaMatch[1].trim()
+        segurado.numero = virgulaMatch[2].trim()
+      } else {
+        segurado.rua = rawEnd
+      }
+    }
+
+    // (f) Bairro: "Bairro: BAIRRO NOVO"
+    const bairroMatch = /\*{0,2}Bairro:\*{0,2}\s*([^\n|*]+?)(?=(?:\s+\*{0,2}[A-Z]|\n|$))/i.exec(
+      sectionText,
+    )
+    if (bairroMatch) {
+      const b = sanitizarTextoExtraido(bairroMatch[1])
+      if (b && !isTextoCabecalhoOuInvalido(b)) {
+        segurado.bairro = b
+      }
+    }
+
+    // (g) Cidade/UF e CEP
+    // Ex: "Cidade/UF: OLINDA/PE CEP: 53030-040"
+    const cidUfMatch =
+      /\*{0,2}Cidade\/UF:\*{0,2}\s*([A-Za-zÀ-ÿ\s.-]+?)\/([A-Z]{2})\b/i.exec(sectionText)
+    if (cidUfMatch) {
+      const c = sanitizarTextoExtraido(cidUfMatch[1])
+      if (c && !isTextoCabecalhoOuInvalido(c)) {
+        segurado.cidade = c
+        segurado.estado = cidUfMatch[2].trim().toUpperCase()
+      }
+    }
+
+    const cepMatch = /\*{0,2}CEP:\*{0,2}\s*([0-9]{5}-?[0-9]{3})\b/i.exec(sectionText)
+    if (cepMatch) {
+      const rawCep = cepMatch[1].replace(/\D/g, '')
+      segurado.cep = `${rawCep.slice(0, 5)}-${rawCep.slice(5)}`
+    }
+  }
+
+  // Fallback para nome: caso no cabeçalho antes de "Essa é a proposta do seu seguro Allianz Condomínio"
+  if (!segurado.nome) {
+    const cabecalhoMatch =
+      /(?:^|\n)\s*([A-Z0-9\s.,'/-]{4,80})\s*\n\s*Essa\s+[ée]\s+a\s+proposta\s+do\s+seu\s+seguro\s+Allianz\s+Condom[íi]nio/i.exec(
+        text,
+      )
+    if (cabecalhoMatch) {
+      const cand = sanitizarTextoExtraido(cabecalhoMatch[1])
+      if (cand && !isTermoInvalidoNomeCondominio(cand)) {
+        segurado.nome = cand
+      }
+    }
+  }
+
+  return {
+    numeroProposta,
+    numeroApolice,
+    vigenciaInicio,
+    vigenciaFim,
+    segurado,
   }
 }
 
