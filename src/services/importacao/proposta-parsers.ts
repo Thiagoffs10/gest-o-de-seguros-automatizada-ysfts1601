@@ -2991,9 +2991,7 @@ export function extrairAllianzCondominioCliente(text: string): {
 
     // (c) Email: "E-mail: condominio@moriacontadores.com.br"
     const emailMatch =
-      /\*{0,2}E-?mail:\*{0,2}\s*([a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,})/i.exec(
-        sectionText,
-      )
+      /\*{0,2}E-?mail:\*{0,2}\s*([a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,})/i.exec(sectionText)
     if (emailMatch) {
       segurado.email = emailMatch[1].trim()
     }
@@ -3025,9 +3023,7 @@ export function extrairAllianzCondominioCliente(text: string): {
     // (e) Endereço de correspondência: rua + número
     // Ex: "Endereço de correspondência: R. CORONEL JOÃO RIBEIRO, 1287"
     const endCorrespMatch =
-      /\*{0,2}Endere[çc]o\s+de\s+correspond[êe]ncia:\*{0,2}\s*([^\n|]+)/i.exec(
-        sectionText,
-      )
+      /\*{0,2}Endere[çc]o\s+de\s+correspond[êe]ncia:\*{0,2}\s*([^\n|]+)/i.exec(sectionText)
     if (endCorrespMatch) {
       const rawEnd = sanitizarTextoExtraido(endCorrespMatch[1])
       const virgulaMatch = /^(.*?),\s*(\d+[A-Za-z0-9\s/]*)$/.exec(rawEnd)
@@ -3052,8 +3048,9 @@ export function extrairAllianzCondominioCliente(text: string): {
 
     // (g) Cidade/UF e CEP
     // Ex: "Cidade/UF: OLINDA/PE CEP: 53030-040"
-    const cidUfMatch =
-      /\*{0,2}Cidade\/UF:\*{0,2}\s*([A-Za-zÀ-ÿ\s.-]+?)\/([A-Z]{2})\b/i.exec(sectionText)
+    const cidUfMatch = /\*{0,2}Cidade\/UF:\*{0,2}\s*([A-Za-zÀ-ÿ\s.-]+?)\/([A-Z]{2})\b/i.exec(
+      sectionText,
+    )
     if (cidUfMatch) {
       const c = sanitizarTextoExtraido(cidUfMatch[1])
       if (c && !isTextoCabecalhoOuInvalido(c)) {

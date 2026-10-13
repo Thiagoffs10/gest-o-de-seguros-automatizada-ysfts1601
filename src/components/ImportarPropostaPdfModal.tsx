@@ -241,7 +241,10 @@ export const ImportarPropostaPdfModal: React.FC<ImportarPropostaPdfModalProps> =
               <Card>
                 <CardContent className="p-3 space-y-1">
                   <div className="font-semibold text-slate-700 flex items-center gap-1">
-                    <UserCheck className="h-3.5 w-3.5" /> {conferida.proposta.tipoSeguro === 'Condomínio' ? 'Segurado' : 'Segurado & Condutor'}
+                    <UserCheck className="h-3.5 w-3.5" />{' '}
+                    {conferida.proposta.tipoSeguro === 'Condomínio'
+                      ? 'Segurado'
+                      : 'Segurado & Condutor'}
                   </div>
                   <div>
                     <span className="text-slate-500">Segurado:</span>{' '}
@@ -308,9 +311,11 @@ export const ImportarPropostaPdfModal: React.FC<ImportarPropostaPdfModalProps> =
                                   : ''),
                               conferida.proposta.segurado.bairro,
                               conferida.proposta.segurado.cep,
-                              conferida.proposta.segurado.cidade && conferida.proposta.segurado.estado
+                              conferida.proposta.segurado.cidade &&
+                              conferida.proposta.segurado.estado
                                 ? `${conferida.proposta.segurado.cidade}/${conferida.proposta.segurado.estado}`
-                                : conferida.proposta.segurado.cidade || conferida.proposta.segurado.estado,
+                                : conferida.proposta.segurado.cidade ||
+                                  conferida.proposta.segurado.estado,
                             ]
                               .filter(Boolean)
                               .join(' - ')
