@@ -29,6 +29,7 @@ import { getEndorsementsByPolicy } from '@/services/endorsements'
 import { getClients } from '@/services/clients'
 import { getSeguradoras } from '@/services/seguradoras'
 import { getParceiros } from '@/services/parceiros'
+import { getActiveTiposSeguro } from '@/services/tipos-seguro'
 import { getPayments } from '@/services/payments'
 import { getReminders } from '@/services/reminders'
 import { Policy, Client, Seguradora, Parceiro, FilterState } from '@/types'
@@ -66,6 +67,7 @@ export default function Policies() {
   const [clients, setClients] = useState<Client[]>([])
   const [seguradoras, setSeguradoras] = useState<Seguradora[]>([])
   const [parceiros, setParceiros] = useState<Parceiro[]>([])
+  const [tiposSeguro, setTiposSeguro] = useState<any[]>([])
   const [search, setSearch] = useState('')
   const [placaSearch, setPlacaSearch] = useState('')
   const [statusFilter, setStatusFilter] = useState('ALL')
@@ -97,10 +99,16 @@ export default function Policies() {
   // Carrega listas estáticas auxiliares (clientes, seguradoras, parceiros) apenas na montagem ou quando necessário
   const loadAuxData = useCallback(async () => {
     try {
-      const [cls, segs, pars] = await Promise.all([getClients(), getSeguradoras(), getParceiros()])
+      const [cls, segs, pars, tipos] = await Promise.all([
+        getClients(),
+        getSeguradoras(),
+        getParceiros(),
+        getActiveTiposSeguro().catch(() => []),
+      ])
       setClients(cls)
       setSeguradoras(segs)
       setParceiros(pars)
+      setTiposSeguro(tipos)
     } catch {
       /* intentionally ignored */
     }
@@ -400,6 +408,7 @@ export default function Policies() {
         showPartnerFilter
         parceiros={parceiros}
         showTipoSeguroFilter
+        tiposSeguro={tiposSeguro}
       />
 
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">

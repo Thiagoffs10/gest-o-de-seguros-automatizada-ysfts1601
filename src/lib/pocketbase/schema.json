@@ -1,5 +1,5 @@
 {
-  "generatedAt": "2026-10-13T17:31:01.819Z",
+  "generatedAt": "2026-10-15T22:45:15.926Z",
   "collections": [
     {
       "name": "users",
@@ -281,22 +281,6 @@
           "system": false
         },
         {
-          "name": "tipo_de_seguro",
-          "type": "select",
-          "required": false,
-          "system": false,
-          "selectValues": [
-            "Auto",
-            "Vida",
-            "Residencial",
-            "Empresarial",
-            "Saúde",
-            "Outros",
-            "Condomínio",
-            "Viagem"
-          ]
-        },
-        {
           "name": "seguradora",
           "type": "relation",
           "required": false,
@@ -516,6 +500,12 @@
         },
         {
           "name": "comissao_alerta_60d_ignorado_motivo",
+          "type": "text",
+          "required": false,
+          "system": false
+        },
+        {
+          "name": "tipo_de_seguro",
           "type": "text",
           "required": false,
           "system": false

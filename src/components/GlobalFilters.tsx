@@ -19,6 +19,7 @@ interface GlobalFiltersProps {
   showTipoSeguroFilter?: boolean
   parceiros?: Parceiro[]
   seguradoras?: Seguradora[]
+  tiposSeguro?: Array<{ id: string; nome: string }>
 }
 
 export function GlobalFilters({
@@ -29,6 +30,7 @@ export function GlobalFilters({
   showTipoSeguroFilter,
   parceiros,
   seguradoras,
+  tiposSeguro,
 }: GlobalFiltersProps) {
   const update = (key: keyof FilterState, value: string) => {
     const newFilters = { ...filters, [key]: value || undefined }
@@ -146,11 +148,17 @@ export function GlobalFilters({
               <SelectValue placeholder="Tipo" />
             </SelectTrigger>
             <SelectContent>
-              {TIPOS_DE_SEGURO.map((t) => (
-                <SelectItem key={t} value={t}>
-                  {t}
-                </SelectItem>
-              ))}
+              {tiposSeguro && tiposSeguro.length > 0
+                ? tiposSeguro.map((t) => (
+                    <SelectItem key={t.id || t.nome} value={t.nome}>
+                      {t.nome}
+                    </SelectItem>
+                  ))
+                : TIPOS_DE_SEGURO.map((t) => (
+                    <SelectItem key={t} value={t}>
+                      {t}
+                    </SelectItem>
+                  ))}
             </SelectContent>
           </Select>
         </div>

@@ -111,10 +111,11 @@ routerAdd(
           md.substring(0, 400).replace(/\n/g, '\\n'),
       )
       // Log chunks so we can see full content in server logs
-      for (var ci = 0; ci < md.length; ci += 2000) {
-        console.log('--- MD_CHUNK_' + ci / 2000 + ' --- ' + md.substring(ci, ci + 2000))
+      for (var ci = 0; ci < md.length; ci += 1000) {
+        console.log(
+          '--- MD_EXACT_CHUNK_' + Math.floor(ci / 1000) + ' --- ' + md.substring(ci, ci + 1000),
+        )
       }
-
       return e.json(200, {
         success: true,
         fileName: fileName,

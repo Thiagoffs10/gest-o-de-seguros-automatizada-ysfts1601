@@ -888,11 +888,17 @@ export default function ClientDetail() {
                   <SelectValue />
                 </SelectTrigger>
                 <SelectContent>
-                  {TIPOS_DE_SEGURO.map((t) => (
-                    <SelectItem key={t} value={t}>
-                      {t}
-                    </SelectItem>
-                  ))}
+                  {tiposSeguro.length > 0
+                    ? tiposSeguro.map((t) => (
+                        <SelectItem key={t.id || t.nome} value={t.nome}>
+                          {t.nome}
+                        </SelectItem>
+                      ))
+                    : TIPOS_DE_SEGURO.map((t) => (
+                        <SelectItem key={t} value={t}>
+                          {t}
+                        </SelectItem>
+                      ))}
                 </SelectContent>
               </Select>
             </div>
