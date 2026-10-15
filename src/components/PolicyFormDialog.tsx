@@ -532,11 +532,13 @@ export function PolicyFormDialog({
       start_date: p.vigenciaInicio || prev.start_date,
       end_date: p.vigenciaFim || prev.end_date,
       previous_policy: conferida.renovacaoPolicyCorrespondente?.id || prev.previous_policy,
-      notes: notasCondutor
-        ? prev.notes
-          ? `${prev.notes}\n${notasCondutor}`
-          : notasCondutor
-        : prev.notes,
+      notes: (() => {
+        const partes: string[] = []
+        if (prev.notes) partes.push(prev.notes)
+        if (notasCondutor) partes.push(notasCondutor)
+        if (p.observacoesApolice) partes.push(p.observacoesApolice)
+        return partes.join('\n')
+      })(),
     }))
 
     toast({

@@ -342,6 +342,15 @@ export function parsePropostaTexto(text: string, nomeArquivo: string = ''): Prop
 
   const seguradoraNome = nomesMap[formato]
 
+  // DESPACHO DEDICADO: PORTO CELULAR (Ramo 171 / Modalidade 434)
+  // Ativado quando identificado produto Porto Celular, evitando totalmente o leitor de Auto da Porto
+  if (isPortoCelular(text, nomeArquivo)) {
+    const celularData = extrairPortoCelularProposta(text)
+    if (celularData) {
+      return celularData
+    }
+  }
+
   // Extrações comuns por Regex
   let numeroProposta = extrairNumeroProposta(text, formato)
   let numeroApolice = ''
@@ -3488,5 +3497,403 @@ export function extrairPropostaInlineAzul(text: string): {
     condutor: condutorRes,
     veiculo: veiculoRes,
     renovacao: renovacaoRes,
+  }
+}
+
+// =========================================================================
+// LEITOR DEDICADO: PORTO CELULAR (RAMO 171 / MODALIDADE 434)
+// =========================================================================
+
+export function isPortoCelular(text: string, nomeArquivo: string = ''): boolean {
+  const t = text.toLowerCase()
+  const n = (nomeArquivo || '').toLowerCase()
+
+  if (n.includes('celular') && (n.includes('porto') || t.includes('porto'))) {
+    return true
+  }
+
+  // Menção explícita de Porto Celular
+  if (t.includes('porto celular') || t.includes('porto seguro celular')) {
+    return true
+  }
+
+  // Ramo 171 / Modalidade 434 da Porto Seguro
+  if (
+    (t.includes('ramo: 171') || t.includes('ramo 171') || t.includes('171')) &&
+    (t.includes('modalidade: 434') ||
+      t.includes('modalidade 434') ||
+      t.includes('434 - porto celular'))
+  ) {
+    return true
+  }
+
+  // Palavras-chave inequívocas de proposta de celular na Porto Seguro
+  if (
+    (t.includes('porto seguro') || t.includes('porto seguro cia de seguros')) &&
+    t.includes('imei') &&
+    (t.includes('aparelho') || t.includes('equipamento'))
+  ) {
+    return true
+  }
+
+  return false
+}
+
+export function extrairPortoCelularProposta(text: string): PropostaExtraida {
+  // 1. Número da Proposta
+  // Ex: "NÚMERO DO ORÇAMENTO PROPOSTA DE SEGURO 117861487" ou "PROPOSTA DE SEGURO 117861487"
+  let numeroProposta = ''
+  const propMatch =
+    /(?:proposta\s+de\s+seguro|n[úu]mero\s+do\s+or[çc]amento\s+proposta\s+de\s+seguro)[*\s|:]+([0-9]{6,15})\b/i.exec(
+      text,
+    ) || /proposta[*\s|:]+([0-9]{7,12})\b/i.exec(text)
+  if (propMatch) {
+    numeroProposta = propMatch[1].trim()
+  }
+
+  // 2. Vigência
+  // No texto real da Porto Celular:
+  // "## 15/10/2026 NOVO" e "## 15/10/2027 ..." ou próximo a:
+  // "VIGÊNCIA DAS 00:01 DO DIA / ATE AS 23:59 DO DIA"
+  let vigenciaInicio = ''
+  let vigenciaFim = ''
+
+  // Padrão 1: "VIGÊNCIA DAS 00:01 DO DIA ... ATÉ AS 23:59 DO DIA ..."
+  const vigExtMatch =
+    /vig[êe]ncia\s+das\s+00:01\s+do\s+dia\s*[:/]?\s*(\d{1,2}[/.-]\d{1,2}[/.-]\d{4})?\s*(?:at[ée]|a)\s*(?:as?\s+23:59\s+do\s+dia)?\s*[:/]?\s*(\d{1,2}[/.-]\d{1,2}[/.-]\d{4})?/i.exec(
+      text,
+    )
+  if (vigExtMatch && vigExtMatch[1] && vigExtMatch[2]) {
+    vigenciaInicio = parseDataFlexivel(vigExtMatch[1])
+    vigenciaFim = parseDataFlexivel(vigExtMatch[2])
+  }
+
+  // Padrão 2: cabeçalho com ## DD/MM/AAAA NOVO e ## DD/MM/AAAA
+  if (!vigenciaInicio || !vigenciaFim) {
+    const datasHashMatches: string[] = []
+    const hashRegex = /##\s*(\d{1,2}\/\d{1,2}\/\d{4})/g
+    let hm: RegExpExecArray | null
+    while ((hm = hashRegex.exec(text)) !== null) {
+      datasHashMatches.push(hm[1])
+    }
+    if (datasHashMatches.length >= 2) {
+      vigenciaInicio = parseDataFlexivel(datasHashMatches[0])
+      vigenciaFim = parseDataFlexivel(datasHashMatches[1])
+    }
+  }
+
+  // Fallback vigências gerais se ainda faltar
+  if (!vigenciaInicio || !vigenciaFim) {
+    const vigGen = extrairVigencias(text)
+    if (vigGen.inicio) vigenciaInicio = vigGen.inicio
+    if (vigGen.fim) vigenciaFim = vigGen.fim
+  }
+
+  // 3. PRÊMIOS — REGRA DE OURO (PEGADINHA DO ITEM vs GERAL):
+  // Há um "DEMONSTRATIVO DE PRÊMIO DO ITEM" e um "DEMONSTRATIVO DE PRÊMIO GERAL"
+  // Usar SEMPRE o DEMONSTRATIVO DE PRÊMIO GERAL!
+  let premioLiquido = 0
+  let iof = 0
+  let premioTotal = 0
+
+  const demonstrativoGeralMatch =
+    /(?:DEMONSTRATIVO\s+DE\s+PR[ÊE]MIO\s+GERAL|PR[ÊE]MIO\s+GERAL)[\s\S]*?(?=(?:DEMONSTRATIVO\s+DE\s+PR[ÊE]MIO\s+DO\s+ITEM|FORMA\s+DE\s+PAGAMENTO|INFORMA[ÇC][ÕO]ES\s+DE\s+PAGAMENTO|CL[ÁA]USULAS|CONDI[ÇC][ÕO]ES|P[áa]gina|\n{4,}|$))/i.exec(
+      text,
+    )
+  const textoGeral = demonstrativoGeralMatch ? demonstrativoGeralMatch[0] : ''
+
+  if (textoGeral) {
+    const liqM =
+      /(?:pr[êe]mio\s+l[íi]quido(?:\s+total)?|valor\s+l[íi]quido)[*\s|:]+R?\$?\s*([0-9.,]+)/i.exec(
+        textoGeral,
+      )
+    if (liqM) premioLiquido = parseMoeda(liqM[1])
+
+    const iofM = /i\.?o\.?f\.?[*\s|:]+R?\$?\s*([0-9.,]+)/i.exec(textoGeral)
+    if (iofM) iof = parseMoeda(iofM[1])
+
+    const totM =
+      /(?:pr[êe]mio\s+total|valor\s+total|total\s+a\s+pagar)[*\s|:]+R?\$?\s*([0-9.,]+)/i.exec(
+        textoGeral,
+      )
+    if (totM) premioTotal = parseMoeda(totM[1])
+  }
+
+  // Se não achou na seção isolada, busca por "PRÊMIO LÍQUIDO TOTAL" no texto inteiro
+  if (!premioLiquido) {
+    const liqTotGlob = /pr[êe]mio\s+l[íi]quido\s+total[*\s|:]+R?\$?\s*([0-9.,]+)/i.exec(text)
+    if (liqTotGlob) premioLiquido = parseMoeda(liqTotGlob[1])
+  }
+  if (!iof) {
+    const iofGlob = /i\.?o\.?f\.?[*\s|:]+R?\$?\s*([0-9.,]+)/i.exec(text)
+    if (iofGlob) iof = parseMoeda(iofGlob[1])
+  }
+  if (!premioTotal) {
+    const totGlob = /(?:pr[êe]mio\s+total|total\s+da\s+proposta)[*\s|:]+R?\$?\s*([0-9.,]+)/i.exec(
+      text,
+    )
+    if (totGlob) premioTotal = parseMoeda(totGlob[1])
+  }
+  if (premioLiquido > 0 && premioTotal === 0 && iof > 0) {
+    premioTotal = Math.round((premioLiquido + iof) * 100) / 100
+  }
+
+  // 4. PARCELAMENTO & FORMA DE PAGAMENTO
+  // Ex: "21 - 1 x BOLETO BANCARIO", "1ª PARCELA R$ 3.551,51"
+  let formaPagamento = 'Boleto'
+  let quantidadeParcelas = 1
+  let parcelamentoDescricao = ''
+
+  if (/boleto/i.test(text)) {
+    formaPagamento = 'Boleto'
+  } else if (/cart[ãa]o/i.test(text)) {
+    formaPagamento = 'Crédito'
+  } else if (/d[ée]bito/i.test(text)) {
+    formaPagamento = 'Débito em conta'
+  }
+
+  const parcRegex =
+    /(?:(\d{1,2})\s*x\s*(?:de\s*)?boleto|(\d{1,2})\s*x\s*de\s*R?\$?\s*([0-9.,]+)|(\d{1,2})\s+parcelas)/i.exec(
+      text,
+    )
+  if (parcRegex) {
+    quantidadeParcelas = parseInt(parcRegex[1] || parcRegex[2] || parcRegex[4] || '1', 10)
+  }
+
+  if (premioTotal > 0 && quantidadeParcelas > 0) {
+    const vlrParc = (premioTotal / quantidadeParcelas).toLocaleString('pt-BR', {
+      minimumFractionDigits: 2,
+      maximumFractionDigits: 2,
+    })
+    parcelamentoDescricao = `${quantidadeParcelas}x de R$ ${vlrParc}`
+  }
+
+  // 5. SEGURADO PJ / PF
+  // No texto bruto real da Porto Celular:
+  // formato: "**DADOS GERAIS** PROPONENTE TIPO DE PESSOA CNPJ <NOME> JURÍDICA <CNPJ>"
+  // Ex: "CNPJ ALMERINDAS EMPREENDIMENTOS SOCIOAMBIENTAIS LTDA JURÍDICA 51364609/0001-80"
+  let nome = ''
+  let cpfCnpj = ''
+  let tipoPessoa: 'PF' | 'PJ' = 'PJ'
+  let email = ''
+  let telefone = ''
+  let cep = ''
+  let rua = ''
+  let numero = ''
+  let bairro = ''
+  let cidade = ''
+  let estado = ''
+
+  // Detecção do Bloco Proponente / Dados Gerais
+  // CNPJ em proponente PJ da Porto Celular
+  const pjMatch =
+    /cnpj\s+([A-Z0-9\s.,'/-]{4,100}?)\s+jur[íi]dica\s+([0-9]{2}\.?[0-9]{3}\.?[0-9]{3}\/?[0-9]{4}-?[0-9]{2}|[0-9]{8}\/?[0-9]{4}-?[0-9]{2})/i.exec(
+      text,
+    ) ||
+    /proponente[^\n]*?cnpj\s+([A-Z0-9\s.,'/-]{4,100}?)\s+jur[íi]dica\s+([0-9]{2}\.?[0-9]{3}\.?[0-9]{3}\/?[0-9]{4}-?[0-9]{2}|[0-9]{8}\/?[0-9]{4}-?[0-9]{2})/i.exec(
+      text,
+    )
+
+  if (pjMatch) {
+    tipoPessoa = 'PJ'
+    const candNome = pjMatch[1].trim()
+    // Limpeza de possíveis resíduos de rótulos
+    const limpo = candNome
+      .replace(/^TIPO\s+DE\s+PESSOA\s*/i, '')
+      .replace(/^PROPONENTE\s*/i, '')
+      .replace(/^CNPJ\s*/i, '')
+      .trim()
+    nome = limpo
+    cpfCnpj = pjMatch[2].replace(/\D/g, '')
+  } else {
+    // Proponente PF (se houver caso PF de Porto Celular)
+    const pfMatch =
+      /proponente[^\n]*?cpf\s+([A-Z0-9\s.,'/-]{4,80}?)\s+f[íi]sica\s+([0-9]{3}\.?[0-9]{3}\.?[0-9]{3}-?[0-9]{2})/i.exec(
+        text,
+      ) ||
+      /cpf\s+([A-Z0-9\s.,'/-]{4,80}?)\s+f[íi]sica\s+([0-9]{3}\.?[0-9]{3}\.?[0-9]{3}-?[0-9]{2})/i.exec(
+        text,
+      )
+    if (pfMatch) {
+      tipoPessoa = 'PF'
+      nome = pfMatch[1]
+        .replace(/^TIPO\s+DE\s+PESSOA\s*/i, '')
+        .replace(/^PROPONENTE\s*/i, '')
+        .trim()
+      cpfCnpj = pfMatch[2].replace(/\D/g, '')
+    }
+  }
+
+  // Fallback de CNPJ do segurado se não capturou acima (evitar CNPJ da Porto 61198164000160)
+  if (!cpfCnpj) {
+    const allCnpjs = text.match(
+      /\b([0-9]{2}\.[0-9]{3}\.[0-9]{3}\/[0-9]{4}-[0-9]{2}|[0-9]{8}\/[0-9]{4}-[0-9]{2})\b/g,
+    )
+    if (allCnpjs) {
+      for (const c of allCnpjs) {
+        const dig = c.replace(/\D/g, '')
+        if (
+          !dig.startsWith('61198164') &&
+          !dig.startsWith('06157') &&
+          !dig.startsWith('33448150') &&
+          dig.length === 14
+        ) {
+          cpfCnpj = dig
+          tipoPessoa = 'PJ'
+          break
+        }
+      }
+    }
+  }
+
+  // Email: "ENVIAR APÓLICE FÍSICA PARA FINANCEIRO@ALMERINDAS.COM SIM" ou emails gerais
+  const emailMatch =
+    /(?:enviar\s+ap[oó]lice(?:\s+f[íi]sica)?\s+para|e-?mail(?:\s+comercial|\s+do\s+proponente)?)[*\s|:]+([a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,})/i.exec(
+      text,
+    ) || /([a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,})/i.exec(text)
+  if (emailMatch) {
+    email = emailMatch[1].trim()
+  }
+
+  // Telefone: "TELEFONE COMERCIAL (11)924930875" ou "(11)924930875"
+  const telMatch =
+    /telefone(?:\s+comercial|\s+celular|\s+residencial)?\s*[:\s]*(\(?[0-9]{2}\)?\s*[0-9]{4,5}[-\s]?[0-9]{4})/i.exec(
+      text,
+    )
+  if (telMatch) {
+    telefone = telMatch[1].trim()
+  }
+
+  // Endereço: bloco "**ENDEREÇO DO PROPONENTE**" ou "ENDEREÇO EMPRESARIAL"
+  // Formato: "CEP CIDADE ESTADO ENDEREÇO 52050-310 RECIFE PE R. ABELARDO NÚMERO COMPLEMENTO BAIRRO 45 GRACAS"
+  const endBlocoMatch =
+    /(?:\*{0,2}ENDERE[ÇC]O\s+DO\s+PROPONENTE\*{0,2}|\*{0,2}ENDERE[ÇC]O\s+EMPRESARIAL\*{0,2})[\s\S]*?(?=(?:\*{0,2}ENDERE[ÇC]O\s+DE\s+COBRAN[ÇC]A|\*{0,2}TELEFONE|\*{0,2}DADOS\s+DO\s+CORRETOR|CL[ÁA]USULAS|DEMONSTRATIVO|\n{3,}|$))/i.exec(
+      text,
+    )
+  const textoEndereco = endBlocoMatch ? endBlocoMatch[0] : text
+
+  // Padrão estruturado Porto:
+  // "CEP CIDADE ESTADO ENDEREÇO <cep> <cidade> <uf> <rua> NÚMERO COMPLEMENTO BAIRRO <numero> <bairro>"
+  const portoEndEstruturado =
+    /(?:cep\s+cidade\s+estado\s+endere[çc]o)\s+([0-9]{5}-?[0-9]{3})\s+([A-Za-zÀ-ÿ\s.-]+?)\s+([A-Z]{2})\s+([A-Za-zÀ-ÿ0-9\s.,'/-]+?)\s+n[úu]mero\s+(?:complemento\s+)?bairro\s+(\d+[A-Za-z0-9/]*)\s+([A-Za-zÀ-ÿ\s.-]+?)(?=(?:\s+telefone|\s+dados|\s+cep|\n|$))/i.exec(
+      textoEndereco,
+    ) ||
+    /([0-9]{5}-?[0-9]{3})\s+([A-Za-zÀ-ÿ\s.-]+?)\s+([A-Z]{2})\s+([A-Za-zÀ-ÿ0-9\s.,'/-]+?)\s+n[úu]mero\s+(?:complemento\s+)?bairro\s+(\d+[A-Za-z0-9/]*)\s+([A-Za-zÀ-ÿ\s.-]+?)(?=(?:\s+telefone|\s+dados|\s+cep|\n|$))/i.exec(
+      textoEndereco,
+    )
+
+  if (portoEndEstruturado) {
+    const rawCep = portoEndEstruturado[1].replace(/\D/g, '')
+    cep = `${rawCep.slice(0, 5)}-${rawCep.slice(5)}`
+    cidade = portoEndEstruturado[2].trim()
+    estado = portoEndEstruturado[3].trim().toUpperCase()
+    rua = portoEndEstruturado[4].trim()
+    numero = portoEndEstruturado[5].trim()
+    bairro = portoEndEstruturado[6].trim()
+  } else {
+    // Extração fallback dos campos no bloco de endereço
+    const cepM = /([0-9]{5}-?[0-9]{3})/.exec(textoEndereco)
+    if (cepM) {
+      const rawCep = cepM[1].replace(/\D/g, '')
+      cep = `${rawCep.slice(0, 5)}-${rawCep.slice(5)}`
+    }
+    const ufM = /\b([A-Z]{2})\b/.exec(textoEndereco)
+    if (ufM && BRAZILIAN_STATES.includes(ufM[1])) {
+      estado = ufM[1]
+    }
+  }
+
+  // 6. ITENS / EQUIPAMENTOS (CELULARES E IMEIs)
+  // Extrair aparelhos e seus IMEIs
+  // Ex: "Samsung-GALAXY S25 ULTRA 256GB, IMEIs 357445726540186 e 357445726548353"
+  const imeisEncontrados: string[] = []
+  const imeiRegex = /\b([0-9]{15})\b/g
+  let imeiMatch: RegExpExecArray | null
+  while ((imeiMatch = imeiRegex.exec(text)) !== null) {
+    if (!imeisEncontrados.includes(imeiMatch[1])) {
+      imeisEncontrados.push(imeiMatch[1])
+    }
+  }
+
+  // Modelos de celular no texto
+  const aparelhosEncontrados: string[] = []
+  const celRegex =
+    /(?:SAMSUNG|APPLE|MOTOROLA|XIAOMI)[-\s]*([A-Za-z0-9\s+]+?(?:ULTRA|PLUS|PRO|MAX|LITE|FE)?\s*\d{2,4}\s*GB)/gi
+  let celM: RegExpExecArray | null
+  while ((celM = celRegex.exec(text)) !== null) {
+    const apar = celM[0].trim()
+    if (!aparelhosEncontrados.includes(apar)) {
+      aparelhosEncontrados.push(apar)
+    }
+  }
+
+  const observacoesItens: string[] = []
+  if (aparelhosEncontrados.length > 0) {
+    observacoesItens.push(`Aparelho: ${aparelhosEncontrados.join(', ')}`)
+  }
+  if (imeisEncontrados.length > 0) {
+    observacoesItens.push(`IMEI(s): ${imeisEncontrados.join(', ')}`)
+  }
+
+  const seguradoSanitizado: PropostaClienteExtraido = {
+    nome: sanitizarTextoExtraido(nome)
+      .replace(/^Nome[:\s]*/i, '')
+      .replace(/^Proponente[:\s]*/i, '')
+      .replace(/^CNPJ[:\s]*/i, '')
+      .trim(),
+    tipoPessoa,
+    cpfCnpj: cpfCnpj || undefined,
+    email: email || undefined,
+    telefone: telefone || undefined,
+    cep: cep || undefined,
+    rua: rua || undefined,
+    numero: numero || undefined,
+    bairro: bairro || undefined,
+    cidade: cidade || undefined,
+    estado: estado || undefined,
+  }
+
+  const condutorSanitizado: PropostaCondutorExtraido = {
+    nome: '',
+    cpf: undefined,
+    dataNascimento: undefined,
+    parentesco: undefined,
+    mesmoQueSegurado: false,
+  }
+
+  const veiculoSanitizado: PropostaVeiculoExtraido = {
+    marcaModelo: '',
+    placa: '',
+    chassi: '',
+    codigoFipe: '',
+    anoFabricacao: undefined,
+    anoModelo: undefined,
+  }
+
+  const renovacaoSanitizada: PropostaRenovacaoExtraida = {
+    isRenovacao: false,
+  }
+
+  return {
+    formato: 'PORTO_SEGURO',
+    seguradoraNome: 'Porto Seguro',
+    numeroProposta: sanitizarTextoExtraido(numeroProposta),
+    numeroApolice: '',
+    tipoSeguro: 'Porto Celular',
+    vigenciaInicio,
+    vigenciaFim,
+    premioLiquido,
+    iof,
+    premioTotal,
+    formaPagamento,
+    quantidadeParcelas,
+    parcelamentoDescricao: sanitizarTextoExtraido(parcelamentoDescricao),
+    segurado: seguradoSanitizado,
+    condutorPrincipal: condutorSanitizado,
+    veiculo: veiculoSanitizado,
+    renovacao: renovacaoSanitizada,
+    camposFaltantes: [],
+    textoBrutoOriginal: text.substring(0, 5000),
+    observacoesApolice: observacoesItens.join(' | ') || undefined,
   }
 }

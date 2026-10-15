@@ -77,4 +77,5 @@ export interface PropostaExtraida {
     motivo: string
   }>
   textoBrutoOriginal?: string
+  observacoesApolice?: string
 }
