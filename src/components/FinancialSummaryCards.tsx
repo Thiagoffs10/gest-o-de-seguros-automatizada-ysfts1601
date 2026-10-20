@@ -1,4 +1,4 @@
-import { memo } from 'react'
+import { memo, useState, useMemo } from 'react'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import {
   TrendingUp,
@@ -12,7 +12,16 @@ import {
   ChevronRight,
   HelpCircle,
   Calendar,
+  Wallet,
+  Filter,
 } from 'lucide-react'
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select'
 import { formatCurrency } from '@/lib/utils'
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip'
 
@@ -57,6 +66,8 @@ interface Props {
   countSemPrevisao?: number
   onSemPrevisaoClick?: () => void
   onExpectedProfitClick?: () => void
+  totalComissoesPendentesAcumulada?: number
+  onTotalPendentesClick?: () => void
 
   // RESULTADO PROJETADO (renomeado de Lucro Previsto, destacado na seção de projeção)
   expectedProfit: number
@@ -110,6 +121,8 @@ export const FinancialSummaryCards = memo(function FinancialSummaryCards({
   countSemPrevisao = 0,
   onSemPrevisaoClick,
   onExpectedProfitClick,
+  totalComissoesPendentesAcumulada,
+  onTotalPendentesClick,
 
   // RESULTADO PROJETADO
   expectedProfit,
@@ -138,6 +151,40 @@ export const FinancialSummaryCards = memo(function FinancialSummaryCards({
   const showBreakdown = legacyReceivedCommissions > 0 || sistemaVal > 0
   const isLucroRealNegativo = realProfit < 0
   const isLucroProjetadoNegativo = expectedProfit < 0
+
+  // Filtro de competência exclusivo do Bloco 3
+  const [bloco3CompetenciaFilter, setBloco3CompetenciaFilter] = useState<string>('ALL')
+
+  // Total Geral acumulado de comissões pendentes (soma exata das competências + Sem Previsão)
+  const somaTotalPendentesCalculada = useMemo(() => {
+    const somaCards = projecoesCompetencias.reduce((sum, c) => sum + (c.saldoPrevisto || 0), 0)
+    return Math.round((somaCards + (saldoSemPrevisao || 0)) * 100) / 100
+  }, [projecoesCompetencias, saldoSemPrevisao])
+
+  const totalAcumuladoAReceber =
+    totalComissoesPendentesAcumulada !== undefined
+      ? totalComissoesPendentesAcumulada
+      : somaTotalPendentesCalculada
+
+  // Total de parcelas acumuladas no Bloco 3
+  const totalParcelasAcumuladas = useMemo(() => {
+    const parcelasCards = projecoesCompetencias.reduce((sum, c) => sum + (c.count || 0), 0)
+    return parcelasCards + (countSemPrevisao || 0)
+  }, [projecoesCompetencias, countSemPrevisao])
+
+  // Filtragem dos cards de competência exibidos pelo filtro do Bloco 3
+  const filteredProjecoesCompetencias = useMemo(() => {
+    if (bloco3CompetenciaFilter === 'ALL') {
+      return projecoesCompetencias
+    }
+    if (bloco3CompetenciaFilter === 'SEM_PREVISAO') {
+      return []
+    }
+    return projecoesCompetencias.filter((c) => c.competenciaRaw === bloco3CompetenciaFilter)
+  }, [projecoesCompetencias, bloco3CompetenciaFilter])
+
+  const showSemPrevisaoCard =
+    bloco3CompetenciaFilter === 'ALL' || bloco3CompetenciaFilter === 'SEM_PREVISAO'
 
   return (
     <TooltipProvider delayDuration={200}>
