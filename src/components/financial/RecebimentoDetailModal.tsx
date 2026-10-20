@@ -33,6 +33,7 @@ export type RecebimentoDetailType =
   | 'nao_recebida'
   | 'saldo_total'
   | 'sem_previsao'
+  | 'total_acumulado'
 
 interface Props {
   open: boolean
@@ -103,6 +104,13 @@ export function RecebimentoDetailModal({
         return {
           title: 'Detalhamento: Saldo Sem Previsão Definida',
           subtitle: `Vendas de ${periodLabel} com saldo residual sem parcelas de comissão previstas`,
+          mode: 'propostas' as const,
+        }
+      case 'total_acumulado':
+        return {
+          title: 'Detalhamento: Total Acumulado de Comissões a Receber',
+          subtitle:
+            'Acumulado de todas as competências (inclui Sem Previsão) — independe do período filtrado',
           mode: 'propostas' as const,
         }
       case 'saldo_total':
@@ -214,11 +222,14 @@ export function RecebimentoDetailModal({
     return map
   }, [allComissoesPrevistasList])
 
-  // Normalização para o modo PROPOSTAS (Parciais, Não Recebidas, Saldo Total, Sem Previsão)
+  // Normalização para o modo PROPOSTAS (Parciais, Não Recebidas, Saldo Total, Sem Previsão, Total Acumulado)
   const propostasRows = useMemo(() => {
     if (type === 'recebida') return []
 
-    const policyRows = periodStartPolicies
+    const isTotalAcumulado = type === 'total_acumulado'
+    const sourcePolicies = isTotalAcumulado ? allPolicies : periodStartPolicies
+
+    const policyRows = sourcePolicies
       .filter((p) => p.status !== 'Cancelada')
       .map((p) => {
         const polPrevs = prevsByPolicyMap.get(p.id) || []
@@ -291,12 +302,19 @@ export function RecebimentoDetailModal({
         }
       })
 
-    // Linhas de previsões ativas de endossos vinculadas cuja competência caia no período
+    // Linhas de previsões ativas de endossos vinculadas
+    // No modo total_acumulado inclui TODAS as competências (sem recorte de período).
+    // Nos demais modos, apenas as cuja competência caia no período.
     const endorsementRows: typeof policyRows = []
-    if (period) {
+    if (isTotalAcumulado || period) {
       for (const prev of allComissoesPrevistasList) {
         if (!prev.endorsement || prev.status === 'Cancelada') continue
-        if (!isCompetenciaInPeriod(period, prev.competencia, prev.data_prevista)) continue
+        if (
+          !isTotalAcumulado &&
+          period &&
+          !isCompetenciaInPeriod(period, prev.competencia, prev.data_prevista)
+        )
+          continue
 
         const parentPol = allPolicies.find((p) => p.id === prev.policy)
         if (parentPol && parentPol.status === 'Cancelada') continue
@@ -358,14 +376,14 @@ export function RecebimentoDetailModal({
     return allRows.filter((row) => {
       if (type === 'parcial') return row.isPartial
       if (type === 'nao_recebida') return row.isPending
-      if (type === 'saldo_total') return row.saldo > 0.009
+      if (type === 'saldo_total' || type === 'total_acumulado') return row.saldo > 0.009
       if (type === 'sem_previsao') return row.saldo > 0.009 && !row.hasPrevisao
       return true
     })
   }, [
     type,
-    periodStartPolicies,
     allPolicies,
+    periodStartPolicies,
     allComissoesPrevistasList,
     period,
     prevsByPolicyMap,
@@ -533,7 +551,7 @@ export function RecebimentoDetailModal({
           },
         })
       } else {
-        // Modo Propostas: parcial, nao_recebida, saldo_total, sem_previsao
+        // Modo Propostas: parcial, nao_recebida, saldo_total, sem_previsao, total_acumulado
         const baseTotals = isFiltered ? filteredPropostasTotals : totalPropostas
         const filenameMap: Record<RecebimentoDetailType, string> = {
           recebida: 'recebimentos-comissao-recebida',
@@ -541,6 +559,7 @@ export function RecebimentoDetailModal({
           nao_recebida: 'recebimentos-comissoes-pendentes',
           saldo_total: 'recebimentos-saldo-total',
           sem_previsao: 'recebimentos-saldo-sem-previsao',
+          total_acumulado: 'recebimentos-total-acumulado',
         }
         const filePrefix = type ? filenameMap[type] : 'recebimentos-detalhamento'
 
@@ -549,7 +568,9 @@ export function RecebimentoDetailModal({
             ? 'Saldo Parcial Residual'
             : type === 'nao_recebida'
               ? 'Total Não Recebido'
-              : 'Saldo Total a Receber'
+              : type === 'total_acumulado'
+                ? 'Total Acumulado a Receber'
+                : 'Saldo Total a Receber'
 
         await exportFinancialListingPDF({
           title: meta.title,
@@ -712,22 +733,38 @@ export function RecebimentoDetailModal({
             </div>
             <div
               className={`p-2.5 rounded-lg border text-xs ${
-                type === 'parcial' ? 'bg-blue-50 border-blue-300' : 'bg-amber-50 border-amber-300'
+                type === 'parcial'
+                  ? 'bg-blue-50 border-blue-300'
+                  : type === 'total_acumulado'
+                    ? 'bg-indigo-50 border-indigo-300'
+                    : 'bg-amber-50 border-amber-300'
               }`}
             >
               <span
                 className={`block font-semibold ${
-                  type === 'parcial' ? 'text-blue-800' : 'text-amber-800'
+                  type === 'parcial'
+                    ? 'text-blue-800'
+                    : type === 'total_acumulado'
+                      ? 'text-indigo-800'
+                      : 'text-amber-800'
                 }`}
               >
                 {type === 'parcial'
                   ? 'Saldo Parcial Residual'
                   : type === 'nao_recebida'
                     ? 'Total Não Recebido'
-                    : 'Saldo Total a Receber'}
+                    : type === 'total_acumulado'
+                      ? 'Total Acumulado a Receber'
+                      : 'Saldo Total a Receber'}
               </span>
               <strong
-                className={`text-base ${type === 'parcial' ? 'text-blue-900' : 'text-amber-900'}`}
+                className={`text-base ${
+                  type === 'parcial'
+                    ? 'text-blue-900'
+                    : type === 'total_acumulado'
+                      ? 'text-indigo-900'
+                      : 'text-amber-900'
+                }`}
               >
                 R$ {formatCurrency(totalPropostas.totalSaldo)}
               </strong>
