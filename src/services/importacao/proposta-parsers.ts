@@ -144,6 +144,11 @@ const VALORES_INVALIDOS_OU_CABECALHOS = [
   'item',
   'tipo de envio',
   'enviar correspondência para',
+  'cotação',
+  'cotacao',
+  'kit digital',
+  'cotação nº',
+  'cotacao nº',
 ]
 
 export function isTextoCabecalhoOuInvalido(val?: string | null): boolean {
@@ -235,6 +240,14 @@ export function isNomePessoaValido(val?: string | null): boolean {
 
   // Não pode conter termos de corretor ou uso interno
   if (lower.includes('corretor') || lower.includes('uso interno')) {
+    return false
+  }
+
+  // Bloquear expressamente linhas de cotação / kits digitais / números de proposta
+  if (
+    /cota[çc][ãa]o|kit\s*digital/i.test(clean) ||
+    /^\s*(?:cota[çc][ãa]o|proposta|ap[oó]lice|or[çc]amento)\b/i.test(clean)
+  ) {
     return false
   }
 
@@ -410,6 +423,49 @@ export function parsePropostaTexto(text: string, nomeArquivo: string = ''): Prop
           anoFabricacao: undefined,
           anoModelo: undefined,
         }
+      }
+    }
+  }
+
+  // CASCATA ESPECIALIZADA PARA MAPFRE AUTO
+  if (formato === 'MAPFRE') {
+    const mapfreData = extrairPropostaMapfre(text)
+    if (mapfreData) {
+      if (mapfreData.numeroProposta) numeroProposta = mapfreData.numeroProposta
+      if (mapfreData.numeroApolice !== undefined) numeroApolice = mapfreData.numeroApolice
+      if (mapfreData.tipoSeguro) tipoSeguro = mapfreData.tipoSeguro
+      if (mapfreData.vigenciaInicio && mapfreData.vigenciaFim) {
+        vigencias = { inicio: mapfreData.vigenciaInicio, fim: mapfreData.vigenciaFim }
+      }
+      if (mapfreData.premioLiquido !== undefined) {
+        premios.liquido = mapfreData.premioLiquido
+      }
+      if (mapfreData.iof !== undefined) {
+        premios.iof = mapfreData.iof
+      }
+      if (mapfreData.premioTotal !== undefined) {
+        premios.total = mapfreData.premioTotal
+      }
+      if (mapfreData.quantidadeParcelas !== undefined) {
+        parcelamento.parcelas = mapfreData.quantidadeParcelas
+      }
+      if (mapfreData.formaPagamento) {
+        parcelamento.forma = mapfreData.formaPagamento
+      }
+      if (mapfreData.parcelamentoDescricao) {
+        parcelamento.descricao = mapfreData.parcelamentoDescricao
+      }
+      if (mapfreData.segurado) {
+        segurado = { ...segurado, ...mapfreData.segurado }
+      }
+      if (mapfreData.condutorPrincipal) {
+        condutor = { ...condutor, ...mapfreData.condutorPrincipal }
+      }
+      if (mapfreData.veiculo) {
+        veiculo = { ...veiculo, ...mapfreData.veiculo }
+      }
+      if (mapfreData.renovacao) {
+        renovacao = { ...renovacao, ...mapfreData.renovacao }
       }
     }
   }
@@ -946,6 +1002,10 @@ function extrairVeiculo(text: string): PropostaVeiculoExtraido {
     /\b([A-Za-z0-9-]{5,9})\s+fipe\b/i.exec(text)
   if (fipeMatch) {
     codigoFipe = fipeMatch[1].trim()
+    // Código FIPE real sempre possui dígitos. Descarta palavras comuns (ex: 'divulgada')
+    if (/^[A-Za-z]+$/.test(codigoFipe) || !/\d/.test(codigoFipe)) {
+      codigoFipe = ''
+    }
   }
 
   // Ano Fabricação / Modelo (ex: 2020 / 2020 Ano Fabricação / Modelo ou Ano/Modelo: 2022)
@@ -1145,7 +1205,8 @@ function extrairSegurado(
     if (docLimpo.startsWith('33164021')) return true
     // Sompo Seguros: 61.383.493/0001-80
     if (docLimpo.startsWith('61383493')) return true
-    // Matrícula SUSEP / Corretora Cred10mix (ex: 202062795...)
+    // Corretora Cred10mix (CNPJ 17.648.302/0001-73 e SUSEP 202062795...)
+    if (docLimpo.startsWith('17648302')) return true
     if (docLimpo.startsWith('202062795')) return true
     return false
   }
@@ -3895,5 +3956,384 @@ export function extrairPortoCelularProposta(text: string): PropostaExtraida {
     camposFaltantes: [],
     textoBrutoOriginal: text.substring(0, 5000),
     observacoesApolice: observacoesItens.join(' | ') || undefined,
+  }
+}
+
+// =========================================================================
+// EXTRATOR ESPECIALIZADO: MAPFRE AUTO (Propostas e Renovações)
+// =========================================================================
+
+export function extrairPropostaMapfre(text: string): {
+  numeroProposta?: string
+  numeroApolice?: string
+  tipoSeguro?: string
+  vigenciaInicio?: string
+  vigenciaFim?: string
+  premioLiquido?: number
+  iof?: number
+  premioTotal?: number
+  formaPagamento?: string
+  quantidadeParcelas?: number
+  parcelamentoDescricao?: string
+  segurado?: Partial<PropostaClienteExtraido>
+  condutorPrincipal?: Partial<PropostaCondutorExtraido>
+  veiculo?: Partial<PropostaVeiculoExtraido>
+  renovacao?: Partial<PropostaRenovacaoExtraida>
+} | null {
+  // Confere se o texto realmente pertence ao ecossistema MAPFRE
+  if (!/mapfre/i.test(text)) {
+    return null
+  }
+
+  // 1. NÚMERO DA PROPOSTA
+  // Ex: "**Proposta:** 2310313139328 **Data Proposta-Hora** 20/10/2026 - 00:00:00"
+  // ou "Proposta: 2310313139328"
+  let numeroProposta: string | undefined
+  const propMatch =
+    /\*{0,2}Proposta:\*{0,2}\s*([0-9]{6,20})\b/i.exec(text) ||
+    /(?:^|[|\n\s])\*{0,2}Proposta\*{0,2}[:\s]+([0-9]{6,20})\b/i.exec(text)
+  if (propMatch) {
+    numeroProposta = propMatch[1].trim()
+  }
+
+  // 2. VIGÊNCIA
+  // Ex: "**Dados do Seguro Vigência: das 24 horas do dia** 22/10/2026 **até as 24 horas do dia** 22/10/2027"
+  // ou "Vigência: das 24 horas do dia 22/10/2026 até as 24 horas do dia 22/10/2027"
+  let vigenciaInicio: string | undefined
+  let vigenciaFim: string | undefined
+  const vigMapfreMatch =
+    /das\s+24\s+horas\s+do\s+dia\*{0,2}\s*(\d{1,2}[/.-]\d{1,2}[/.-]\d{4})\s*\*{0,2}(?:at[ée]|as)\s+(?:as\s+)?24\s+horas\s+do\s+dia\*{0,2}\s*(\d{1,2}[/.-]\d{1,2}[/.-]\d{4})/i.exec(
+      text,
+    )
+  if (vigMapfreMatch) {
+    vigenciaInicio = parseDataFlexivel(vigMapfreMatch[1])
+    vigenciaFim = parseDataFlexivel(vigMapfreMatch[2])
+  }
+
+  // 3. SEGURADO & ENDEREÇO RESIDENCIAL
+  // Ex: "**Nome do Segurado:** JOSE CALIXTO DA SILVA NETO **Tipo Pessoa:** FISICA **CPF:** 082.831.014-98"
+  // "**Data Nasc.:** 26/02/1994 **Sexo:** MASCULINO ... **E-mail:** JCALIXTOSN@GMAIL.COM ... **Tel.Celular:** (83) 99177-6469 ... **Endereço:** RUA JURACY DE CARVALHO LUNA **Nº** 68 ... **Bairro:** BRISAMAR **Cidade:** JOAO PESSOA **UF:** PB **CEP:** 58034-240"
+  const segurado: Partial<PropostaClienteExtraido> = {
+    tipoPessoa: 'PF',
+  }
+
+  const nomeSeguradoMatch =
+    /\*{0,2}Nome\s+do\s+Segurado:\*{0,2}\s*([^\n*|]+?)(?=\s*\*{0,2}(?:Tipo\s+Pessoa|CPF|CNPJ|Data|Sexo|Tel|Endere[çc]o|E-mail)|\||\n|$)/i.exec(
+      text,
+    )
+  if (nomeSeguradoMatch) {
+    const rawNome = sanitizarTextoExtraido(nomeSeguradoMatch[1])
+    if (isNomePessoaValido(rawNome)) {
+      segurado.nome = rawNome
+    }
+  }
+
+  const tipoPessoaMatch = /\*{0,2}Tipo\s+Pessoa:\*{0,2}\s*([A-Za-z]+)/i.exec(text)
+  if (tipoPessoaMatch) {
+    const tp = tipoPessoaMatch[1].toUpperCase()
+    if (tp.includes('JURIDICA') || tp.includes('JURÍDICA') || tp === 'PJ') {
+      segurado.tipoPessoa = 'PJ'
+    } else {
+      segurado.tipoPessoa = 'PF'
+    }
+  }
+
+  // CPF do Segurado (na mesma linha do nome do segurado ou rotulado como CPF logo a seguir)
+  const cpfSeguradoMatch =
+    /\*{0,2}Nome\s+do\s+Segurado:[\s\S]*?\*{0,2}CPF:\*{0,2}\s*([0-9]{3}\.[0-9]{3}\.[0-9]{3}-[0-9]{2}|[0-9]{11})\b/i.exec(
+      text,
+    ) || /\*{0,2}CPF:\*{0,2}\s*([0-9]{3}\.[0-9]{3}\.[0-9]{3}-[0-9]{2}|[0-9]{11})\b/i.exec(text)
+  if (cpfSeguradoMatch) {
+    const limpo = cpfSeguradoMatch[1].replace(/\D/g, '')
+    if (limpo.length === 11 && isValidCpf(limpo)) {
+      segurado.cpfCnpj = limpo
+    }
+  }
+
+  // Data Nasc do Segurado
+  const nascSeguradoMatch = /\*{0,2}Data\s+Nasc\.:\*{0,2}\s*(\d{1,2}[/.-]\d{1,2}[/.-]\d{4})/i.exec(
+    text,
+  )
+  if (nascSeguradoMatch) {
+    segurado.dataNascimento = parseDataFlexivel(nascSeguradoMatch[1])
+  }
+
+  // E-mail do Segurado
+  const emailSeguradoMatch =
+    /\*{0,2}E-?mail:\*{0,2}\s*([a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,})/i.exec(text)
+  if (emailSeguradoMatch) {
+    segurado.email = emailSeguradoMatch[1].trim()
+  }
+
+  // Celular / Telefone do Segurado
+  const celSeguradoMatch =
+    /\*{0,2}Tel\.Celular:\*{0,2}\s*(\(?[0-9]{2}\)?\s*[0-9]{4,5}[-\s]?[0-9]{4})/i.exec(text) ||
+    /\*{0,2}Tel\.Res\.:\*{0,2}\s*(\(?[0-9]{2}\)?\s*[0-9]{4,5}[-\s]?[0-9]{4})/i.exec(text)
+  if (celSeguradoMatch) {
+    segurado.telefone = celSeguradoMatch[1].trim()
+  }
+
+  // Endereço (Rua, Número, Bairro, Cidade, UF, CEP) no bloco do segurado
+  const endMatch =
+    /\*{0,2}Endere[çc]o:\*{0,2}\s*([^\n*|]+?)(?=\s*\*{0,2}(?:N[ºo.]|Compl|Bairro|Cidade|UF|CEP)|\||\n|$)/i.exec(
+      text,
+    )
+  if (endMatch) {
+    const r = sanitizarTextoExtraido(endMatch[1])
+    if (r && !isTextoCabecalhoOuInvalido(r)) {
+      segurado.rua = r
+    }
+  }
+
+  const numMatch =
+    /\*{0,2}N[ºo.]\*{0,2}\s*([0-9A-Za-z\s/]+?)(?=\s*\*{0,2}(?:Compl|Bairro|Cidade|UF|CEP)|\||\n|$)/i.exec(
+      text,
+    )
+  if (numMatch) {
+    const n = sanitizarTextoExtraido(numMatch[1])
+    if (n && n !== '-' && !isTextoCabecalhoOuInvalido(n)) {
+      segurado.numero = n
+    }
+  }
+
+  const bairroMatch =
+    /\*{0,2}Bairro:\*{0,2}\s*([^\n*|]+?)(?=\s*\*{0,2}(?:Cidade|UF|CEP)|\||\n|$)/i.exec(text)
+  if (bairroMatch) {
+    const b = sanitizarTextoExtraido(bairroMatch[1])
+    if (b && !isTextoCabecalhoOuInvalido(b)) {
+      segurado.bairro = b
+    }
+  }
+
+  const cidadeMatch = /\*{0,2}Cidade:\*{0,2}\s*([^\n*|]+?)(?=\s*\*{0,2}(?:UF|CEP)|\||\n|$)/i.exec(
+    text,
+  )
+  if (cidadeMatch) {
+    const c = sanitizarTextoExtraido(cidadeMatch[1])
+    if (c && !isTextoCabecalhoOuInvalido(c)) {
+      segurado.cidade = c
+    }
+  }
+
+  const ufMatch = /\*{0,2}UF:\*{0,2}\s*([A-Z]{2})\b/i.exec(text)
+  if (ufMatch && BRAZILIAN_STATES.includes(ufMatch[1].toUpperCase())) {
+    segurado.estado = ufMatch[1].toUpperCase()
+  }
+
+  // CEP no bloco do segurado: buscar antes do bloco de questionário de risco
+  const idxQuest = text.toLowerCase().indexOf('questionário de avaliação de risco')
+  const textoAntesQuest = idxQuest > 0 ? text.substring(0, idxQuest) : text
+  const cepMatch = /\*{0,2}CEP:\*{0,2}\s*([0-9]{5}-?[0-9]{3})\b/i.exec(textoAntesQuest)
+  if (cepMatch) {
+    const rawCep = cepMatch[1].replace(/\D/g, '')
+    segurado.cep = `${rawCep.slice(0, 5)}-${rawCep.slice(5)}`
+  }
+
+  // 4. CONDUTOR PRINCIPAL
+  // Ex: "**- Nome do Principal Condutor:** JOSE CALIXTO DA SILVA NETO **CPF:** 082.831.014-98"
+  // e "**- Data de Nascimento Condutor:** 26/02/1994"
+  // ou sem negrito: "- Nome do Principal Condutor: JOSE CALIXTO DA SILVA NETO"
+  const condutorPrincipal: Partial<PropostaCondutorExtraido> = {}
+  const condNomeMatch =
+    /(?:-\s*)?\*{0,2}Nome\s+do\s+Principal\s+Condutor:\*{0,2}\s*([^\n*|]+?)(?=\s*\*{0,2}(?:CPF|Data|Sexo|Estado)|\||\n|$)/i.exec(
+      text,
+    )
+  if (condNomeMatch) {
+    const cNome = sanitizarTextoExtraido(condNomeMatch[1])
+    if (isNomePessoaValido(cNome)) {
+      condutorPrincipal.nome = cNome
+    }
+  }
+
+  const condCpfMatch =
+    /(?:Nome\s+do\s+Principal\s+Condutor:[\s\S]*?)\*{0,2}CPF:\*{0,2}\s*([0-9]{3}\.[0-9]{3}\.[0-9]{3}-[0-9]{2}|[0-9]{11})\b/i.exec(
+      text,
+    )
+  if (condCpfMatch) {
+    const limpo = condCpfMatch[1].replace(/\D/g, '')
+    if (limpo.length === 11 && isValidCpf(limpo)) {
+      condutorPrincipal.cpf = limpo
+    }
+  }
+
+  const condNascMatch =
+    /(?:-\s*)?\*{0,2}Data\s+de\s+Nascimento\s+Condutor:\*{0,2}\s*(\d{1,2}[/.-]\d{1,2}[/.-]\d{4})/i.exec(
+      text,
+    )
+  if (condNascMatch) {
+    condutorPrincipal.dataNascimento = parseDataFlexivel(condNascMatch[1])
+  }
+
+  if (condutorPrincipal.nome && segurado.nome) {
+    condutorPrincipal.mesmoQueSegurado =
+      condutorPrincipal.nome.trim().toLowerCase() === segurado.nome.trim().toLowerCase()
+  }
+
+  // 5. VEÍCULO
+  // Ex: "**Veículo:** 68;159;1; PI400603 VOLKSWAGEN - TAOS COMFORTLINE 250 1.4 TSI TB AT6 (Flex) A/G 4p"
+  // Placa e Chassi em células de tabela GFM ou soltos:
+  // "|Chassi: 8AWBJ6B29RA824716|Placa: SLE7G82||"
+  // Ano Modelo / Fabricação: "|Ano Modelo: 2024|0Km: NÃO||"
+  const veiculo: Partial<PropostaVeiculoExtraido> = {
+    codigoFipe: '',
+  }
+
+  const veicLinhaMatch =
+    /\*{0,2}Ve[íi]culo:\*{0,2}\s*([^\n|*]+?)(?=\s*\*{0,2}(?:Ano|Chassi|Placa|0Km|Uso)|\||\n|$)/i.exec(
+      text,
+    )
+  if (veicLinhaMatch) {
+    let rawVeic = sanitizarTextoExtraido(veicLinhaMatch[1])
+    // Limpar prefixo de grid interno da MAPFRE, ex: "68;159;1; PI400603 VOLKSWAGEN-TAOS..."
+    // Expressão regular: remover códigos separados por ponto-e-vírgula e código alfanumérico PI...
+    rawVeic = rawVeic
+      .replace(/^[\d\s;]+\s*(?:[A-Z]{1,3}\d{4,10}\s*)?/i, '')
+      .replace(/^[A-Z]{1,3}\d{4,10}\s+/i, '')
+      .trim()
+
+    // Se o modelo ficou com hífen sem espaços (VOLKSWAGEN-TAOS), normalizar para espaço " - "
+    rawVeic = rawVeic.replace(/\b([A-Za-z]+)-([A-Za-z]+)\b/g, '$1 - $2')
+
+    if (rawVeic.length > 3 && !isTextoCabecalhoOuInvalido(rawVeic)) {
+      veiculo.marcaModelo = rawVeic
+    }
+  }
+
+  // Placa
+  const placaMapfreMatch = /(?:placa[:\s*|]+)\b([A-Z]{3}[-\s]?[0-9][A-Z0-9][0-9]{2})\b/i.exec(text)
+  if (placaMapfreMatch) {
+    veiculo.placa = placaMapfreMatch[1].replace(/[-\s]/g, '').toUpperCase()
+  }
+
+  // Chassi
+  const chassiMapfreMatch = /(?:chassi[:\s*|]+)\b([A-HJ-NPR-Z0-9]{17})\b/i.exec(text)
+  if (chassiMapfreMatch) {
+    veiculo.chassi = chassiMapfreMatch[1].toUpperCase()
+  }
+
+  // Ano Modelo e Ano Fabricação
+  const anoModMatch = /(?:ano\s+modelo|ano\/modelo)[:\s*|]+(19\d{2}|20\d{2})\b/i.exec(text)
+  const anoFabMatch = /(?:ano\s+fab(?:rica[çc][ãa]o)?|ano\/fab)[:\s*|]+(19\d{2}|20\d{2})\b/i.exec(
+    text,
+  )
+  if (anoModMatch) {
+    veiculo.anoModelo = parseInt(anoModMatch[1], 10)
+    veiculo.anoFabricacao = anoFabMatch ? parseInt(anoFabMatch[1], 10) : veiculo.anoModelo
+  }
+
+  // Código FIPE: na proposta Mapfre analisada, não há código FIPE numérico limpo
+  // Manter expressamente vazio para não pegar "divulgada"
+  veiculo.codigoFipe = ''
+
+  // 6. PRÊMIOS
+  // Ex: "## Prêmios ... ## Prêmio Líquido Encargos IOF Prêmio Total ... 1.992,41 0,00 147,04 2.139,45"
+  // Os quatro valores vêm NUMA linha, nessa ordem: Líquido, Encargos, IOF, Total.
+  let premioLiquido: number | undefined
+  let iof: number | undefined
+  let premioTotal: number | undefined
+
+  const quatroPremiosMatch =
+    /(?:pr[êe]mio\s+l[íi]quido[\s\S]{1,60}?encargos[\s\S]{1,60}?iof[\s\S]{1,60}?pr[êe]mio\s+total[\s\S]*?)([0-9]{1,3}(?:\.[0-9]{3})*,[0-9]{2})\s+([0-9]{1,3}(?:\.[0-9]{3})*,[0-9]{2})\s+([0-9]{1,3}(?:\.[0-9]{3})*,[0-9]{2})\s+([0-9]{1,3}(?:\.[0-9]{3})*,[0-9]{2})/i.exec(
+      text,
+    )
+  if (quatroPremiosMatch) {
+    premioLiquido = parseMoeda(quatroPremiosMatch[1])
+    iof = parseMoeda(quatroPremiosMatch[3])
+    premioTotal = parseMoeda(quatroPremiosMatch[4])
+  } else {
+    // Tentar linha de 4 valores numéricos soltos após cabeçalho de prêmios
+    const secPremiosMatch =
+      /pr[êe]mios[\s\S]*?([0-9]{1,3}(?:\.[0-9]{3})*,[0-9]{2})\s+([0-9]{1,3}(?:\.[0-9]{3})*,[0-9]{2})\s+([0-9]{1,3}(?:\.[0-9]{3})*,[0-9]{2})\s+([0-9]{1,3}(?:\.[0-9]{3})*,[0-9]{2})/i.exec(
+        text,
+      )
+    if (secPremiosMatch) {
+      premioLiquido = parseMoeda(secPremiosMatch[1])
+      iof = parseMoeda(secPremiosMatch[3])
+      premioTotal = parseMoeda(secPremiosMatch[4])
+    }
+  }
+
+  // 7. PARCELAMENTO & FORMA DE PAGAMENTO
+  // Ex: "|Condições de Pagamento: Código do Plano:|2310 - CR - 10 parc (Sem Juros)|Valor da Primeira:|213,94|"
+  // e "|Taxa de Juros pactuada:||Valor das demais:|213,99|"
+  let quantidadeParcelas: number | undefined
+  let formaPagamento: string | undefined
+  let parcelamentoDescricao: string | undefined
+
+  const planoMatch =
+    /(?:c[oó]digo\s+do\s+plano[*\s|:]+)([0-9A-Za-z\s\-()]+?)(?=\s*[|*]?\s*(?:valor\s+da\s+primeira|taxa|cart[ãa]o)|\n|\||$)/i.exec(
+      text,
+    )
+  if (planoMatch) {
+    const planoStr = planoMatch[1].trim()
+    const parcMatch = /(\d{1,2})\s*parc/i.exec(planoStr)
+    if (parcMatch) {
+      quantidadeParcelas = parseInt(parcMatch[1], 10)
+    }
+
+    if (/\bCR\b/i.test(planoStr) || /cart[ãa]o/i.test(text)) {
+      formaPagamento = 'Crédito'
+    }
+
+    const vlrPrimMatch =
+      /(?:valor\s+da\s+primeira)[*\s|:]+([0-9]{1,3}(?:\.[0-9]{3})*,[0-9]{2})/i.exec(text)
+    const vlrDemaisMatch =
+      /(?:valor\s+das\s+demais)[*\s|:]+([0-9]{1,3}(?:\.[0-9]{3})*,[0-9]{2})/i.exec(text)
+
+    if (quantidadeParcelas) {
+      if (vlrPrimMatch && vlrDemaisMatch) {
+        parcelamentoDescricao = `${quantidadeParcelas}x sem juros (1ª R$ ${vlrPrimMatch[1]}; demais R$ ${vlrDemaisMatch[1]})`
+      } else if (vlrPrimMatch) {
+        parcelamentoDescricao = `${quantidadeParcelas}x de R$ ${vlrPrimMatch[1]}`
+      } else {
+        parcelamentoDescricao = `${quantidadeParcelas}x sem juros`
+      }
+    }
+  }
+
+  // 8. RENOVAÇÃO
+  // Ex: "|Tipo de Seguro: RENOVAÇÃO MAPFRE|Sinistro na Última Vigência: NÃO|Classe de Bônus: 10|"
+  // "|Seguradora Anterior: 6238 - MAPFRE SEGUROS|Nr. da Apólice Anterior: 60519629931|Nro. Item: 1|"
+  const renovacao: Partial<PropostaRenovacaoExtraida> = {}
+  if (/renova[çc][ãa]o/i.test(text)) {
+    renovacao.isRenovacao = true
+    const apoliceAntMatch =
+      /(?:nr\.?\s*da\s*ap[oó]lice\s*anterior|ap[oó]lice\s*anterior)[*\s|:]+([0-9]{6,20})\b/i.exec(
+        text,
+      )
+    if (apoliceAntMatch) {
+      renovacao.apoliceAnterior = apoliceAntMatch[1].trim()
+    }
+
+    const segAntMatch =
+      /(?:seguradora\s*anterior)[*\s|:]+([0-9A-Za-zÀ-ÿ\s.\-/]+?)(?=(?:\s*[|*]?\s*(?:nr\.|ap[oó]lice|item|nro\.))|\n|\||$)/i.exec(
+        text,
+      )
+    if (segAntMatch) {
+      renovacao.seguradoraAnterior = sanitizarTextoExtraido(segAntMatch[1])
+    }
+
+    const bonusMatch = /(?:classe\s*de\s*b[oó]nus)[*\s|:]+([0-9]{1,2})\b/i.exec(text)
+    if (bonusMatch) {
+      renovacao.classeBonus = bonusMatch[1].trim()
+    }
+  }
+
+  return {
+    numeroProposta,
+    numeroApolice: '', // proposta de renovação não traz nova apólice emitida ainda
+    tipoSeguro: 'Auto',
+    vigenciaInicio,
+    vigenciaFim,
+    premioLiquido,
+    iof,
+    premioTotal,
+    formaPagamento,
+    quantidadeParcelas,
+    parcelamentoDescricao,
+    segurado,
+    condutorPrincipal,
+    veiculo,
+    renovacao,
   }
 }
