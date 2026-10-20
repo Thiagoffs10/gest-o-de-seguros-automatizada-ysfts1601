@@ -1540,6 +1540,7 @@ export default function Financial() {
         countSemPrevisao={metrics.countSemPrevisao}
         onSemPrevisaoClick={() => setRecebimentoModalType('sem_previsao')}
         onExpectedProfitClick={() => setIsResultadoProjetadoOpen(true)}
+        onTotalPendentesClick={() => setRecebimentoModalType('saldo_total')}
         // RESULTADO PROJETADO (renomeado de Lucro Previsto, isolado na projeção)
         expectedProfit={metrics.expectedProfit}
         // BLOCO 4: RESULTADO REAL DO PERÍODO

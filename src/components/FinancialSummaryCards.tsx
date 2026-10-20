@@ -540,19 +540,119 @@ export const FinancialSummaryCards = memo(function FinancialSummaryCards({
         {/* ============================================================ */}
         {/* BLOCO 3 — PROJEÇÃO DE RECEBIMENTOS & RESULTADO PROJETADO     */}
         {/* ============================================================ */}
-        <div className="space-y-2">
-          <div className="flex flex-col sm:flex-row sm:items-center justify-between px-1 gap-1">
-            <h3 className="text-xs font-bold text-slate-700 uppercase tracking-wider flex items-center gap-1.5">
-              <span className="w-2 h-2 rounded-full bg-indigo-600 inline-block" />
-              3. PROJEÇÃO DE RECEBIMENTOS (QUANDO ESPERAMOS RECEBER O SALDO)
-            </h3>
-            <span className="text-[11px] text-slate-500 font-medium">
-              Modelos parcelados, recorrentes e esgotamento
-            </span>
+        <div className="space-y-2.5">
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between px-1 gap-2">
+            <div>
+              <h3 className="text-xs font-bold text-slate-700 uppercase tracking-wider flex items-center gap-1.5">
+                <span className="w-2 h-2 rounded-full bg-indigo-600 inline-block" />
+                3. PROJEÇÃO DE RECEBIMENTOS (QUANDO ESPERAMOS RECEBER O SALDO)
+              </h3>
+              <p className="text-[11px] text-slate-500 mt-0.5">
+                Cronograma de saldo pendente a receber mês a mês (modelos parcelados, recorrentes e
+                esgotamento)
+              </p>
+            </div>
+
+            {/* Filtro próprio de competência do Bloco 3 */}
+            <div className="flex items-center gap-1.5 shrink-0">
+              <span className="text-[11px] font-medium text-slate-500 flex items-center gap-1">
+                <Filter className="w-3 h-3 text-indigo-600" />
+                Filtrar projeção:
+              </span>
+              <Select value={bloco3CompetenciaFilter} onValueChange={setBloco3CompetenciaFilter}>
+                <SelectTrigger className="w-[170px] h-8 text-xs bg-white border-slate-300">
+                  <SelectValue placeholder="Todas as competências" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="ALL">
+                    Todas ({projecoesCompetencias.length + (saldoSemPrevisao > 0 ? 1 : 0)})
+                  </SelectItem>
+                  {projecoesCompetencias.map((comp) => (
+                    <SelectItem key={comp.competenciaRaw} value={comp.competenciaRaw}>
+                      {comp.competencia} ({comp.count} parc.)
+                    </SelectItem>
+                  ))}
+                  {saldoSemPrevisao > 0 && (
+                    <SelectItem value="SEM_PREVISAO">
+                      Sem Previsão ({countSemPrevisao} itens)
+                    </SelectItem>
+                  )}
+                </SelectContent>
+              </Select>
+              {bloco3CompetenciaFilter !== 'ALL' && (
+                <button
+                  type="button"
+                  onClick={() => setBloco3CompetenciaFilter('ALL')}
+                  className="text-[10px] text-indigo-600 hover:text-indigo-800 underline font-medium px-1"
+                >
+                  Ver todos
+                </button>
+              )}
+            </div>
           </div>
 
           <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-6 lg:grid-cols-7 gap-2.5">
-            {projecoesCompetencias.map((comp) => {
+            {/* CARD DE TOTAL GERAL A RECEBER (ACUMULADO DAS COMISSÕES PENDENTES) */}
+            <Card
+              onClick={onTotalPendentesClick || onSaldoTotalClick}
+              role="button"
+              tabIndex={0}
+              className="shadow-sm cursor-pointer hover:border-indigo-500 hover:shadow-md hover:-translate-y-0.5 active:translate-y-0 transition-all duration-150 group border-indigo-300 bg-gradient-to-br from-indigo-50/80 via-blue-50/40 to-slate-50/60 ring-1 ring-indigo-200 select-none ring-offset-background focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-indigo-400 col-span-2 sm:col-span-1"
+            >
+              <CardHeader className="p-2.5 pb-1 flex flex-row items-center justify-between">
+                <div className="flex items-center gap-1 min-w-0">
+                  <CardTitle className="text-[11px] font-bold text-indigo-950 truncate">
+                    Total a Receber
+                  </CardTitle>
+                  <Tooltip>
+                    <TooltipTrigger asChild>
+                      <HelpCircle className="w-3 h-3 text-indigo-600 shrink-0" />
+                    </TooltipTrigger>
+                    <TooltipContent className="text-xs max-w-xs">
+                      {bloco3CompetenciaFilter === 'ALL'
+                        ? 'Total Geral Acumulado a Receber: soma exata de todas as competências futuras projetadas + saldo sem previsão. Bate com o Saldo Total a Receber do Bloco 2.'
+                        : 'Total filtrado pela competência selecionada acima. Clique em Ver todos para ver o acumulado geral.'}
+                    </TooltipContent>
+                  </Tooltip>
+                </div>
+                <Wallet className="w-3.5 h-3.5 text-indigo-600 group-hover:scale-110 transition-transform shrink-0" />
+              </CardHeader>
+              <CardContent className="p-2.5 pt-0">
+                <div className="text-sm font-extrabold text-indigo-900 truncate">
+                  R${' '}
+                  {formatCurrency(
+                    bloco3CompetenciaFilter === 'ALL'
+                      ? totalAcumuladoAReceber
+                      : bloco3CompetenciaFilter === 'SEM_PREVISAO'
+                        ? saldoSemPrevisao
+                        : filteredProjecoesCompetencias.reduce(
+                            (sum, c) => sum + (c.saldoPrevisto || 0),
+                            0,
+                          ),
+                  )}
+                </div>
+                <div className="flex items-center justify-between text-[10px] text-indigo-700 mt-1 font-medium">
+                  <span className="truncate">
+                    {bloco3CompetenciaFilter === 'ALL'
+                      ? `${totalParcelasAcumuladas} parcela(s)`
+                      : bloco3CompetenciaFilter === 'SEM_PREVISAO'
+                        ? `${countSemPrevisao} item(ns)`
+                        : `${filteredProjecoesCompetencias.reduce((sum, c) => sum + (c.count || 0), 0)} parcela(s)`}
+                  </span>
+                  <span className="group-hover:underline flex items-center font-bold shrink-0 ml-1">
+                    Auditar <ChevronRight className="w-3 h-3 ml-0.5" />
+                  </span>
+                </div>
+                <div className="text-[9px] text-slate-500 mt-0.5 font-normal truncate">
+                  {bloco3CompetenciaFilter === 'ALL'
+                    ? 'Acumulado pendente'
+                    : 'Competência filtrada'}
+                </div>
+              </CardContent>
+            </Card>
+
+            {/* CARDS DE COMPETÊNCIA FILTRADOS */}
+            {filteredProjecoesCompetencias.map((comp) => {
               const isClickable = Boolean(onCompetenciaClick)
               return (
                 <Card
@@ -568,10 +668,10 @@ export const FinancialSummaryCards = memo(function FinancialSummaryCards({
                     <span className="text-[11px] font-bold text-slate-700 uppercase group-hover:text-indigo-600 transition-colors">
                       {comp.competencia}
                     </span>
-                    <Calendar className="w-3.5 h-3.5 text-slate-400 group-hover:text-indigo-600" />
+                    <Calendar className="w-3.5 h-3.5 text-slate-400 group-hover:text-indigo-600 shrink-0" />
                   </CardHeader>
                   <CardContent className="p-2.5 pt-0">
-                    <div className="text-sm font-bold text-indigo-900">
+                    <div className="text-sm font-bold text-indigo-900 truncate">
                       R$ {formatCurrency(comp.saldoPrevisto)}
                     </div>
                     <div className="flex items-center justify-between text-[10px] text-slate-500 mt-1">
@@ -584,43 +684,45 @@ export const FinancialSummaryCards = memo(function FinancialSummaryCards({
             })}
 
             {/* Card de SEM PREVISÃO DEFINIDA (quando não há competência futura confiável) */}
-            <Card
-              onClick={onSemPrevisaoClick}
-              role="button"
-              tabIndex={0}
-              className={`shadow-xs cursor-pointer hover:border-amber-400 hover:shadow-md hover:-translate-y-0.5 active:translate-y-0 transition-all duration-150 group border-slate-200 select-none ring-offset-background focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-amber-400 ${
-                saldoSemPrevisao > 0 ? 'bg-amber-50/40 border-amber-200' : 'bg-slate-50/50'
-              }`}
-            >
-              <CardHeader className="p-2.5 pb-1 flex flex-row items-center justify-between">
-                <div className="flex items-center gap-1">
-                  <span className="text-[11px] font-bold text-slate-700 uppercase group-hover:text-amber-800 transition-colors">
-                    Sem Previsão
-                  </span>
-                  <Tooltip>
-                    <TooltipTrigger asChild>
-                      <HelpCircle className="w-3 h-3 text-slate-400" />
-                    </TooltipTrigger>
-                    <TooltipContent className="text-xs max-w-xs">
-                      Comissões pendentes ou com saldo sem competência futura definida. Conciliação:
-                      Projeções com data + Sem previsão = Saldo Total a Receber.
-                    </TooltipContent>
-                  </Tooltip>
-                </div>
-                <Clock className="w-3.5 h-3.5 text-slate-400 group-hover:text-amber-700" />
-              </CardHeader>
-              <CardContent className="p-2.5 pt-0">
-                <div className="text-sm font-bold text-slate-800">
-                  R$ {formatCurrency(saldoSemPrevisao)}
-                </div>
-                <div className="flex items-center justify-between text-[10px] text-slate-500 mt-1">
-                  <span>{countSemPrevisao} item(ns)</span>
-                  <span className="text-amber-700 font-medium group-hover:underline">Ver</span>
-                </div>
-              </CardContent>
-            </Card>
+            {showSemPrevisaoCard && (
+              <Card
+                onClick={onSemPrevisaoClick}
+                role="button"
+                tabIndex={0}
+                className={`shadow-xs cursor-pointer hover:border-amber-400 hover:shadow-md hover:-translate-y-0.5 active:translate-y-0 transition-all duration-150 group border-slate-200 select-none ring-offset-background focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-amber-400 ${
+                  saldoSemPrevisao > 0 ? 'bg-amber-50/40 border-amber-200' : 'bg-slate-50/50'
+                }`}
+              >
+                <CardHeader className="p-2.5 pb-1 flex flex-row items-center justify-between">
+                  <div className="flex items-center gap-1 min-w-0">
+                    <span className="text-[11px] font-bold text-slate-700 uppercase group-hover:text-amber-800 transition-colors truncate">
+                      Sem Previsão
+                    </span>
+                    <Tooltip>
+                      <TooltipTrigger asChild>
+                        <HelpCircle className="w-3 h-3 text-slate-400 shrink-0" />
+                      </TooltipTrigger>
+                      <TooltipContent className="text-xs max-w-xs">
+                        Comissões pendentes ou com saldo sem competência futura definida.
+                        Conciliação: Projeções com data + Sem previsão = Saldo Total a Receber.
+                      </TooltipContent>
+                    </Tooltip>
+                  </div>
+                  <Clock className="w-3.5 h-3.5 text-slate-400 group-hover:text-amber-700 shrink-0" />
+                </CardHeader>
+                <CardContent className="p-2.5 pt-0">
+                  <div className="text-sm font-bold text-slate-800 truncate">
+                    R$ {formatCurrency(saldoSemPrevisao)}
+                  </div>
+                  <div className="flex items-center justify-between text-[10px] text-slate-500 mt-1">
+                    <span>{countSemPrevisao} item(ns)</span>
+                    <span className="text-amber-700 font-medium group-hover:underline">Ver</span>
+                  </div>
+                </CardContent>
+              </Card>
+            )}
 
-            {/* Card de RESULTADO LÍQUIDO PROJETADO (clicável com memória simples) */}
+            {/* Card de RESULTADO LÍQUIDO PROJETADO (CLAREZA REFORÇADA: NÃO É COMISSÃO A RECEBER, É MARGEM ESTIMADA) */}
             <Card
               onClick={onExpectedProfitClick}
               role="button"
@@ -628,34 +730,45 @@ export const FinancialSummaryCards = memo(function FinancialSummaryCards({
               className="shadow-xs cursor-pointer hover:border-indigo-400 hover:shadow-md hover:-translate-y-0.5 active:translate-y-0 transition-all duration-150 group bg-slate-50 border-slate-300 col-span-2 sm:col-span-1 select-none ring-offset-background focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-indigo-400"
             >
               <CardHeader className="p-2.5 pb-1 flex flex-row items-center justify-between">
-                <div className="flex items-center gap-1">
-                  <span className="text-[11px] font-bold text-slate-700 uppercase group-hover:text-indigo-600 transition-colors">
+                <div className="flex items-center gap-1 min-w-0">
+                  <span className="text-[11px] font-bold text-slate-700 uppercase group-hover:text-indigo-600 transition-colors truncate">
                     Res. Líq. Projetado
                   </span>
                   <Tooltip>
                     <TooltipTrigger asChild>
-                      <HelpCircle className="w-3 h-3 text-slate-400" />
+                      <HelpCircle className="w-3 h-3 text-slate-400 shrink-0" />
                     </TooltipTrigger>
-                    <TooltipContent className="text-xs max-w-xs">
-                      (+) Receitas previstas (-) Repasses previstos (-) Custos previstos = Resultado
-                      Líquido Projetado. Valor ESTIMADO, nunca apresentado como recebido. Clique
-                      para ver memória.
+                    <TooltipContent className="text-xs max-w-xs space-y-1">
+                      <p className="font-semibold text-slate-900">
+                        Resultado Líquido Projetado (Margem Teórica da Safra):
+                      </p>
+                      <p>
+                        (+) Comissões Previstas Líquidas (-) Repasses Previstos (-) Custos Previstos
+                        = Margem Projetada.
+                      </p>
+                      <p className="text-amber-600 font-medium">
+                        Atenção: NÃO representa o dinheiro a receber em caixa (para isso veja o card
+                        "Total a Receber"). Representa a margem teórica das vendas.
+                      </p>
                     </TooltipContent>
                   </Tooltip>
                 </div>
-                <TrendingUp className="w-3.5 h-3.5 text-slate-500 group-hover:text-indigo-600 transition-colors" />
+                <TrendingUp className="w-3.5 h-3.5 text-slate-500 group-hover:text-indigo-600 transition-colors shrink-0" />
               </CardHeader>
               <CardContent className="p-2.5 pt-0">
                 <div
-                  className={`text-sm font-bold ${
+                  className={`text-sm font-bold truncate ${
                     isLucroProjetadoNegativo ? 'text-rose-700' : 'text-slate-800'
                   }`}
                 >
                   R$ {formatCurrency(expectedProfit)}
                 </div>
                 <div className="flex items-center justify-between text-[10px] text-slate-500 mt-1">
-                  <span>Estimativa</span>
+                  <span className="truncate">Margem teórica</span>
                   <span className="text-indigo-600 font-medium group-hover:underline">Memória</span>
+                </div>
+                <div className="text-[9px] text-slate-400 mt-0.5 font-normal truncate">
+                  Receita (-) Repasse (-) Custos
                 </div>
               </CardContent>
             </Card>
