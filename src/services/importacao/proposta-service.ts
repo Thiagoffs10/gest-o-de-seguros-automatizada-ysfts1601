@@ -70,7 +70,7 @@ export async function extrairPropostaDeArquivoPdf(
 
   // PERSISTÊNCIA NO SERVIDOR (collection importacao_debug)
   try {
-    const appVersion = '0.0.193'
+    const appVersion = '0.0.211'
     pb.collection('importacao_debug')
       .create({
         arquivo_nome: file.name,
