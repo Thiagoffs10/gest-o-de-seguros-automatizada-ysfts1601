@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react'
+import React, { useMemo, useState } from 'react'
 import { useDebounce } from '@/hooks/use-debounce'
 import {
   Dialog,
@@ -12,7 +12,10 @@ import { Input } from '@/components/ui/input'
 import { Badge } from '@/components/ui/badge'
 import { Policy, ComissaoRecebimento, ComissaoPrevista } from '@/types'
 import { formatCurrency, formatDateDisplay } from '@/lib/utils'
-import { reconciliarRecebimentosComPrevisoes } from '@/services/comissao-recebimentos'
+import {
+  inferirCompetenciaRecebimento,
+  reconciliarRecebimentosComPrevisoes,
+} from '@/services/comissao-recebimentos'
 import { DatePeriod, isCompetenciaInPeriod } from '@/lib/date-filter'
 import {
   CheckCircle2,
@@ -34,6 +37,68 @@ export type RecebimentoDetailType =
   | 'saldo_total'
   | 'sem_previsao'
   | 'total_acumulado'
+
+export interface CompetenciaGroupData<T> {
+  key: string // chave de agrupamento, ex: "09/2026" ou "SEM_PREVISAO"
+  label: string // rótulo legível, ex: "SET/26" ou "Sem Previsão"
+  rows: T[]
+  subtotalPrevisto: number
+  subtotalRecebido: number
+  subtotalSaldo: number
+  count: number
+}
+
+// Meses em português para rótulos legíveis
+const MESES_ABREV = [
+  'JAN',
+  'FEV',
+  'MAR',
+  'ABR',
+  'MAI',
+  'JUN',
+  'JUL',
+  'AGO',
+  'SET',
+  'OUT',
+  'NOV',
+  'DEZ',
+]
+
+/**
+ * Converte chave de competência "MM/YYYY" para rótulo legível "MMM/YY" (ex: "09/2026" -> "SET/26").
+ * Retorna fallback se não tiver formato MM/YYYY.
+ */
+export function formatCompetenciaGroupLabel(comp?: string | null): string {
+  if (!comp || comp === 'SEM_PREVISAO' || comp === 'Sem Data' || comp === '-') {
+    return 'Sem Previsão'
+  }
+  if (comp.includes('/')) {
+    const [mStr, yStr] = comp.trim().split('/')
+    const mNum = parseInt(mStr, 10)
+    if (mNum >= 1 && mNum <= 12) {
+      const shortYear = yStr ? yStr.slice(-2) : ''
+      return `${MESES_ABREV[mNum - 1]}/${shortYear}`
+    }
+  }
+  return comp
+}
+
+/**
+ * Ordena chaves de competência em ordem cronológica (MM/YYYY), com 'SEM_PREVISAO'/'Sem Previsão' por último.
+ */
+export function compareCompetencias(aKey: string, bKey: string): number {
+  const isASemPrevisao = aKey === 'SEM_PREVISAO' || aKey === 'Sem Previsão' || !aKey.includes('/')
+  const isBSemPrevisao = bKey === 'SEM_PREVISAO' || bKey === 'Sem Previsão' || !bKey.includes('/')
+
+  if (isASemPrevisao && isBSemPrevisao) return 0
+  if (isASemPrevisao) return 1
+  if (isBSemPrevisao) return -1
+
+  const [ma, ya] = aKey.split('/').map(Number)
+  const [mb, yb] = bKey.split('/').map(Number)
+  if (ya !== yb) return ya - yb
+  return ma - mb
+}
 
 interface Props {
   open: boolean
@@ -282,6 +347,31 @@ export function RecebimentoDetailModal({
         if (isSettled) statusText = 'Recebida'
         else if (isPartial) statusText = 'Parcial'
 
+        // Determina competência de recebimento para agrupamento cronológico
+        let competenciaKey = 'SEM_PREVISAO'
+        if (hasPrevisao) {
+          // Previsão com saldo pendente (ou primeira previsão não endosso)
+          const activePrev =
+            polPrevs.find((prev) => {
+              if (prev.endorsement) return false
+              const recRes = reconciliacaoMap.get(prev.id)
+              const pSaldo = recRes
+                ? recRes.saldo
+                : Math.max(
+                    0,
+                    (Number(prev.valor_previsto) || 0) - (recRes?.valorRecebidoBruto || 0),
+                  )
+              return pSaldo > 0.009
+            }) || polPrevs.find((prev) => !prev.endorsement)
+
+          if (activePrev) {
+            competenciaKey =
+              activePrev.competencia?.trim() ||
+              inferirCompetenciaRecebimento(activePrev.data_prevista) ||
+              'SEM_PREVISAO'
+          }
+        }
+
         return {
           id: p.id,
           tipo: 'Apolice' as 'Apolice' | 'Endosso',
@@ -299,6 +389,7 @@ export function RecebimentoDetailModal({
           isPending,
           hasPrevisao,
           ultimoRecebimento,
+          competenciaKey,
         }
       })
 
@@ -350,6 +441,11 @@ export function RecebimentoDetailModal({
         if (isSettled) statusText = 'Recebida'
         else if (isPartial) statusText = 'Parcial'
 
+        const endorsementCompKey =
+          prev.competencia?.trim() ||
+          inferirCompetenciaRecebimento(prev.data_prevista) ||
+          'SEM_PREVISAO'
+
         endorsementRows.push({
           id: prev.id,
           tipo: 'Endosso' as const,
@@ -367,6 +463,7 @@ export function RecebimentoDetailModal({
           isPending,
           hasPrevisao: true,
           ultimoRecebimento,
+          competenciaKey: endorsementCompKey,
         })
       }
     }
@@ -436,9 +533,45 @@ export function RecebimentoDetailModal({
     )
   }, [propostasRows, debouncedSearch])
 
+  // Agrupamento por competência no modo 'total_acumulado'
+  const isTotalAcumuladoMode = type === 'total_acumulado'
+
+  const groupedPropostas = useMemo<CompetenciaGroupData<(typeof propostasRows)[number]>[]>(() => {
+    if (!isTotalAcumuladoMode) return []
+
+    const map = new Map<string, (typeof propostasRows)[number][]>()
+    filteredPropostas.forEach((row) => {
+      const cKey = row.competenciaKey || 'SEM_PREVISAO'
+      if (!map.has(cKey)) {
+        map.set(cKey, [])
+      }
+      map.get(cKey)!.push(row)
+    })
+
+    const sortedKeys = Array.from(map.keys()).sort(compareCompetencias)
+
+    return sortedKeys.map((key) => {
+      const rows = map.get(key) || []
+      const subtotalPrevisto = Math.round(rows.reduce((sum, r) => sum + r.previsto, 0) * 100) / 100
+      const subtotalRecebido = Math.round(rows.reduce((sum, r) => sum + r.rec, 0) * 100) / 100
+      const subtotalSaldo = Math.round(rows.reduce((sum, r) => sum + r.saldo, 0) * 100) / 100
+
+      return {
+        key,
+        label: formatCompetenciaGroupLabel(key),
+        rows,
+        subtotalPrevisto,
+        subtotalRecebido,
+        subtotalSaldo,
+        count: rows.length,
+      }
+    })
+  }, [isTotalAcumuladoMode, filteredPropostas])
+
   const activeRowsCount =
     meta.mode === 'movimentos' ? filteredMovimentos.length : filteredPropostas.length
-  const totalPages = Math.max(1, Math.ceil(activeRowsCount / PAGE_SIZE))
+  // No modo total_acumulado agrupado, exibimos todas as competências organizadas em uma única visualização com scroll
+  const totalPages = isTotalAcumuladoMode ? 1 : Math.max(1, Math.ceil(activeRowsCount / PAGE_SIZE))
 
   const paginatedMovimentos = useMemo(() => {
     const start = (page - 1) * PAGE_SIZE
@@ -446,9 +579,10 @@ export function RecebimentoDetailModal({
   }, [filteredMovimentos, page])
 
   const paginatedPropostas = useMemo(() => {
+    if (isTotalAcumuladoMode) return filteredPropostas
     const start = (page - 1) * PAGE_SIZE
     return filteredPropostas.slice(start, start + PAGE_SIZE)
-  }, [filteredPropostas, page])
+  }, [filteredPropostas, page, isTotalAcumuladoMode])
 
   const handleOpenChange = (nextOpen: boolean) => {
     if (!nextOpen) {
@@ -610,23 +744,61 @@ export function RecebimentoDetailModal({
             { header: 'Último Recebimento', dataKey: 'ultimoRecFmt', align: 'center' },
             { header: 'Status', dataKey: 'statusText', align: 'center' },
           ],
-          rows: filteredPropostas.map((r) => {
-            const prefixo = r.isEndorsement ? '[Endosso] ' : ''
-            const baseProposta =
-              r.apolice && r.apolice !== r.proposta
-                ? `${r.proposta}\n(Ap: ${r.apolice})`
-                : r.proposta
-            return {
-              propostaFormatada: `${prefixo}${baseProposta}`,
-              clienteNome: r.clienteNome,
-              seguradoraNome: r.seguradoraNome,
-              previstoFmt: `R$ ${formatCurrency(r.previsto)}`,
-              recFmt: `R$ ${formatCurrency(r.rec)}`,
-              saldoFmt: `R$ ${formatCurrency(r.saldo)}`,
-              ultimoRecFmt: r.ultimoRecebimento ? formatDateDisplay(r.ultimoRecebimento) : '-',
-              statusText: r.statusText,
-            }
-          }),
+          rows: isTotalAcumuladoMode
+            ? groupedPropostas.flatMap((grp) => {
+                const headerRow: any = {
+                  _isGroupHeader: true,
+                  _groupTitle: `COMPETÊNCIA: ${grp.label.toUpperCase()} (${grp.count} ${grp.count === 1 ? 'item' : 'itens'}) — Subtotal a Receber: R$ ${formatCurrency(grp.subtotalSaldo)}`,
+                }
+                const dataRows = grp.rows.map((r) => {
+                  const prefixo = r.isEndorsement ? '[Endosso] ' : ''
+                  const baseProposta =
+                    r.apolice && r.apolice !== r.proposta
+                      ? `${r.proposta}\n(Ap: ${r.apolice})`
+                      : r.proposta
+                  return {
+                    propostaFormatada: `${prefixo}${baseProposta}`,
+                    clienteNome: r.clienteNome,
+                    seguradoraNome: r.seguradoraNome,
+                    previstoFmt: `R$ ${formatCurrency(r.previsto)}`,
+                    recFmt: `R$ ${formatCurrency(r.rec)}`,
+                    saldoFmt: `R$ ${formatCurrency(r.saldo)}`,
+                    ultimoRecFmt: r.ultimoRecebimento
+                      ? formatDateDisplay(r.ultimoRecebimento)
+                      : '-',
+                    statusText: r.statusText,
+                  }
+                })
+                const subtotalRow: any = {
+                  _isGroupSubtotal: true,
+                  propostaFormatada: `Subtotal ${grp.label}`,
+                  clienteNome: '',
+                  seguradoraNome: '',
+                  previstoFmt: `R$ ${formatCurrency(grp.subtotalPrevisto)}`,
+                  recFmt: `R$ ${formatCurrency(grp.subtotalRecebido)}`,
+                  saldoFmt: `R$ ${formatCurrency(grp.subtotalSaldo)}`,
+                  ultimoRecFmt: '',
+                  statusText: '',
+                }
+                return [headerRow, ...dataRows, subtotalRow]
+              })
+            : filteredPropostas.map((r) => {
+                const prefixo = r.isEndorsement ? '[Endosso] ' : ''
+                const baseProposta =
+                  r.apolice && r.apolice !== r.proposta
+                    ? `${r.proposta}\n(Ap: ${r.apolice})`
+                    : r.proposta
+                return {
+                  propostaFormatada: `${prefixo}${baseProposta}`,
+                  clienteNome: r.clienteNome,
+                  seguradoraNome: r.seguradoraNome,
+                  previstoFmt: `R$ ${formatCurrency(r.previsto)}`,
+                  recFmt: `R$ ${formatCurrency(r.rec)}`,
+                  saldoFmt: `R$ ${formatCurrency(r.saldo)}`,
+                  ultimoRecFmt: r.ultimoRecebimento ? formatDateDisplay(r.ultimoRecebimento) : '-',
+                  statusText: r.statusText,
+                }
+              }),
           totalRow: {
             propostaFormatada: `Total Consolidado (${filteredPropostas.length} propostas)`,
             clienteNome: '',
@@ -874,8 +1046,172 @@ export function RecebimentoDetailModal({
               </tfoot>
             </table>
           </div>
+        ) : isTotalAcumuladoMode ? (
+          /* TABELA MODO TOTAL ACUMULADO (AGRUPADO POR COMPETÊNCIA DE RECEBIMENTO) */
+          <div className="overflow-x-auto border rounded-lg flex-1 min-h-[260px]">
+            <table className="w-full text-left text-xs text-slate-700">
+              <thead className="bg-slate-100 text-slate-600 font-semibold border-b sticky top-0 z-10">
+                <tr>
+                  <th className="p-2.5">Proposta</th>
+                  <th className="p-2.5">Cliente</th>
+                  <th className="p-2.5">Seguradora</th>
+                  <th className="p-2.5 text-right">Comissão Prevista</th>
+                  <th className="p-2.5 text-right text-emerald-800">Já Recebido</th>
+                  <th className="p-2.5 text-right font-bold text-indigo-900 bg-indigo-100/70">
+                    Saldo a Receber
+                  </th>
+                  <th className="p-2.5">Último Recebimento</th>
+                  <th className="p-2.5 text-center">Status</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-slate-100">
+                {groupedPropostas.length === 0 ? (
+                  <tr>
+                    <td colSpan={8} className="text-center p-8 text-slate-500">
+                      Nenhuma proposta com saldo encontrada para o total acumulado.
+                    </td>
+                  </tr>
+                ) : (
+                  groupedPropostas.map((group) => {
+                    const isSemPrevisao = group.key === 'SEM_PREVISAO'
+                    return (
+                      <React.Fragment key={group.key}>
+                        {/* Cabeçalho do Grupo de Competência */}
+                        <tr
+                          className={`border-t-2 font-bold ${
+                            isSemPrevisao
+                              ? 'bg-amber-100/80 text-amber-950 border-amber-300'
+                              : 'bg-indigo-50/90 text-indigo-950 border-indigo-200'
+                          }`}
+                        >
+                          <td colSpan={5} className="p-2.5">
+                            <div className="flex items-center gap-2">
+                              <Badge
+                                className={
+                                  isSemPrevisao
+                                    ? 'bg-amber-700 text-white font-bold text-[11px] px-2 py-0.5'
+                                    : 'bg-indigo-700 text-white font-bold text-[11px] px-2 py-0.5'
+                                }
+                              >
+                                {group.label}
+                              </Badge>
+                              <span className="text-xs font-semibold">
+                                {group.count} {group.count === 1 ? 'registro' : 'registros'}
+                              </span>
+                            </div>
+                          </td>
+                          <td
+                            className={`p-2.5 text-right font-extrabold ${
+                              isSemPrevisao
+                                ? 'text-amber-950 bg-amber-200/80'
+                                : 'text-indigo-950 bg-indigo-200/80'
+                            }`}
+                          >
+                            <span className="text-[10px] block font-normal uppercase opacity-75">
+                              Subtotal
+                            </span>
+                            R$ {formatCurrency(group.subtotalSaldo)}
+                          </td>
+                          <td colSpan={2}></td>
+                        </tr>
+
+                        {/* Linhas de Propostas deste Grupo */}
+                        {group.rows.map((r) => (
+                          <tr key={r.id} className="hover:bg-slate-50/80">
+                            <td className="p-2.5 font-bold text-slate-900 pl-4">
+                              <div className="flex flex-col">
+                                <div className="flex items-center gap-1.5">
+                                  <span>{r.proposta}</span>
+                                  {r.isEndorsement && (
+                                    <Badge
+                                      variant="outline"
+                                      className="text-[10px] px-1.5 py-0 border-blue-200 bg-blue-50 text-blue-700 font-normal"
+                                    >
+                                      Endosso
+                                    </Badge>
+                                  )}
+                                </div>
+                                {r.apolice && r.apolice !== r.proposta && (
+                                  <span className="text-[10px] text-slate-400 font-normal">
+                                    Apólice: {r.apolice}
+                                  </span>
+                                )}
+                              </div>
+                            </td>
+                            <td className="p-2.5 font-medium text-slate-900 max-w-[160px] truncate">
+                              {r.clienteNome}
+                            </td>
+                            <td className="p-2.5 text-slate-700">{r.seguradoraNome}</td>
+                            <td className="p-2.5 text-right font-medium text-slate-900">
+                              R$ {formatCurrency(r.previsto)}
+                            </td>
+                            <td className="p-2.5 text-right font-semibold text-emerald-700">
+                              R$ {formatCurrency(r.rec)}
+                            </td>
+                            <td className="p-2.5 text-right font-bold text-indigo-900 bg-indigo-50/40">
+                              R$ {formatCurrency(r.saldo)}
+                            </td>
+                            <td className="p-2.5 text-slate-600">
+                              {r.ultimoRecebimento ? formatDateDisplay(r.ultimoRecebimento) : '-'}
+                            </td>
+                            <td className="p-2.5 text-center">
+                              <Badge
+                                className={
+                                  r.statusText === 'Recebida'
+                                    ? 'bg-emerald-600 text-white'
+                                    : r.statusText === 'Parcial'
+                                      ? 'bg-blue-600 text-white'
+                                      : 'bg-amber-500 text-white'
+                                }
+                              >
+                                {r.statusText}
+                              </Badge>
+                            </td>
+                          </tr>
+                        ))}
+
+                        {/* Linha de Subtotal da Competência */}
+                        <tr className="bg-slate-50 text-slate-700 font-semibold border-b text-[11px]">
+                          <td colSpan={3} className="p-2 pl-4 text-slate-600 italic">
+                            Subtotal da Competência ({group.label}):
+                          </td>
+                          <td className="p-2 text-right">
+                            R$ {formatCurrency(group.subtotalPrevisto)}
+                          </td>
+                          <td className="p-2 text-right text-emerald-800">
+                            R$ {formatCurrency(group.subtotalRecebido)}
+                          </td>
+                          <td className="p-2 text-right font-bold text-indigo-900 bg-indigo-100/50">
+                            R$ {formatCurrency(group.subtotalSaldo)}
+                          </td>
+                          <td colSpan={2}></td>
+                        </tr>
+                      </React.Fragment>
+                    )
+                  })
+                )}
+              </tbody>
+              <tfoot className="bg-slate-100 font-bold border-t-2 sticky bottom-0 z-10 text-slate-900">
+                <tr>
+                  <td className="p-2.5" colSpan={3}>
+                    Total Geral Acumulado ({propostasRows.length} propostas)
+                  </td>
+                  <td className="p-2.5 text-right">
+                    R$ {formatCurrency(totalPropostas.totalPrevisto)}
+                  </td>
+                  <td className="p-2.5 text-right text-emerald-800">
+                    R$ {formatCurrency(totalPropostas.totalRecebido)}
+                  </td>
+                  <td className="p-2.5 text-right text-indigo-950 bg-indigo-200/90 text-sm font-extrabold">
+                    R$ {formatCurrency(totalPropostas.totalSaldo)}
+                  </td>
+                  <td colSpan={2}></td>
+                </tr>
+              </tfoot>
+            </table>
+          </div>
         ) : (
-          /* TABELA MODO PROPOSTAS (Parcial, Não Recebida, Saldo Total) */
+          /* TABELA MODO PROPOSTAS DEMAIS MODOS (Parcial, Não Recebida, Saldo Total, Sem Previsão) */
           <div className="overflow-x-auto border rounded-lg flex-1 min-h-[220px]">
             <table className="w-full text-left text-xs text-slate-700">
               <thead className="bg-slate-100 text-slate-600 font-semibold border-b sticky top-0 z-10">

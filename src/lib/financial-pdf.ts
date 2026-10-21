@@ -259,9 +259,37 @@ export async function exportFinancialListingPDF(options: FinancialPDFOptions) {
     currentY += 1
   }
 
-  // 5. Tabela com autoTable
+  // 5. Tabela com autoTable (com suporte a cabeçalhos e subtotais de grupo)
   const tableHeaders = options.columns.map((c) => c.header)
   const tableData: RowInput[] = options.rows.map((row) => {
+    if (row._isGroupHeader) {
+      return [
+        {
+          content: String(row._groupTitle || ''),
+          colSpan: options.columns.length,
+          styles: {
+            fillColor: [224, 231, 255], // indigo-100
+            textColor: [30, 27, 75], // indigo-950
+            fontStyle: 'bold',
+            fontSize: 7.8,
+          },
+        },
+      ] as any
+    }
+    if (row._isGroupSubtotal) {
+      return options.columns.map((c) => {
+        const val = row[c.dataKey]
+        return {
+          content: val !== undefined && val !== null ? String(val) : '',
+          styles: {
+            fillColor: [241, 245, 249], // slate-100
+            textColor: [15, 23, 42], // slate-900
+            fontStyle: 'bold',
+            fontSize: 7.2,
+          },
+        }
+      }) as any
+    }
     return options.columns.map((c) => {
       const val = row[c.dataKey]
       return val !== undefined && val !== null ? String(val) : '-'
