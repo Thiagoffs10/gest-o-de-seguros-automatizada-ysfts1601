@@ -19,6 +19,7 @@ import {
 } from '@/components/ui/select'
 import { Policy, Endorsement } from '@/types'
 import { todayLocalDate, formatDateDisplay, formatDateForInput } from '@/lib/utils'
+import { toUpperPT } from '@/lib/normalize-text'
 import { createEndorsement, updateEndorsement } from '@/services/endorsements'
 import { useToast } from '@/hooks/use-toast'
 import { getErrorMessage } from '@/lib/pocketbase/errors'
@@ -316,9 +317,9 @@ export function EndorsementFormDialog({
             <Label className="text-xs font-semibold">Nº da Proposta do Endosso (opcional)</Label>
             <Input
               placeholder="Ex: 889912"
-              className="mt-1"
+              className="mt-1 uppercase"
               value={numeroProposta}
-              onChange={(e) => setNumeroProposta(e.target.value)}
+              onChange={(e) => setNumeroProposta(toUpperPT(e.target.value))}
             />
           </div>
 
@@ -360,9 +361,9 @@ export function EndorsementFormDialog({
                 <Label className="text-xs">Modelo do Veículo</Label>
                 <Input
                   placeholder="Ex: Corolla XEi 2.0"
-                  className="mt-1"
+                  className="mt-1 uppercase"
                   value={modeloVeiculo}
-                  onChange={(e) => setModeloVeiculo(e.target.value)}
+                  onChange={(e) => setModeloVeiculo(toUpperPT(e.target.value))}
                 />
               </div>
             </div>
@@ -491,9 +492,9 @@ export function EndorsementFormDialog({
             <Textarea
               rows={2}
               placeholder="Informações adicionais sobre o endosso..."
-              className="mt-1 text-xs"
+              className="mt-1 text-xs uppercase"
               value={observacao}
-              onChange={(e) => setObservacao(e.target.value)}
+              onChange={(e) => setObservacao(toUpperPT(e.target.value))}
             />
           </div>
 

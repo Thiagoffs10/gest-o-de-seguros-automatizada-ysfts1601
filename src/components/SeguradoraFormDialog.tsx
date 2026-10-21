@@ -11,6 +11,7 @@ import { Label } from '@/components/ui/label'
 import { Button } from '@/components/ui/button'
 import { Seguradora } from '@/types'
 import type { FieldErrors } from '@/lib/pocketbase/errors'
+import { toUpperPT } from '@/lib/normalize-text'
 
 interface Props {
   open: boolean
@@ -76,8 +77,9 @@ export function SeguradoraFormDialog({
             <Label className="text-xs font-semibold">Nome *</Label>
             <Input
               required
+              className="uppercase"
               value={form.nome}
-              onChange={(e) => set('nome', e.target.value)}
+              onChange={(e) => set('nome', toUpperPT(e.target.value))}
               placeholder="Nome da seguradora"
             />
             <FieldErr message={err('nome')} />

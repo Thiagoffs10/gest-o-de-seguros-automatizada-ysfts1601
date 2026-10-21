@@ -18,6 +18,7 @@ import {
 } from '@/components/ui/select'
 import { Parceiro } from '@/types'
 import { isValidCpf, isValidCnpj, maskCpf, maskCnpj } from '@/lib/document-validators'
+import { toUpperPT } from '@/lib/normalize-text'
 
 interface Props {
   open: boolean
@@ -125,7 +126,12 @@ export function PartnerFormDialog({
         <form onSubmit={handleSubmit} className="space-y-3">
           <div>
             <Label className="text-xs font-semibold">Nome *</Label>
-            <Input required value={form.nome} onChange={(e) => set('nome', e.target.value)} />
+            <Input
+              required
+              className="uppercase"
+              value={form.nome}
+              onChange={(e) => set('nome', toUpperPT(e.target.value))}
+            />
           </div>
           <div className="grid grid-cols-2 gap-2">
             <div>
@@ -177,8 +183,9 @@ export function PartnerFormDialog({
           <div>
             <Label className="text-xs font-semibold">Dados Bancários / PIX</Label>
             <Input
+              className="uppercase"
               value={form.dados_bancarios_ou_pix}
-              onChange={(e) => set('dados_bancarios_ou_pix', e.target.value)}
+              onChange={(e) => set('dados_bancarios_ou_pix', toUpperPT(e.target.value))}
             />
           </div>
           <DialogFooter>

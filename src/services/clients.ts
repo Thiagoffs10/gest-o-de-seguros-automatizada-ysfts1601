@@ -1,5 +1,6 @@
 import pb from '@/lib/pocketbase/client'
 import { Client } from '@/types'
+import { normalizeClientPayload } from '@/lib/normalize-text'
 
 export const getClients = async (
   searchQuery?: string,
@@ -31,11 +32,13 @@ export const getClient = async (id: string) => {
 }
 
 export const createClient = async (data: Partial<Client>) => {
-  return pb.collection('clients').create<Client>(data)
+  const normalized = normalizeClientPayload(data)
+  return pb.collection('clients').create<Client>(normalized)
 }
 
 export const updateClient = async (id: string, data: Partial<Client>) => {
-  return pb.collection('clients').update<Client>(id, data)
+  const normalized = normalizeClientPayload(data)
+  return pb.collection('clients').update<Client>(id, normalized)
 }
 
 export const deleteClient = async (id: string) => {

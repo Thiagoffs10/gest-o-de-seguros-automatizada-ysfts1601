@@ -22,6 +22,7 @@ import { BRAZILIAN_STATES } from '@/lib/constants'
 import { lookupCep } from '@/lib/cep'
 import { isValidCpf, isValidCnpj, maskCpf, maskCnpj } from '@/lib/document-validators'
 import { maskPhone } from '@/lib/phone-utils'
+import { toUpperPT } from '@/lib/normalize-text'
 import { lookupCnpj } from '@/lib/cnpj'
 import { Loader2, Check, Copy } from 'lucide-react'
 import { Client } from '@/types'
@@ -299,7 +300,12 @@ export function ClientFormDialog({
               <Label className="text-xs font-semibold">
                 {isPF ? 'Nome Completo *' : 'Razão Social *'}
               </Label>
-              <Input required value={form.name} onChange={(e) => set('name', e.target.value)} />
+              <Input
+                required
+                className="uppercase"
+                value={form.name}
+                onChange={(e) => set('name', toUpperPT(e.target.value))}
+              />
             </div>
             {isPF ? (
               <div>
@@ -386,12 +392,12 @@ export function ClientFormDialog({
               <Label className="text-xs font-semibold">Rua / Endereço</Label>
               <Input
                 value={form.rua}
-                onChange={(e) => set('rua', e.target.value)}
-                className={
+                onChange={(e) => set('rua', toUpperPT(e.target.value))}
+                className={`uppercase ${
                   initialData && !form.rua
                     ? 'border-amber-400 bg-amber-50/40 focus-visible:ring-amber-400'
                     : ''
-                }
+                }`}
               />
             </div>
           </div>
@@ -400,24 +406,24 @@ export function ClientFormDialog({
               <Label className="text-xs font-semibold">Número</Label>
               <Input
                 value={form.numero}
-                onChange={(e) => set('numero', e.target.value)}
-                className={
+                onChange={(e) => set('numero', toUpperPT(e.target.value))}
+                className={`uppercase ${
                   initialData && !form.numero
                     ? 'border-amber-400 bg-amber-50/40 focus-visible:ring-amber-400'
                     : ''
-                }
+                }`}
               />
             </div>
             <div className="col-span-2">
               <Label className="text-xs font-semibold">Bairro</Label>
               <Input
                 value={form.bairro}
-                onChange={(e) => set('bairro', e.target.value)}
-                className={
+                onChange={(e) => set('bairro', toUpperPT(e.target.value))}
+                className={`uppercase ${
                   initialData && !form.bairro
                     ? 'border-amber-400 bg-amber-50/40 focus-visible:ring-amber-400'
                     : ''
-                }
+                }`}
               />
             </div>
           </div>
@@ -426,12 +432,12 @@ export function ClientFormDialog({
               <Label className="text-xs font-semibold">Cidade</Label>
               <Input
                 value={form.cidade}
-                onChange={(e) => set('cidade', e.target.value)}
-                className={
+                onChange={(e) => set('cidade', toUpperPT(e.target.value))}
+                className={`uppercase ${
                   initialData && !form.cidade
                     ? 'border-amber-400 bg-amber-50/40 focus-visible:ring-amber-400'
                     : ''
-                }
+                }`}
               />
             </div>
             <div>
@@ -481,7 +487,11 @@ export function ClientFormDialog({
           )}
           <div>
             <Label className="text-xs font-semibold">Observações</Label>
-            <Textarea value={form.notes} onChange={(e) => set('notes', e.target.value)} />
+            <Textarea
+              className="uppercase"
+              value={form.notes}
+              onChange={(e) => set('notes', toUpperPT(e.target.value))}
+            />
           </div>
           <DialogFooter className="flex items-center justify-between gap-2 sm:justify-between w-full">
             <div>

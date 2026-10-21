@@ -53,6 +53,7 @@ import { getTiposSeguro } from '@/services/tipos-seguro'
 import { getProdutos } from '@/services/produtos'
 import { ClientAutocomplete } from '@/components/ClientAutocomplete'
 import type { FieldErrors } from '@/lib/pocketbase/errors'
+import { toUpperPT, toUpperTrim } from '@/lib/normalize-text'
 import {
   formatCurrency,
   formatCurrencyDisplay,
@@ -511,22 +512,22 @@ export function PolicyFormDialog({
       try {
         const isPJ = p.segurado.tipoPessoa === 'PJ'
         const novoCli = await createClient({
-          name: p.segurado.nome,
+          name: toUpperTrim(p.segurado.nome),
           tipo_pessoa: isPJ ? 'PJ' : 'PF',
           cpf: !isPJ ? p.segurado.cpfCnpj : undefined,
           cnpj: isPJ ? p.segurado.cpfCnpj : undefined,
           birth_date: !isPJ ? p.segurado.dataNascimento || undefined : undefined,
-          email: p.segurado.email || undefined,
+          email: p.segurado.email ? p.segurado.email.toLowerCase().trim() : undefined,
           phone: p.segurado.telefone || undefined,
           cep: p.segurado.cep || undefined,
-          rua: p.segurado.rua || undefined,
-          numero: p.segurado.numero || undefined,
-          bairro: p.segurado.bairro || undefined,
-          cidade: p.segurado.cidade || undefined,
-          estado: p.segurado.estado || undefined,
+          rua: toUpperTrim(p.segurado.rua) || undefined,
+          numero: toUpperTrim(p.segurado.numero) || undefined,
+          bairro: toUpperTrim(p.segurado.bairro) || undefined,
+          cidade: toUpperTrim(p.segurado.cidade) || undefined,
+          estado: toUpperTrim(p.segurado.estado) || undefined,
           notes:
             !p.condutorPrincipal.mesmoQueSegurado && p.condutorPrincipal.nome
-              ? `[Condutor Principal: ${p.condutorPrincipal.nome}]`
+              ? `[CONDUTOR PRINCIPAL: ${toUpperTrim(p.condutorPrincipal.nome)}]`
               : undefined,
         })
         setClientsList((prev) => [novoCli, ...prev])
@@ -567,12 +568,12 @@ export function PolicyFormDialog({
       ...prev,
       client: clientId || prev.client,
       seguradora: conferida.seguradoraIdCorrespondente || prev.seguradora,
-      numero_proposta: p.numeroProposta || prev.numero_proposta,
-      policy_number: p.numeroApolice || '', // apólice fica vazia aguardando emissão
+      numero_proposta: toUpperTrim(p.numeroProposta) || prev.numero_proposta,
+      policy_number: toUpperTrim(p.numeroApolice) || '', // apólice fica vazia aguardando emissão
       tipo_de_seguro: p.tipoSeguro || prev.tipo_de_seguro,
-      placa: p.veiculo.placa || prev.placa,
-      chassi: p.veiculo.chassi || prev.chassi,
-      modelo_veiculo: p.veiculo.marcaModelo || prev.modelo_veiculo,
+      placa: toUpperTrim(p.veiculo.placa) || prev.placa,
+      chassi: toUpperTrim(p.veiculo.chassi) || prev.chassi,
+      modelo_veiculo: toUpperTrim(p.veiculo.marcaModelo) || prev.modelo_veiculo,
       valor_bruto: p.premioTotal || prev.valor_bruto,
       valor_liquido: p.premioLiquido || prev.valor_liquido,
       forma_pagamento: p.formaPagamento || prev.forma_pagamento,
@@ -585,7 +586,7 @@ export function PolicyFormDialog({
         if (prev.notes) partes.push(prev.notes)
         if (notasCondutor) partes.push(notasCondutor)
         if (p.observacoesApolice) partes.push(p.observacoesApolice)
-        return partes.join('\n')
+        return toUpperPT(partes.join('\n'))
       })(),
     }))
 
@@ -809,8 +810,9 @@ export function PolicyFormDialog({
             <div>
               <Label className="text-xs font-semibold">Nº da proposta (opcional)</Label>
               <Input
+                className="uppercase"
                 value={form.numero_proposta || ''}
-                onChange={(e) => set('numero_proposta', e.target.value)}
+                onChange={(e) => set('numero_proposta', toUpperPT(e.target.value))}
                 placeholder="Ex: PROP-12345"
               />
               <FieldErr message={err('numero_proposta') || validationErrors.numero_proposta} />
@@ -818,8 +820,9 @@ export function PolicyFormDialog({
             <div>
               <Label className="text-xs font-semibold">Nº da apólice (opcional)</Label>
               <Input
+                className="uppercase"
                 value={form.policy_number || ''}
-                onChange={(e) => set('policy_number', e.target.value)}
+                onChange={(e) => set('policy_number', toUpperPT(e.target.value))}
                 placeholder="Ex: AP-987654"
               />
               <FieldErr message={err('policy_number') || validationErrors.policy_number} />
@@ -906,8 +909,9 @@ export function PolicyFormDialog({
               <div className="col-span-2">
                 <Label className="text-xs font-semibold">Modelo do Veículo</Label>
                 <Input
+                  className="uppercase"
                   value={form.modelo_veiculo}
-                  onChange={(e) => set('modelo_veiculo', e.target.value)}
+                  onChange={(e) => set('modelo_veiculo', toUpperPT(e.target.value))}
                 />
               </div>
             </div>
@@ -1283,8 +1287,9 @@ export function PolicyFormDialog({
             <div>
               <Label className="text-xs font-semibold">Observação (Quem indicou)</Label>
               <Input
+                className="uppercase"
                 value={form.observacao_indicacao}
-                onChange={(e) => set('observacao_indicacao', e.target.value)}
+                onChange={(e) => set('observacao_indicacao', toUpperPT(e.target.value))}
               />
             </div>
           )}
@@ -1399,9 +1404,9 @@ export function PolicyFormDialog({
             <Label className="text-xs font-semibold">Observações</Label>
             <Textarea
               value={form.notes}
-              onChange={(e) => set('notes', e.target.value)}
+              onChange={(e) => set('notes', toUpperPT(e.target.value))}
               placeholder="Notas adicionais sobre a apólice..."
-              className="text-sm"
+              className="text-sm uppercase"
               rows={2}
             />
           </div>

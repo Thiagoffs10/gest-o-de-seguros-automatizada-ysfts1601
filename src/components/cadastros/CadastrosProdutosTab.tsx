@@ -376,10 +376,10 @@ export function CadastrosProdutosTab() {
               <Label className="text-xs font-semibold">Nome do Produto Comercial *</Label>
               <Input
                 required
+                className="mt-1 uppercase"
                 value={nome}
-                onChange={(e) => setNome(e.target.value)}
+                onChange={(e) => setNome(toUpperPT(e.target.value))}
                 placeholder="Ex: Vida Viva Mais, Auto Fácil, Seguro Residencial Protegido..."
-                className="mt-1"
               />
               {fieldErrors.nome && <p className="text-xs text-red-500 mt-1">{fieldErrors.nome}</p>}
             </div>
@@ -430,9 +430,9 @@ export function CadastrosProdutosTab() {
               <Label className="text-xs font-semibold">Código Comercial / Interno (opcional)</Label>
               <Input
                 value={codigoComercial}
-                onChange={(e) => setCodigoComercial(e.target.value)}
+                onChange={(e) => setCodigoComercial(toUpperPT(e.target.value))}
                 placeholder="Ex: PR-0192, BRD-VIDA-01"
-                className="mt-1 text-xs font-mono"
+                className="mt-1 text-xs font-mono uppercase"
               />
             </div>
 
@@ -441,9 +441,9 @@ export function CadastrosProdutosTab() {
               <Textarea
                 rows={2}
                 value={descricao}
-                onChange={(e) => setDescricao(e.target.value)}
+                onChange={(e) => setDescricao(toUpperPT(e.target.value))}
                 placeholder="Diferenciais do produto, regras específicas de subscrição..."
-                className="mt-1 text-xs"
+                className="mt-1 text-xs uppercase"
               />
             </div>
 

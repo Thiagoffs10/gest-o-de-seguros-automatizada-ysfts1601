@@ -1,5 +1,6 @@
 import pb from '@/lib/pocketbase/client'
 import { CustoFixo } from '@/types'
+import { normalizeCustoFixoPayload } from '@/lib/normalize-text'
 
 export const getCustosFixos = async (filterString?: string) => {
   return pb.collection('custos_fixos').getFullList<CustoFixo>({
@@ -9,11 +10,11 @@ export const getCustosFixos = async (filterString?: string) => {
 }
 
 export const createCustoFixo = async (data: Partial<CustoFixo>) => {
-  return pb.collection('custos_fixos').create<CustoFixo>(data)
+  return pb.collection('custos_fixos').create<CustoFixo>(normalizeCustoFixoPayload(data))
 }
 
 export const updateCustoFixo = async (id: string, data: Partial<CustoFixo>) => {
-  return pb.collection('custos_fixos').update<CustoFixo>(id, data)
+  return pb.collection('custos_fixos').update<CustoFixo>(id, normalizeCustoFixoPayload(data))
 }
 
 export const deleteCustoFixo = async (id: string) => {

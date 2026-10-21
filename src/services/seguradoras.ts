@@ -1,16 +1,17 @@
 import pb from '@/lib/pocketbase/client'
 import { Seguradora } from '@/types'
+import { normalizeSeguradoraPayload } from '@/lib/normalize-text'
 
 export const getSeguradoras = async () => {
   return pb.collection('seguradoras').getFullList<Seguradora>({ sort: 'nome' })
 }
 
 export const createSeguradora = async (data: Partial<Seguradora>) => {
-  return pb.collection('seguradoras').create<Seguradora>(data)
+  return pb.collection('seguradoras').create<Seguradora>(normalizeSeguradoraPayload(data))
 }
 
 export const updateSeguradora = async (id: string, data: Partial<Seguradora>) => {
-  return pb.collection('seguradoras').update<Seguradora>(id, data)
+  return pb.collection('seguradoras').update<Seguradora>(id, normalizeSeguradoraPayload(data))
 }
 
 export const deleteSeguradora = async (id: string) => {

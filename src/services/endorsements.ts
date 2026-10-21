@@ -12,6 +12,7 @@ import {
   createComissaoRecebimento,
   recalcularStatusApolice,
 } from '@/services/comissao-recebimentos'
+import { normalizeEndorsementPayload } from '@/lib/normalize-text'
 
 export const getAllEndorsements = async (): Promise<Endorsement[]> => {
   return pb.collection('endorsements').getFullList<Endorsement>({
@@ -146,7 +147,7 @@ export async function createEndorsement(data: CreateEndorsementPayload): Promise
       : Number(policy.commission_percent || 0)
   const commValor = Math.round(((vLiquido * commPercent) / 100) * 100) / 100
 
-  const payload: Record<string, any> = {
+  const rawPayload: Record<string, any> = {
     policy: policy.id,
     tipo: data.tipo.trim(),
     data_endosso: formatDateForInput(data.data_endosso),
@@ -161,6 +162,7 @@ export async function createEndorsement(data: CreateEndorsementPayload): Promise
     observacao: data.observacao ? data.observacao.trim() : '',
   }
 
+  const payload = normalizeEndorsementPayload(rawPayload)
   const endorsement = await pb.collection('endorsements').create<Endorsement>(payload)
 
   // Impacto Financeiro Reutilizando a Arquitetura Existente
@@ -294,7 +296,7 @@ export async function updateEndorsement(
     }
   }
 
-  return pb.collection('endorsements').update<Endorsement>(id, payload)
+  return pb.collection('endorsements').update<Endorsement>(id, normalizeEndorsementPayload(payload))
 }
 
 /**

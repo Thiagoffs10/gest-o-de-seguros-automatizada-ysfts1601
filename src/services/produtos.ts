@@ -1,5 +1,6 @@
 import pb from '@/lib/pocketbase/client'
 import { Produto } from '@/types'
+import { normalizeProdutoPayload } from '@/lib/normalize-text'
 
 export const getProdutos = async (filter?: string, sort = 'nome'): Promise<Produto[]> => {
   return pb.collection('produtos').getFullList<Produto>({
@@ -51,7 +52,7 @@ export const createProduto = async (data: CreateProdutoPayload): Promise<Produto
     descricao: data.descricao ? data.descricao.trim() : '',
     ativo: data.ativo !== false,
   }
-  return pb.collection('produtos').create<Produto>(payload)
+  return pb.collection('produtos').create<Produto>(normalizeProdutoPayload(payload))
 }
 
 export const updateProduto = async (
@@ -75,7 +76,7 @@ export const updateProduto = async (
   }
   if (data.ativo !== undefined) payload.ativo = data.ativo
 
-  return pb.collection('produtos').update<Produto>(id, payload)
+  return pb.collection('produtos').update<Produto>(id, normalizeProdutoPayload(payload))
 }
 
 export const deleteProduto = async (id: string): Promise<boolean> => {

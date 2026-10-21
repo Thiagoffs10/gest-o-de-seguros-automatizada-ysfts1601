@@ -39,6 +39,7 @@ import {
 } from '@/services/importacao/proposta-service'
 import { formatCurrency, formatBRDate } from '@/lib/utils'
 import { maskDocument } from '@/lib/document-validators'
+import { toUpperPT } from '@/lib/normalize-text'
 
 interface ImportarPropostaPdfModalProps {
   open: boolean
@@ -251,7 +252,9 @@ export const ImportarPropostaPdfModal: React.FC<ImportarPropostaPdfModalProps> =
                   </div>
                   <div>
                     <span className="text-slate-500">Segurado:</span>{' '}
-                    <strong>{conferida.proposta.segurado.nome || 'Não identificado'}</strong>
+                    <strong>
+                      {toUpperPT(conferida.proposta.segurado.nome) || 'NÃO IDENTIFICADO'}
+                    </strong>
                   </div>
                   <div>
                     <span className="text-slate-500">CPF/CNPJ:</span>{' '}
@@ -262,7 +265,7 @@ export const ImportarPropostaPdfModal: React.FC<ImportarPropostaPdfModalProps> =
                   {conferida.proposta.tipoSeguro !== 'Condomínio' && (
                     <div>
                       <span className="text-slate-500">Condutor Principal:</span>{' '}
-                      <strong>{conferida.proposta.condutorPrincipal.nome || '-'}</strong>
+                      <strong>{toUpperPT(conferida.proposta.condutorPrincipal.nome) || '-'}</strong>
                       {!conferida.proposta.condutorPrincipal.mesmoQueSegurado && (
                         <Badge
                           variant="outline"
@@ -294,12 +297,12 @@ export const ImportarPropostaPdfModal: React.FC<ImportarPropostaPdfModalProps> =
                     <>
                       <div>
                         <span className="text-slate-500">Modelo:</span>{' '}
-                        {conferida.proposta.veiculo.marcaModelo || '-'}
+                        <strong>{toUpperPT(conferida.proposta.veiculo.marcaModelo) || '-'}</strong>
                       </div>
                       <div>
                         <span className="text-slate-500">Placa / Chassi:</span>{' '}
-                        <strong>{conferida.proposta.veiculo.placa || '-'}</strong> •{' '}
-                        {conferida.proposta.veiculo.chassi || '-'}
+                        <strong>{toUpperPT(conferida.proposta.veiculo.placa) || '-'}</strong> •{' '}
+                        {toUpperPT(conferida.proposta.veiculo.chassi) || '-'}
                       </div>
                     </>
                   ) : (
@@ -307,22 +310,24 @@ export const ImportarPropostaPdfModal: React.FC<ImportarPropostaPdfModalProps> =
                       <span className="text-slate-500">Local de Risco / Endereço:</span>{' '}
                       <strong>
                         {conferida.proposta.segurado.rua
-                          ? [
-                              conferida.proposta.segurado.rua +
-                                (conferida.proposta.segurado.numero
-                                  ? `, ${conferida.proposta.segurado.numero}`
-                                  : ''),
-                              conferida.proposta.segurado.bairro,
-                              conferida.proposta.segurado.cep,
-                              conferida.proposta.segurado.cidade &&
-                              conferida.proposta.segurado.estado
-                                ? `${conferida.proposta.segurado.cidade}/${conferida.proposta.segurado.estado}`
-                                : conferida.proposta.segurado.cidade ||
-                                  conferida.proposta.segurado.estado,
-                            ]
-                              .filter(Boolean)
-                              .join(' - ')
-                          : 'Conforme proposta'}
+                          ? toUpperPT(
+                              [
+                                conferida.proposta.segurado.rua +
+                                  (conferida.proposta.segurado.numero
+                                    ? `, ${conferida.proposta.segurado.numero}`
+                                    : ''),
+                                conferida.proposta.segurado.bairro,
+                                conferida.proposta.segurado.cep,
+                                conferida.proposta.segurado.cidade &&
+                                conferida.proposta.segurado.estado
+                                  ? `${conferida.proposta.segurado.cidade}/${conferida.proposta.segurado.estado}`
+                                  : conferida.proposta.segurado.cidade ||
+                                    conferida.proposta.segurado.estado,
+                              ]
+                                .filter(Boolean)
+                                .join(' - '),
+                            )
+                          : 'CONFORME PROPOSTA'}
                       </strong>
                     </div>
                   )}

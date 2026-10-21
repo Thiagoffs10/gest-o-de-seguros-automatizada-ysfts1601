@@ -1,5 +1,6 @@
 import pb from '@/lib/pocketbase/client'
 import { Reminder } from '@/types'
+import { normalizeReminderPayload } from '@/lib/normalize-text'
 
 export const getReminders = async (filterString?: string) => {
   return pb.collection('reminders').getFullList<Reminder>({
@@ -10,11 +11,11 @@ export const getReminders = async (filterString?: string) => {
 }
 
 export const createReminder = async (data: Partial<Reminder>) => {
-  return pb.collection('reminders').create<Reminder>(data)
+  return pb.collection('reminders').create<Reminder>(normalizeReminderPayload(data))
 }
 
 export const updateReminder = async (id: string, data: Partial<Reminder>) => {
-  return pb.collection('reminders').update<Reminder>(id, data)
+  return pb.collection('reminders').update<Reminder>(id, normalizeReminderPayload(data))
 }
 
 export const deleteReminder = async (id: string) => {

@@ -4,6 +4,7 @@ import { getVeiculoVigente } from '@/services/endorsements'
 
 import { formatDateForInput, todayLocalDate, toLocalDate } from '@/lib/utils'
 import { extractDatePart } from '@/lib/date-filter'
+import { normalizePolicyPayload } from '@/lib/normalize-text'
 
 /**
  * Prepara payload para CRIAÇÃO de uma nova apólice.
@@ -224,7 +225,7 @@ export function preparePolicyPayload(data: Partial<Policy> & Record<string, any>
   delete payload.updated
   delete payload.policy_code
 
-  return payload
+  return normalizePolicyPayload(payload)
 }
 
 export const sortPoliciesPrioritized = (policies: Policy[]): Policy[] => {
@@ -397,7 +398,7 @@ export function preparePolicyUpdatePayload(data: Partial<Policy> & Record<string
       : 'Outros'
   }
 
-  return payload
+  return normalizePolicyPayload(payload)
 }
 
 export const createPolicy = async (data: Partial<Policy>) => {

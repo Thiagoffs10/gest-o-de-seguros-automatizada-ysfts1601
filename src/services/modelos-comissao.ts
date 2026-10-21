@@ -9,6 +9,7 @@ import {
 } from '@/types'
 import { calcularPrevisoesComissao, PrevisaoItemCalculada } from '@/services/comissao-engine'
 import { formatDateForInput } from '@/lib/utils'
+import { normalizeModeloComissaoPayload } from '@/lib/normalize-text'
 
 export const getModelosComissao = async (
   filter?: string,
@@ -67,7 +68,9 @@ export const createModeloComissao = async (
     payload.tipo_seguro = ''
   }
 
-  return pb.collection('modelos_comissao').create<ModeloComissao>(payload)
+  return pb
+    .collection('modelos_comissao')
+    .create<ModeloComissao>(normalizeModeloComissaoPayload(payload))
 }
 
 export const updateModeloComissao = async (
@@ -104,7 +107,9 @@ export const updateModeloComissao = async (
   const novaVersao = (current.versao || 1) + 1
   payload.versao = novaVersao
 
-  return pb.collection('modelos_comissao').update<ModeloComissao>(id, payload)
+  return pb
+    .collection('modelos_comissao')
+    .update<ModeloComissao>(id, normalizeModeloComissaoPayload(payload))
 }
 
 export const deleteModeloComissao = async (id: string): Promise<boolean> => {

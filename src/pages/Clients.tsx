@@ -17,6 +17,7 @@ import { useDebounce } from '@/hooks/use-debounce'
 import { getClients } from '@/services/clients'
 import { getPolicies } from '@/services/policies'
 import { getSeguradoras } from '@/services/seguradoras'
+import { toUpperPT, toUpperTrim } from '@/lib/normalize-text'
 import { Client, Policy, FilterState, Seguradora } from '@/types'
 import { evaluateClientCrossSell } from '@/services/cross-sell'
 import { Button } from '@/components/ui/button'
@@ -190,18 +191,18 @@ export default function Clients() {
       }
 
       const clientDraft: Partial<Client> = {
-        name: segurado.nome || '',
+        name: toUpperTrim(segurado.nome),
         tipo_pessoa: tipoPessoa,
         cpf: tipoPessoa === 'PF' ? segurado.cpfCnpj || '' : '',
         cnpj: tipoPessoa === 'PJ' ? segurado.cpfCnpj || '' : '',
-        email: segurado.email || '',
+        email: (segurado.email || '').toLowerCase().trim(),
         phone: segurado.telefone || '',
         cep: segurado.cep || '',
-        rua: segurado.rua || '',
-        numero: segurado.numero || '',
-        bairro: segurado.bairro || '',
-        cidade: segurado.cidade || '',
-        estado: segurado.estado || '',
+        rua: toUpperTrim(segurado.rua),
+        numero: toUpperTrim(segurado.numero),
+        bairro: toUpperTrim(segurado.bairro),
+        cidade: toUpperTrim(segurado.cidade),
+        estado: toUpperTrim(segurado.estado),
         birth_date: segurado.dataNascimento || '',
         notes: notasAdicionais.join('\n'),
       }
@@ -500,12 +501,12 @@ export default function Clients() {
               const policyPayload: Partial<Policy> = {
                 client: savedClient.id,
                 seguradora: propostaOrigemImportada.seguradoraIdCorrespondente || '',
-                numero_proposta: p.numeroProposta || '',
+                numero_proposta: toUpperTrim(p.numeroProposta),
                 policy_number: '',
                 tipo_de_seguro: (p.tipoSeguro as any) || 'Auto',
-                placa: p.veiculo.placa || '',
-                chassi: p.veiculo.chassi || '',
-                modelo_veiculo: p.veiculo.marcaModelo || '',
+                placa: toUpperTrim(p.veiculo.placa),
+                chassi: toUpperTrim(p.veiculo.chassi),
+                modelo_veiculo: toUpperTrim(p.veiculo.marcaModelo),
                 valor_bruto: p.premioTotal || 0,
                 valor_liquido: p.premioLiquido || 0,
                 forma_pagamento: (p.formaPagamento as any) || '',
@@ -515,7 +516,7 @@ export default function Clients() {
                 previous_policy: propostaOrigemImportada.renovacaoPolicyCorrespondente?.id || '',
                 notes:
                   !p.condutorPrincipal.mesmoQueSegurado && p.condutorPrincipal.nome
-                    ? `Condutor Principal: ${p.condutorPrincipal.nome}${p.condutorPrincipal.cpf ? ` (CPF: ${p.condutorPrincipal.cpf})` : ''}`
+                    ? `CONDUTOR PRINCIPAL: ${toUpperTrim(p.condutorPrincipal.nome)}${p.condutorPrincipal.cpf ? ` (CPF: ${p.condutorPrincipal.cpf})` : ''}`
                     : '',
               }
 
