@@ -1007,27 +1007,43 @@ function extrairParcelamento(
     parcelas = p1 + p2
     descricao = `${p1}+${p2} (${parcelas}x)`
   } else {
-    // Procura "Nº. de Parcelas: 10" ou "Valor da Parcela: 233,50" ou "10 parcelas" ou "10x de R$ ..." ou "1x R$ 1.596,12"
-    const numParcMatch = /n[ºo.]?\s+de\s+parcelas[*\s|:]+(\d{1,2})/i.exec(text)
-    const parcMatch =
-      numParcMatch ||
-      /(\d{1,2})\s*x\s+R?\$?\s*([0-9.,]+)/i.exec(text) ||
-      /(?:parcelas?|parcelamento)[*\s|:]+(\d{1,2})x?/i.exec(text) ||
-      /(\d{1,2})\s*(?:x|vezes)\s+de\s+R?\$?/i.exec(text) ||
-      /(\d{1,2})\s+parcelas\b/i.exec(text)
-
+    // Padrão de cartão explícito: "10x Crédito-Demais Bandeiras" ou "10x Débito"
+    // Captura: parcelas=10, forma="Crédito", valor da parcela de "Valor parcelas R$ 185,00"
+    const cartaoTipoMatch = /(\d{1,2})x\s*(?:Cr[ée]dito|D[ée]bito)[^\n\r]*/i.exec(text)
     const vlrParcMatch =
-      /(?:valor\s+da\s+parcela|valor\s+parcelas|vlr\s+parcela)[*\s|:]+R?\$?\s*([0-9.,]+)/i.exec(
-        text,
-      )
+      /(?:valor\s+(?:das?\s+)?parcelas?|vlr\s+parcela)[*\s|:]+R?\$?\s*([0-9.,]+)/i.exec(text)
 
-    if (parcMatch) {
-      parcelas = parseInt(parcMatch[1], 10)
-      const vlr = parcMatch[2] || (vlrParcMatch ? vlrParcMatch[1].trim() : '')
-      if (vlr) {
-        descricao = `${parcelas}x de R$ ${vlr.trim()}`
+    if (cartaoTipoMatch) {
+      parcelas = parseInt(cartaoTipoMatch[1], 10)
+      if (/d[ée]bito/i.test(cartaoTipoMatch[0])) {
+        forma = 'Débito em conta'
       } else {
-        descricao = `${parcelas}x`
+        forma = 'Crédito'
+      }
+      const vlr = vlrParcMatch ? vlrParcMatch[1].trim() : ''
+      if (vlr) {
+        descricao = `${parcelas}x de R$ ${vlr} (${forma})`
+      } else {
+        descricao = `${parcelas}x (${forma})`
+      }
+    } else {
+      // Procura "Nº. de Parcelas: 10" ou "Valor da Parcela: 233,50" ou "10 parcelas" ou "10x de R$ ..." ou "1x R$ 1.596,12"
+      const numParcMatch = /n[ºo.]?\s+de\s+parcelas[*\s|:]+(\d{1,2})/i.exec(text)
+      const parcMatch =
+        numParcMatch ||
+        /(\d{1,2})\s*x\s+R?\$?\s*([0-9.,]+)/i.exec(text) ||
+        /(?:parcelas?|parcelamento)[*\s|:]+(\d{1,2})x?/i.exec(text) ||
+        /(\d{1,2})\s*(?:x|vezes)\s+de\s+R?\$?/i.exec(text) ||
+        /(\d{1,2})\s+parcelas\b/i.exec(text)
+
+      if (parcMatch) {
+        parcelas = parseInt(parcMatch[1], 10)
+        const vlr = parcMatch[2] || (vlrParcMatch ? vlrParcMatch[1].trim() : '')
+        if (vlr) {
+          descricao = `${parcelas}x de R$ ${vlr.trim()}`
+        } else {
+          descricao = `${parcelas}x`
+        }
       }
     }
   }
@@ -3309,110 +3325,152 @@ export function extrairPropostaInlineAzul(text: string): {
       }
 
       // 2. ENDEREÇO RESIDENCIAL & CONTATO (Linha 2)
-      // Ex: **Endereço residencial Complemento CEP Bairro Cidade UF** R Doralice de Almeida Lyra, 55-58037-335 Jardim Oceania João Pessoa PB **E-mail Telefone Tipo de envio Enviar correspondência para** paulagabrieladv@gmail.com Celular: (83) 99112-9729 DIGITAL SEGURADO
+      // Ex 1: **Endereço residencial Complemento CEP Bairro Cidade UF** R Doralice de Almeida Lyra, 55-58037-335 Jardim Oceania João Pessoa PB **E-mail Telefone Tipo de envio Enviar correspondência para** paulagabrieladv@gmail.com Celular: (83) 99112-9729 DIGITAL SEGURADO
+      // Ex 2: **Endereço residencial Complemento CEP Bairro Cidade UF** Av Norte Miguel Arraes de Alencar, AP207BL4 52051-000 Tamarineira Recife PE 3533 **E-mail Telefone Tipo de envio Enviar correspondência para** NATHANFIGUEIREDO04@GMAIL.CO Celular: (81) 99706-6092 DIGITAL SEGURADO M
       if (
         rotuloLower.includes('endereço residencial') ||
         rotuloLower.includes('endereco residencial')
       ) {
         const trechoEnd = seg.valores.trim()
         if (trechoEnd) {
-          // CEP = primeira ocorrência de /\d{5}-?\d{3}/ (atenção: vem colado ao número por hífen "55-58037-335")
-          const cepMatch = /(\d{5}-?\d{3})/.exec(trechoEnd)
+          // 1. CEP: regex /\b(\d{5}-\d{3})\b/ ou /\b(\d{5}-?\d{3})\b/ (suporta colado ao número tipo 55-58037-335)
+          const cepMatch = /\b(\d{5}-\d{3})\b/.exec(trechoEnd) || /(\d{5}-?\d{3})/.exec(trechoEnd)
           if (cepMatch) {
             const rawCep = cepMatch[1].replace(/\D/g, '')
             const cepFormatado = `${rawCep.slice(0, 5)}-${rawCep.slice(5)}`
             const idxCep = cepMatch.index
 
-            // Texto ANTES do CEP: "R Doralice de Almeida Lyra, 55-" ou "R Doralice de Almeida Lyra, 55"
+            // 1. Tudo ANTES do CEP é o logradouro (manter rua como está, removendo apenas hífen terminal colado se houver)
             let textoAntes = trechoEnd.substring(0, idxCep).trim()
             textoAntes = textoAntes.replace(/-+$/, '').trim()
 
             let rua = textoAntes
             let numero = ''
 
-            // Separar rua e número: número = dígitos finais após vírgula ou espaço
-            const numVirgulaMatch = /,\s*(\d+[A-Za-z0-9\s/]*)$/.exec(textoAntes)
-            if (numVirgulaMatch) {
-              numero = numVirgulaMatch[1].trim()
-              rua = textoAntes.substring(0, numVirgulaMatch.index).trim()
-            } else {
-              const numEspacoMatch = /\s+(\d+[A-Za-z0-9/]*)$/.exec(textoAntes)
-              if (numEspacoMatch && !/^\d{4}$/.test(numEspacoMatch[1])) {
-                numero = numEspacoMatch[1].trim()
-                rua = textoAntes.substring(0, numEspacoMatch.index).trim()
+            // Se houver número com vírgula padrão "Rua Tal, 55", separar
+            // Mas se for formato completo como "Av Norte Miguel Arraes de Alencar, AP207BL4", manter a rua intacta conforme especificação
+            // Regra: rua = "Av Norte Miguel Arraes de Alencar, AP207BL4"
+            // Se o texto antes do CEP contém identificador de complemento/apartamento/bloco tipo "AP207BL4"
+            // manter rua intacta ("Av Norte Miguel Arraes de Alencar, AP207BL4")
+            const temComplementoColado = /\b(?:AP|BL|APTO|BLOCO|CASA|LOTE|QD)\d+/i.test(textoAntes)
+
+            if (!temComplementoColado) {
+              // Se o texto antes do CEP contém vírgula seguida de número simples: "Rua Tal, 55"
+              // Se tiver letras complexas como AP207BL4 ou for especificação inline, mantém tudo em rua
+              const numVirgulaSimplesMatch = /,\s*(\d{1,5}[A-Za-z]?)$/.exec(textoAntes)
+              if (numVirgulaSimplesMatch) {
+                numero = numVirgulaSimplesMatch[1].trim()
+                rua = textoAntes.substring(0, numVirgulaSimplesMatch.index).trim()
+              } else {
+                const numEspacoMatch = /\s+(\d{1,5}[A-Za-z]?)$/.exec(textoAntes)
+                if (numEspacoMatch && !/^\d{4}$/.test(numEspacoMatch[1])) {
+                  numero = numEspacoMatch[1].trim()
+                  rua = textoAntes.substring(0, numEspacoMatch.index).trim()
+                }
               }
             }
 
-            // Texto APÓS o CEP: " Jardim Oceania João Pessoa PB"
+            // Texto APÓS o CEP: ex "Tamarineira Recife PE 3533" ou "Jardim Oceania João Pessoa PB"
             const textoApos = trechoEnd.substring(idxCep + cepMatch[0].length).trim()
 
-            // UF = último token de 2 letras maiúsculas do trecho ("PB")
+            // 2. UF: no trecho após o CEP, só aceitar token presente na lista canônica de UFs (BRAZILIAN_STATES).
+            // "AV" e qualquer outra coisa NÃO é UF — rejeitar e deixar estado vazio.
+            // 3. Descartar tokens puramente numéricos residuais ("3533") nesse trecho.
+            // 4. Miolo entre CEP e UF = "Tamarineira Recife": separar bairro="Tamarineira" e cidade="Recife".
+            // Se não der para discernir com certeza, atribuir o primeiro token ao bairro e deixar cidade vazia (campo faltante).
+            // Nunca concatenar cidade no bairro nem inventar cidade.
+            // 5. Cidade nunca termina em número, nunca é sigla de UF, nunca contém sigla de UF no final.
+            const tokensApos = textoApos.split(/\s+/).filter(Boolean)
+
+            // Localizar token canônico de UF no trecho após o CEP
+            let idxUf = -1
             let estado = ''
+            for (let i = 0; i < tokensApos.length; i++) {
+              const tokU = tokensApos[i].toUpperCase()
+              if (/^[A-Z]{2}$/.test(tokU) && BRAZILIAN_STATES.includes(tokU)) {
+                estado = tokU
+                idxUf = i
+                break
+              }
+            }
+
+            // Tokens entre o CEP e a UF (miolo)
+            const tokensMiolo = (idxUf !== -1 ? tokensApos.slice(0, idxUf) : tokensApos).filter(
+              (tok) => !/^\d+$/.test(tok),
+            ) // descartar puramente numéricos residuais
+
             let bairro = ''
             let cidade = ''
 
-            const ufMatch = /\b([A-Z]{2})\b\s*$/.exec(textoApos)
-            if (ufMatch && BRAZILIAN_STATES.includes(ufMatch[1])) {
-              estado = ufMatch[1]
-            }
+            const cidadesConhecidas = [
+              'joão pessoa',
+              'joao pessoa',
+              'são paulo',
+              'sao paulo',
+              'rio de janeiro',
+              'belo horizonte',
+              'porto alegre',
+              'salvador',
+              'curitiba',
+              'recife',
+              'fortaleza',
+              'brasília',
+              'brasilia',
+              'campina grande',
+              'jaboatão dos guararapes',
+              'olinda',
+              'paulista',
+            ]
 
-            // Bairro e Cidade: tokens ENTRE o CEP e a UF
-            let miolo = textoApos
-            if (estado) {
-              miolo = miolo.replace(new RegExp(`\\b${estado}\\b\\s*$`), '').trim()
-            }
+            if (tokensMiolo.length === 1) {
+              // Se há apenas um token no miolo: atribuir ao bairro e deixar cidade vazia (campo faltante)
+              bairro = tokensMiolo[0]
+            } else if (tokensMiolo.length >= 2) {
+              const ultimas3 = tokensMiolo.length >= 3 ? tokensMiolo.slice(-3).join(' ') : ''
+              const ultimas2 = tokensMiolo.slice(-2).join(' ')
+              const ultima1 = tokensMiolo[tokensMiolo.length - 1]
 
-            // Heurística robusta de split Bairro / Cidade:
-            // Ex: "Jardim Oceania João Pessoa"
-            // Casos conhecidos de capitais/cidades compostas brasileiras ou divisão proporcional:
-            if (miolo) {
-              const tokens = miolo.split(/\s+/).filter(Boolean)
-              if (tokens.length >= 2) {
-                // Checar se as 2 últimas palavras formam cidade conhecida comum (ex: João Pessoa, São Paulo, etc.)
-                const ultimas2 = tokens.slice(-2).join(' ')
-                const ultimas3 = tokens.length >= 3 ? tokens.slice(-3).join(' ') : ''
-
-                const cidadesCompostas = [
-                  'joão pessoa',
-                  'joao pessoa',
-                  'são paulo',
-                  'sao paulo',
-                  'rio de janeiro',
-                  'belo horizonte',
-                  'porto alegre',
-                  'salvador',
-                  'curitiba',
-                  'recife',
-                  'fortaleza',
-                  'brasília',
-                  'brasilia',
-                  'campina grande',
-                  'jaboatão dos guararapes',
-                  'olinda',
-                  'paulista',
-                ]
-
-                if (ultimas3 && cidadesCompostas.includes(ultimas3.toLowerCase())) {
-                  cidade = ultimas3
-                  bairro = tokens.slice(0, -3).join(' ')
-                } else if (cidadesCompostas.includes(ultimas2.toLowerCase())) {
-                  cidade = ultimas2
-                  bairro = tokens.slice(0, -2).join(' ')
-                } else if (tokens.length === 2) {
-                  bairro = tokens[0]
-                  cidade = tokens[1]
-                } else if (tokens.length === 3) {
-                  bairro = tokens[0]
-                  cidade = tokens.slice(1).join(' ')
-                } else {
-                  // Mais de 3 tokens: metade inicial para bairro, metade final para cidade
-                  const mid = Math.floor(tokens.length / 2)
-                  bairro = tokens.slice(0, mid).join(' ')
-                  cidade = tokens.slice(mid).join(' ')
-                }
-              } else if (tokens.length === 1) {
-                cidade = tokens[0]
+              if (ultimas3 && cidadesConhecidas.includes(ultimas3.toLowerCase())) {
+                cidade = ultimas3
+                bairro = tokensMiolo.slice(0, -3).join(' ')
+              } else if (cidadesConhecidas.includes(ultimas2.toLowerCase())) {
+                cidade = ultimas2
+                bairro = tokensMiolo.slice(0, -2).join(' ')
+              } else if (cidadesConhecidas.includes(ultima1.toLowerCase())) {
+                cidade = ultima1
+                bairro = tokensMiolo.slice(0, -1).join(' ')
+              } else if (tokensMiolo.length === 2) {
+                bairro = tokensMiolo[0]
+                cidade = tokensMiolo[1]
+              } else if (tokensMiolo.length === 3) {
+                bairro = tokensMiolo[0]
+                cidade = tokensMiolo.slice(1).join(' ')
+              } else {
+                // Se não der para discernir com certeza: atribuir o primeiro token ao bairro e deixar cidade vazia
+                bairro = tokensMiolo[0]
+                cidade = ''
               }
+            }
+
+            // 5. Validações estritas de cidade:
+            // Cidade nunca termina em número, nunca é sigla de UF, nunca contém sigla de UF no final.
+            if (cidade) {
+              cidade = cidade.replace(/\s+\d+$/, '').trim()
+              if (/^[A-Z]{2}$/i.test(cidade) && BRAZILIAN_STATES.includes(cidade.toUpperCase())) {
+                cidade = ''
+              }
+              const ufFinalMatch = new RegExp(`\\s+(${BRAZILIAN_STATES.join('|')})$`, 'i')
+              cidade = cidade.replace(ufFinalMatch, '').trim()
+              if (/^\d+$/.test(cidade)) {
+                cidade = ''
+              }
+            }
+
+            // Validações de bairro: nunca termina em número residual nem sigla de UF
+            if (bairro) {
+              bairro = bairro.replace(/\s+\d+$/, '').trim()
+              const ufFinalBairro = new RegExp(`\\s+(${BRAZILIAN_STATES.join('|')})$`, 'i')
+              bairro = bairro.replace(ufFinalBairro, '').trim()
             }
 
             seguradoRes = {
