@@ -45,6 +45,7 @@ import { useRealtime } from '@/hooks/use-realtime'
 import { useToast } from '@/hooks/use-toast'
 import { usePermissions } from '@/hooks/use-permissions'
 import { extractFieldErrors, getErrorMessage, type FieldErrors } from '@/lib/pocketbase/errors'
+import { toUpperPT } from '@/lib/normalize-text'
 
 export function CadastrosProdutosTab() {
   const { toast } = useToast()
