@@ -189,20 +189,57 @@ export async function extrairPropostaDeArquivoPdf(
   // 4. VÍNCULO COM APÓLICE ANTERIOR (se for Renovação)
   let renovacaoPolicyCorrespondente: Policy | undefined
   if (proposta.renovacao.isRenovacao) {
-    if (proposta.renovacao.apoliceAnterior) {
-      const numAntClean = proposta.renovacao.apoliceAnterior.replace(/\D/g, '')
-      const prevs = await getPolicies(
-        `policy_number = "${proposta.renovacao.apoliceAnterior}" || policy_number = "${numAntClean}" || numero_proposta = "${proposta.renovacao.apoliceAnterior}"`,
-      )
-      if (prevs && prevs.length > 0) {
-        renovacaoPolicyCorrespondente = prevs[0]
+    const rawNumAnt = (proposta.renovacao.apoliceAnterior || '').trim()
+    const numAntDigits = rawNumAnt.replace(/\D/g, '')
+
+    // Tentativas ordenadas de busca:
+    // 1. Busca ampla por policy_number contendo os dígitos ou texto exato
+    if (rawNumAnt || numAntDigits) {
+      const orClauses: string[] = []
+      if (rawNumAnt) {
+        orClauses.push(`policy_number ~ "${rawNumAnt}"`)
+        orClauses.push(`numero_proposta ~ "${rawNumAnt}"`)
+      }
+      if (numAntDigits && numAntDigits !== rawNumAnt) {
+        orClauses.push(`policy_number ~ "${numAntDigits}"`)
+        orClauses.push(`numero_proposta ~ "${numAntDigits}"`)
+      }
+      try {
+        const prevs = await pb.collection('policies').getFullList<Policy>({
+          filter: orClauses.join(' || '),
+          expand: 'seguradora,client',
+          sort: '-end_date',
+        })
+        if (prevs && prevs.length > 0) {
+          // Priorizar correspondência que case normalizando dígitos
+          const matchExato = prevs.find((p) => {
+            const pNumDig = (p.policy_number || '').replace(/\D/g, '')
+            const pPropDig = (p.numero_proposta || '').replace(/\D/g, '')
+            return (
+              (numAntDigits && (pNumDig === numAntDigits || pPropDig === numAntDigits)) ||
+              (rawNumAnt && (p.policy_number === rawNumAnt || p.numero_proposta === rawNumAnt))
+            )
+          })
+          renovacaoPolicyCorrespondente = matchExato || prevs[0]
+        }
+      } catch (errPrev) {
+        console.warn('Erro ao consultar apólice anterior de renovação por número:', errPrev)
       }
     }
-    // Se não achou por número mas tem a placa do veículo
+
+    // 2. Se não achou por número mas tem a placa do veículo
     if (!renovacaoPolicyCorrespondente && proposta.veiculo.placa) {
-      const prevsPlaca = await getPolicies(`placa = "${proposta.veiculo.placa}"`)
-      if (prevsPlaca && prevsPlaca.length > 0) {
-        renovacaoPolicyCorrespondente = prevsPlaca[0]
+      try {
+        const prevsPlaca = await pb.collection('policies').getFullList<Policy>({
+          filter: `placa = "${proposta.veiculo.placa}"`,
+          expand: 'seguradora,client',
+          sort: '-end_date',
+        })
+        if (prevsPlaca && prevsPlaca.length > 0) {
+          renovacaoPolicyCorrespondente = prevsPlaca[0]
+        }
+      } catch (errPlaca) {
+        console.warn('Erro ao consultar apólice anterior de renovação por placa:', errPlaca)
       }
     }
   }

@@ -23,6 +23,9 @@ import {
   DollarSign,
   ShieldAlert,
   Copy,
+  ExternalLink,
+  RefreshCw,
+  Info,
 } from 'lucide-react'
 import { useToast } from '@/hooks/use-toast'
 import {
@@ -367,6 +370,83 @@ export const ImportarPropostaPdfModal: React.FC<ImportarPropostaPdfModalProps> =
                 </CardContent>
               </Card>
             </div>
+
+            {/* Banner de Renovação Cruzada / Vínculo com Apólice Anterior */}
+            {conferida.proposta.renovacao.isRenovacao &&
+              (conferida.renovacaoPolicyCorrespondente ? (
+                <div className="p-3 bg-emerald-50 border border-emerald-300 rounded-lg text-emerald-900 flex items-start justify-between gap-3 shadow-xs">
+                  <div className="flex items-start gap-2">
+                    <RefreshCw className="h-4 w-4 shrink-0 mt-0.5 text-emerald-600" />
+                    <div>
+                      <div className="font-bold text-xs flex items-center gap-1.5 text-emerald-950">
+                        Renovação da apólice nº{' '}
+                        {conferida.renovacaoPolicyCorrespondente.policy_number ||
+                          conferida.renovacaoPolicyCorrespondente.numero_proposta ||
+                          conferida.proposta.renovacao.apoliceAnterior ||
+                          conferida.renovacaoPolicyCorrespondente.id}{' '}
+                        <Badge className="bg-emerald-600 hover:bg-emerald-700 text-white text-[10px] py-0 px-1.5">
+                          Já cadastrada
+                        </Badge>
+                      </div>
+                      <p className="text-[11px] text-emerald-800 mt-0.5">
+                        {conferida.renovacaoPolicyCorrespondente.expand?.seguradora?.nome
+                          ? `${conferida.renovacaoPolicyCorrespondente.expand.seguradora.nome} • `
+                          : conferida.proposta.renovacao.seguradoraAnterior
+                            ? `${conferida.proposta.renovacao.seguradoraAnterior} • `
+                            : ''}
+                        Vence
+                        {conferida.renovacaoPolicyCorrespondente.end_date
+                          ? ' em ' + formatBRDate(conferida.renovacaoPolicyCorrespondente.end_date)
+                          : ': vigência não informada'}
+                        {conferida.renovacaoPolicyCorrespondente.expand?.client?.name && (
+                          <span className="text-emerald-700 block mt-0.5">
+                            Cliente: {conferida.renovacaoPolicyCorrespondente.expand.client.name}
+                          </span>
+                        )}
+                      </p>
+                      <p className="text-[10px] text-emerald-700/90 mt-1">
+                        O vínculo histórico (<code className="font-mono">previous_policy</code>)
+                        será gravado automaticamente ao salvar.
+                      </p>
+                    </div>
+                  </div>
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    className="h-7 text-[11px] shrink-0 border-emerald-300 bg-white hover:bg-emerald-100 text-emerald-800"
+                    onClick={() => {
+                      window.open(
+                        `/apolices/${conferida.renovacaoPolicyCorrespondente!.id}`,
+                        '_blank',
+                      )
+                    }}
+                  >
+                    Abrir apólice <ExternalLink className="h-3 w-3 ml-1" />
+                  </Button>
+                </div>
+              ) : (
+                <div className="p-3 bg-blue-50 border border-blue-200 rounded-lg text-blue-900 flex items-start gap-2 shadow-xs">
+                  <Info className="h-4 w-4 shrink-0 mt-0.5 text-blue-600" />
+                  <div>
+                    <div className="font-bold text-xs text-blue-950">
+                      Renovação da apólice nº{' '}
+                      {conferida.proposta.renovacao.apoliceAnterior || 'não informada'} — não
+                      encontrada no sistema
+                    </div>
+                    <p className="text-[11px] text-blue-800 mt-0.5">
+                      {conferida.proposta.renovacao.seguradoraAnterior && (
+                        <span>
+                          Seguradora anterior informada na proposta:{' '}
+                          {conferida.proposta.renovacao.seguradoraAnterior}.{' '}
+                        </span>
+                      )}
+                      Aviso puramente informativo para controle. O cadastro prosseguirá normalmente
+                      sem bloquear.
+                    </p>
+                  </div>
+                </div>
+              ))}
           </div>
         )}
 

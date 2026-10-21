@@ -83,6 +83,8 @@ export interface Policy {
     client?: Client
     seguradora?: Seguradora
     parceiro?: Parceiro
+    previous_policy?: Policy
+    modelo_comissao?: any
   }
   seguradora?: string
   insurance_company?: string

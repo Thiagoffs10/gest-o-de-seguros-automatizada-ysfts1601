@@ -295,7 +295,7 @@ export const getPolicies = async (
     filter = filter ? `${filter} && (${qName})` : qName
   }
   const rawList = await pb.collection('policies').getFullList<Policy>({
-    expand: 'client,seguradora,parceiro,modelo_comissao',
+    expand: 'client,seguradora,parceiro,modelo_comissao,previous_policy,previous_policy.seguradora',
     filter,
     sort: '-created',
   })
@@ -305,7 +305,7 @@ export const getPolicies = async (
 }
 export const getPolicy = async (id: string) => {
   return pb.collection('policies').getOne<Policy>(id, {
-    expand: 'client,seguradora,parceiro,modelo_comissao',
+    expand: 'client,seguradora,parceiro,modelo_comissao,previous_policy,previous_policy.seguradora',
   })
 }
 

@@ -7,6 +7,7 @@ import {
   Sparkles,
   Loader2,
   FileText,
+  RefreshCw,
 } from 'lucide-react'
 import { Link } from 'react-router-dom'
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip'
@@ -59,7 +60,9 @@ import {
   formatDateForInput,
   todayLocalDate,
   toLocalDate,
+  formatBRDate,
 } from '@/lib/utils'
+import { getPolicy } from '@/services/policies'
 
 const DEFAULT_FORM = {
   client: '',
@@ -341,6 +344,14 @@ export function PolicyFormDialog({
   const [modeloAtivo, setModeloAtivo] = useState<ModeloComissao | null>(null)
   const [isImportarPropostaOpen, setIsImportarPropostaOpen] = useState(false)
   const [camposFaltantesDestaque, setCamposFaltantesDestaque] = useState<string[]>([])
+  const [previousPolicyInfo, setPreviousPolicyInfo] = useState<{
+    id: string
+    policy_number?: string
+    numero_proposta?: string
+    seguradoraNome?: string
+    end_date?: string
+    clientName?: string
+  } | null>(null)
   const skipAuto = useRef(true)
 
   useEffect(() => {
@@ -445,12 +456,37 @@ export function PolicyFormDialog({
     } else {
       setForm({ ...DEFAULT_FORM })
       setModeloAtivo(null)
+      setPreviousPolicyInfo(null)
     }
     setValidationErrors({})
     setTimeout(() => {
       skipAuto.current = false
     }, 100)
   }, [open, initialData])
+
+  // Se initialData tiver previous_policy (ex: vindo da proposta ou renovação), busca dados da apólice anterior para visualização clara
+  useEffect(() => {
+    if (!open) return
+    const prevId = form.previous_policy || initialData?.previous_policy
+    if (prevId) {
+      getPolicy(prevId)
+        .then((p) => {
+          if (p) {
+            setPreviousPolicyInfo({
+              id: p.id,
+              policy_number: p.policy_number,
+              numero_proposta: p.numero_proposta,
+              seguradoraNome: p.expand?.seguradora?.nome,
+              end_date: p.end_date,
+              clientName: p.expand?.client?.name,
+            })
+          }
+        })
+        .catch(() => {})
+    } else {
+      setPreviousPolicyInfo(null)
+    }
+  }, [open, form.previous_policy, initialData?.previous_policy])
 
   const set = (key: string, val: any) => {
     setForm((prev: any) => ({ ...prev, [key]: val }))
@@ -513,6 +549,18 @@ export function PolicyFormDialog({
     // Destacar campos faltantes
     const faltantesKeys = p.camposFaltantes.map((cf) => cf.campo)
     setCamposFaltantesDestaque(faltantesKeys)
+
+    // Atualiza info da apólice anterior para feedback visual imediato no formulário
+    if (conferida.renovacaoPolicyCorrespondente) {
+      setPreviousPolicyInfo({
+        id: conferida.renovacaoPolicyCorrespondente.id,
+        policy_number: conferida.renovacaoPolicyCorrespondente.policy_number,
+        numero_proposta: conferida.renovacaoPolicyCorrespondente.numero_proposta,
+        seguradoraNome: conferida.renovacaoPolicyCorrespondente.expand?.seguradora?.nome,
+        end_date: conferida.renovacaoPolicyCorrespondente.end_date,
+        clientName: conferida.renovacaoPolicyCorrespondente.expand?.client?.name,
+      })
+    }
 
     // Preenche o formulário da apólice
     setForm((prev: any) => ({
@@ -698,6 +746,41 @@ export function PolicyFormDialog({
           <div className="p-2.5 bg-amber-50 border border-amber-200 rounded-md text-xs text-amber-900">
             <strong>Atenção:</strong> Alguns dados obrigatórios não estavam no PDF e precisam ser
             revisados manualmente.
+          </div>
+        )}
+
+        {form.previous_policy && (
+          <div className="p-2.5 bg-emerald-50 border border-emerald-300 rounded-md text-xs text-emerald-900 flex items-center justify-between gap-2">
+            <div>
+              <span className="font-bold flex items-center gap-1">
+                <RefreshCw className="w-3.5 h-3.5 text-emerald-600" />
+                Renovação vinculada à apólice anterior:
+              </span>
+              <p className="text-[11px] text-emerald-800 mt-0.5">
+                {previousPolicyInfo?.policy_number
+                  ? `Nº ${previousPolicyInfo.policy_number}`
+                  : previousPolicyInfo?.numero_proposta
+                    ? `Proposta ${previousPolicyInfo.numero_proposta}`
+                    : `ID ${form.previous_policy}`}
+                {previousPolicyInfo?.seguradoraNome
+                  ? ` • ${previousPolicyInfo.seguradoraNome}`
+                  : ''}
+                {previousPolicyInfo?.end_date
+                  ? ` (vence em ${formatBRDate(previousPolicyInfo.end_date)})`
+                  : ''}
+              </p>
+            </div>
+            <button
+              type="button"
+              onClick={() => {
+                set('previous_policy', '')
+                setPreviousPolicyInfo(null)
+              }}
+              className="text-[10px] text-slate-400 hover:text-red-600 underline"
+              title="Remover vínculo de renovação"
+            >
+              Remover vínculo
+            </button>
           </div>
         )}
 

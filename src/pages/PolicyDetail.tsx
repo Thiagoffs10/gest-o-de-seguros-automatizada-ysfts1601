@@ -10,7 +10,9 @@ import {
   ArrowUpRight,
   Plus,
   AlertTriangle,
+  ExternalLink,
 } from 'lucide-react'
+import pb from '@/lib/pocketbase/client'
 import {
   getPolicy,
   createPolicy,
@@ -98,6 +100,7 @@ export default function PolicyDetail() {
   const [clients, setClients] = useState<Client[]>([])
   const [seguradoras, setSeguradoras] = useState<Seguradora[]>([])
   const [parceiros, setParceiros] = useState<Parceiro[]>([])
+  const [renovadaPorPolicy, setRenovadaPorPolicy] = useState<Policy | null>(null)
   const [isPayModalOpen, setIsPayModalOpen] = useState(false)
   const [dialogMode, setDialogMode] = useState<DialogMode>(null)
   const [fieldErrors, setFieldErrors] = useState<FieldErrors>({})
@@ -142,7 +145,7 @@ export default function PolicyDetail() {
     try {
       const p = await getPolicy(id)
       setPolicy(p)
-      const [pays, recs, prevList, ends, cls, segs, pars] = await Promise.all([
+      const [pays, recs, prevList, ends, cls, segs, pars, posteriores] = await Promise.all([
         getPayments(`policy = "${id}"`),
         getComissaoRecebimentosByPolicy(id),
         getComissoesPrevistasByPolicy(id).catch(() => []),
@@ -150,6 +153,14 @@ export default function PolicyDetail() {
         getClients(),
         getSeguradoras(),
         getParceiros(),
+        pb
+          .collection('policies')
+          .getFullList<Policy>({
+            filter: `previous_policy = "${id}"`,
+            expand: 'seguradora,client',
+            sort: '-created',
+          })
+          .catch(() => []),
       ])
       setPayments(pays)
       setRecebimentos(recs)
@@ -158,6 +169,7 @@ export default function PolicyDetail() {
       setClients(cls)
       setSeguradoras(segs)
       setParceiros(pars)
+      setRenovadaPorPolicy(posteriores && posteriores.length > 0 ? posteriores[0] : null)
     } catch {
       /* intentionally ignored */
     }
@@ -482,6 +494,55 @@ export default function PolicyDetail() {
                 ? `Proposta ${policy.numero_proposta}`
                 : `Registro #${policy.policy_code || policy.id}`}
           </h1>
+
+          {/* Encadeamento de Renovação Cruzada: Anterior e/ou Posterior */}
+          {(policy.previous_policy || renovadaPorPolicy) && (
+            <div className="flex flex-wrap items-center gap-2 mt-2">
+              {policy.previous_policy && (
+                <div className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md text-xs bg-emerald-50 text-emerald-900 border border-emerald-200">
+                  <RefreshCw className="w-3.5 h-3.5 text-emerald-600" />
+                  <span>
+                    Renovação de:{' '}
+                    <Link
+                      to={`/apolices/${policy.previous_policy}`}
+                      className="font-bold underline hover:text-emerald-700"
+                    >
+                      {policy.expand?.previous_policy?.policy_number
+                        ? `Apólice nº ${policy.expand.previous_policy.policy_number}`
+                        : policy.expand?.previous_policy?.numero_proposta
+                          ? `Proposta nº ${policy.expand.previous_policy.numero_proposta}`
+                          : `Apólice anterior`}
+                      {policy.expand?.previous_policy?.expand?.seguradora?.nome
+                        ? ` (${policy.expand.previous_policy.expand.seguradora.nome})`
+                        : ''}
+                    </Link>
+                  </span>
+                </div>
+              )}
+
+              {renovadaPorPolicy && (
+                <div className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md text-xs bg-blue-50 text-blue-900 border border-blue-200">
+                  <ArrowRight className="w-3.5 h-3.5 text-blue-600" />
+                  <span>
+                    Renovada por:{' '}
+                    <Link
+                      to={`/apolices/${renovadaPorPolicy.id}`}
+                      className="font-bold underline hover:text-blue-700"
+                    >
+                      {renovadaPorPolicy.policy_number
+                        ? `Apólice nº ${renovadaPorPolicy.policy_number}`
+                        : renovadaPorPolicy.numero_proposta
+                          ? `Proposta nº ${renovadaPorPolicy.numero_proposta}`
+                          : `Apólice seguinte`}
+                      {renovadaPorPolicy.expand?.seguradora?.nome
+                        ? ` (${renovadaPorPolicy.expand.seguradora.nome})`
+                        : ''}
+                    </Link>
+                  </span>
+                </div>
+              )}
+            </div>
+          )}
         </div>
         <div className="flex flex-wrap gap-2">
           {can('policies', 'update') && (
@@ -1080,6 +1141,48 @@ export default function PolicyDetail() {
             <div>
               <p className="text-xs text-slate-500">Parceiro</p>
               <p className="font-semibold">{policy.expand.parceiro.nome}</p>
+            </div>
+          )}
+          {policy.previous_policy && (
+            <div>
+              <p className="text-xs text-slate-500">Renovação de (Apólice anterior)</p>
+              <p className="font-semibold">
+                <Link
+                  to={`/apolices/${policy.previous_policy}`}
+                  className="text-blue-600 hover:underline flex items-center gap-1"
+                >
+                  {policy.expand?.previous_policy?.policy_number
+                    ? `Nº ${policy.expand.previous_policy.policy_number}`
+                    : policy.expand?.previous_policy?.numero_proposta
+                      ? `Proposta ${policy.expand.previous_policy.numero_proposta}`
+                      : 'Ver apólice anterior'}
+                  {policy.expand?.previous_policy?.expand?.seguradora?.nome
+                    ? ` (${policy.expand.previous_policy.expand.seguradora.nome})`
+                    : ''}
+                  <ExternalLink className="w-3 h-3 ml-0.5" />
+                </Link>
+              </p>
+            </div>
+          )}
+          {renovadaPorPolicy && (
+            <div>
+              <p className="text-xs text-slate-500">Renovada por (Apólice seguinte)</p>
+              <p className="font-semibold">
+                <Link
+                  to={`/apolices/${renovadaPorPolicy.id}`}
+                  className="text-blue-600 hover:underline flex items-center gap-1"
+                >
+                  {renovadaPorPolicy.policy_number
+                    ? `Nº ${renovadaPorPolicy.policy_number}`
+                    : renovadaPorPolicy.numero_proposta
+                      ? `Proposta ${renovadaPorPolicy.numero_proposta}`
+                      : 'Ver apólice seguinte'}
+                  {renovadaPorPolicy.expand?.seguradora?.nome
+                    ? ` (${renovadaPorPolicy.expand.seguradora.nome})`
+                    : ''}
+                  <ExternalLink className="w-3 h-3 ml-0.5" />
+                </Link>
+              </p>
             </div>
           )}
           {policy.notes && (
