@@ -261,8 +261,12 @@ export default function Financial() {
     setRepassePage(1)
   }, [filters, statusFilter, commFilter, debouncedCpfCnpjFilter, debouncedPolicySearchFilter])
 
-  const loadData = useCallback(async () => {
-    setLoading(true)
+  const hasLoadedInitialDataRef = useRef(false)
+
+  const loadData = useCallback(async (isBackground = false) => {
+    if (!isBackground && !hasLoadedInitialDataRef.current) {
+      setLoading(true)
+    }
     try {
       const [pols, pars, segs, custos, recs, prods, prevs] = await Promise.all([
         getPolicies(),
@@ -280,10 +284,12 @@ export default function Financial() {
       setRecebimentos(recs)
       setProdutos(prods)
       setAllComissoesPrevistasList(prevs)
+      hasLoadedInitialDataRef.current = true
     } catch {
       /* ignored */
+    } finally {
+      setLoading(false)
     }
-    setLoading(false)
   }, [])
 
   // ETAPA 2B — ITEM 7: Carregar previsões por competência com paginação e filtros no servidor
@@ -316,29 +322,29 @@ export default function Financial() {
   }, [loadData])
   useRealtime('policies', () => {
     if (!isOperationInProgressRef.current) {
-      loadData()
+      loadData(true)
     }
   })
   useRealtime('custos_fixos', () => {
     if (!isOperationInProgressRef.current) {
-      loadData()
+      loadData(true)
     }
   })
   useRealtime('comissao_recebimentos', () => {
     if (!isOperationInProgressRef.current) {
-      loadData()
+      loadData(true)
       loadPrevisoesServerSide()
     }
   })
   useRealtime('comissoes_previstas', () => {
     if (!isOperationInProgressRef.current) {
       loadPrevisoesServerSide()
-      loadData()
+      loadData(true)
     }
   })
   useRealtime('recebimentos_legados', () => {
     if (!isOperationInProgressRef.current) {
-      loadData()
+      loadData(true)
     }
   })
 
@@ -2930,12 +2936,16 @@ export default function Financial() {
         open={!!recebimentoPolicy}
         onOpenChange={(open) => {
           if (!open) {
+            isOperationInProgressRef.current = false
             setRecebimentoPolicy(null)
             setRecebimentoInitialComp(undefined)
             setRecebimentoInitialPrevId(undefined)
             setRecebimentoInitialValor(undefined)
             setRecebimentoInitialEndorsementId(undefined)
           }
+        }}
+        onSubmittingChange={(submitting) => {
+          isOperationInProgressRef.current = submitting
         }}
         policy={recebimentoPolicy}
         seguradoras={seguradoras}
@@ -2955,7 +2965,12 @@ export default function Financial() {
           setRecebimentoInitialPrevId(undefined)
           setRecebimentoInitialValor(undefined)
           setRecebimentoInitialEndorsementId(undefined)
-          loadData()
+          // Aguarda pequeno delay para garantir que eventos em trânsito no realtime sejam ignorados
+          setTimeout(() => {
+            isOperationInProgressRef.current = false
+            loadData(true)
+            loadPrevisoesServerSide()
+          }, 150)
         }}
       />
       {/* MODAL DE IMPORTAÇÃO DE EXTRATOS */}
