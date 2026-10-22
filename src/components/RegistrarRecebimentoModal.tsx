@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useState, useRef } from 'react'
 import {
   Dialog,
   DialogContent,
@@ -26,6 +26,7 @@ interface Props {
   initialValorBruto?: number
   comissaoPrevistaId?: string
   endorsementId?: string
+  onSubmittingChange?: (submitting: boolean) => void
   onSuccess: () => void
 }
 
@@ -39,6 +40,7 @@ export function RegistrarRecebimentoModal({
   initialValorBruto,
   comissaoPrevistaId,
   endorsementId,
+  onSubmittingChange,
   onSuccess,
 }: Props) {
   const { toast } = useToast()
@@ -80,14 +82,21 @@ export function RegistrarRecebimentoModal({
   // Saldo a receber ANTES desta baixa
   const saldoAtual = tetoBaixa
 
-  // Quando o modal abre, preencher valor bruto sugerido = saldo atual e imposto padrão da seguradora
+  // Ref para garantir que a inicialização ocorra APENAS na transição de fechado -> aberto
+  const prevOpenRef = useRef(false)
+  const isSubmittingRef = useRef(false)
+
+  // Quando o modal abre (transição false -> true), inicializar o formulário de forma segura
   useEffect(() => {
-    if (open) {
+    const justOpened = open && !prevOpenRef.current
+    prevOpenRef.current = open
+
+    if (justOpened) {
       setDataRecebimento(todayLocalDate())
       const defaultAliquota =
         policySeguradora?.imposto_percentual != null
           ? Number(policySeguradora.imposto_percentual)
-          : policy.iss != null && comissaoPrevista > 0
+          : policy && policy.iss != null && comissaoPrevista > 0
             ? Math.round((policy.iss / comissaoPrevista) * 100 * 10) / 10
             : 0
 
@@ -111,6 +120,12 @@ export function RegistrarRecebimentoModal({
       setCompetencia(initialCompetencia || '')
       setObservacao('')
       setIsSubmitting(false)
+      isSubmittingRef.current = false
+      onSubmittingChange?.(false)
+    } else if (!open) {
+      setIsSubmitting(false)
+      isSubmittingRef.current = false
+      onSubmittingChange?.(false)
     }
   }, [
     open,
@@ -120,6 +135,7 @@ export function RegistrarRecebimentoModal({
     comissaoPrevista,
     initialCompetencia,
     initialValorBruto,
+    onSubmittingChange,
   ])
 
   // Recalcula imposto e líquido ao alterar valor bruto ou alíquota
@@ -153,7 +169,8 @@ export function RegistrarRecebimentoModal({
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
-    if (isSubmitting || !policy) return
+    // Bloqueio reentrante síncrono via ref + state
+    if (isSubmittingRef.current || isSubmitting || !policy) return
 
     if (!valorBruto || Number(valorBruto) <= 0) {
       toast({
@@ -173,7 +190,7 @@ export function RegistrarRecebimentoModal({
       return
     }
 
-    // CORREÇÃO 1: Bloquear tentativa de salvar baixa com valor superior ao saldo a receber
+    // Bloquear tentativa de salvar baixa com valor superior ao saldo a receber
     if (isAcimaDoSaldo) {
       toast({
         title: 'Valor acima do saldo',
@@ -182,8 +199,6 @@ export function RegistrarRecebimentoModal({
       })
       return
     }
-
-    setIsSubmitting(true)
 
     // ITEM A.1: Garantir que quando comissaoPrevistaId está presente, ele é enviado obrigatoriamente
     // como comissao_prevista. Impedir salvar novo recebimento vinculado a previsão sem o ID válido.
@@ -196,6 +211,11 @@ export function RegistrarRecebimentoModal({
       })
       return
     }
+
+    // Ativa travas síncronas antes da Promise
+    isSubmittingRef.current = true
+    setIsSubmitting(true)
+    onSubmittingChange?.(true)
 
     // Chave de idempotência no cliente baseada no timestamp único + id apólice + valor
     const idempotencyKey = `rec_${policy.id}_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`
@@ -224,7 +244,7 @@ export function RegistrarRecebimentoModal({
           : undefined,
       })
 
-      // Fecha o modal antes de chamar onSuccess para prevenir flash/duplo toggle
+      // Fecha o modal chamando apenas onOpenChange(false) ou onSuccess
       onOpenChange(false)
       onSuccess?.()
     } catch (err) {
@@ -233,8 +253,9 @@ export function RegistrarRecebimentoModal({
         description: getErrorMessage(err),
         variant: 'destructive',
       })
-    } finally {
+      isSubmittingRef.current = false
       setIsSubmitting(false)
+      onSubmittingChange?.(false)
     }
   }
   if (!policy) return null

@@ -320,32 +320,49 @@ export default function Financial() {
   useEffect(() => {
     loadData()
   }, [loadData])
-  useRealtime('policies', () => {
-    if (!isOperationInProgressRef.current) {
-      loadData(true)
+  // Ref para debounce/coalescência de refetches do realtime em segundo plano
+  const realtimeDebounceTimerRef = useRef<NodeJS.Timeout | null>(null)
+  const scheduleRealtimeReload = useCallback(
+    (includePrevisoesServer = false) => {
+      if (isOperationInProgressRef.current) return
+      if (realtimeDebounceTimerRef.current) {
+        clearTimeout(realtimeDebounceTimerRef.current)
+      }
+      realtimeDebounceTimerRef.current = setTimeout(() => {
+        realtimeDebounceTimerRef.current = null
+        if (!isOperationInProgressRef.current) {
+          loadData(true)
+          if (includePrevisoesServer) {
+            loadPrevisoesServerSide()
+          }
+        }
+      }, 250)
+    },
+    [loadData, loadPrevisoesServerSide],
+  )
+
+  useEffect(() => {
+    return () => {
+      if (realtimeDebounceTimerRef.current) {
+        clearTimeout(realtimeDebounceTimerRef.current)
+      }
     }
+  }, [])
+
+  useRealtime('policies', () => {
+    scheduleRealtimeReload(false)
   })
   useRealtime('custos_fixos', () => {
-    if (!isOperationInProgressRef.current) {
-      loadData(true)
-    }
+    scheduleRealtimeReload(false)
   })
   useRealtime('comissao_recebimentos', () => {
-    if (!isOperationInProgressRef.current) {
-      loadData(true)
-      loadPrevisoesServerSide()
-    }
+    scheduleRealtimeReload(true)
   })
   useRealtime('comissoes_previstas', () => {
-    if (!isOperationInProgressRef.current) {
-      loadPrevisoesServerSide()
-      loadData(true)
-    }
+    scheduleRealtimeReload(true)
   })
   useRealtime('recebimentos_legados', () => {
-    if (!isOperationInProgressRef.current) {
-      loadData(true)
-    }
+    scheduleRealtimeReload(false)
   })
 
   const period = useMemo(() => computePeriodFromFilters(filters), [filters])
