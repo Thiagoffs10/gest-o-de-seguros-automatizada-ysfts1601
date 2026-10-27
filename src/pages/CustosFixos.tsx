@@ -31,6 +31,7 @@ import { CustoFixoFormDialog } from '@/components/CustoFixoFormDialog'
 import { GlobalFilters } from '@/components/GlobalFilters'
 import { useToast } from '@/hooks/use-toast'
 import { useRealtime } from '@/hooks/use-realtime'
+import { useCoalescedCallback } from '@/hooks/use-coalesced-callback'
 import { usePermissions } from '@/hooks/use-permissions'
 import { getErrorMessage } from '@/lib/pocketbase/errors'
 import { computePeriodFromFilters, isDateInPeriod } from '@/lib/date-filter'
@@ -112,9 +113,13 @@ export default function CustosFixos() {
   useEffect(() => {
     loadData()
   }, [loadData])
-  useRealtime('custos_fixos', () => loadData())
-  useRealtime('policies', () => loadData())
-  useRealtime('comissao_recebimentos', () => loadData())
+
+  // Coalescência de refetches do realtime para evitar requisições triplicadas
+  const { schedule: scheduleRealtimeReload } = useCoalescedCallback(() => loadData(), 250)
+
+  useRealtime('custos_fixos', () => scheduleRealtimeReload())
+  useRealtime('policies', () => scheduleRealtimeReload())
+  useRealtime('comissao_recebimentos', () => scheduleRealtimeReload())
 
   const { totalReceitas, totalRepasses, totalCustos, lucroLiquido, custosPagos, custosPendentes } =
     useMemo(() => {

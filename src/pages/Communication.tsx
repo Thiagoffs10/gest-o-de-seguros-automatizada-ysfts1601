@@ -28,6 +28,7 @@ import { AutomacaoCampanhasTab } from '@/components/comunicacao/AutomacaoCampanh
 import { CommsHistory } from '@/components/comunicacao/CommsHistory'
 import { EmailTemplatesManager } from '@/components/comunicacao/EmailTemplatesManager'
 import { useRealtime } from '@/hooks/use-realtime'
+import { useCoalescedCallback } from '@/hooks/use-coalesced-callback'
 import {
   CampaignAutomation,
   CampaignQueueItem,
@@ -98,10 +99,12 @@ export default function Communication() {
     loadData()
   }, [loadData])
 
-  useRealtime('email_templates', () => loadData())
-  useRealtime('campaign_automations', () => loadData())
-  useRealtime('campaign_queue', () => loadData())
-  useRealtime('campaign_send_logs', () => loadData())
+  const { schedule: scheduleRealtimeReload } = useCoalescedCallback(() => loadData(), 250)
+
+  useRealtime('email_templates', () => scheduleRealtimeReload())
+  useRealtime('campaign_automations', () => scheduleRealtimeReload())
+  useRealtime('campaign_queue', () => scheduleRealtimeReload())
+  useRealtime('campaign_send_logs', () => scheduleRealtimeReload())
 
   const pendingApprovalCount = campaignQueue.filter(
     (q) => q.status === 'AGUARDANDO_APROVACAO',

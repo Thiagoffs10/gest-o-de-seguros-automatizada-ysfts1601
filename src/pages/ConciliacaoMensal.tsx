@@ -32,6 +32,7 @@ import {
 } from '@/components/ui/select'
 import { useToast } from '@/hooks/use-toast'
 import { useRealtime } from '@/hooks/use-realtime'
+import { useCoalescedCallback } from '@/hooks/use-coalesced-callback'
 import { usePermissions } from '@/hooks/use-permissions'
 import { useAuth } from '@/hooks/use-auth'
 import {
@@ -121,12 +122,16 @@ export default function ConciliacaoMensal() {
   useEffect(() => {
     loadData()
   }, [loadData])
-  useRealtime('policies', () => loadData())
-  useRealtime('custos_fixos', () => loadData())
-  useRealtime('conciliacoes', () => loadData())
-  useRealtime('comissao_recebimentos', () => loadData())
-  useRealtime('endorsements', () => loadData())
-  useRealtime('comissoes_previstas', () => loadData())
+
+  // Coalescência de refetches do realtime para evitar recarregamentos repetidos quando múltiplos registros são atualizados
+  const { schedule: scheduleRealtimeReload } = useCoalescedCallback(() => loadData(), 250)
+
+  useRealtime('policies', () => scheduleRealtimeReload())
+  useRealtime('custos_fixos', () => scheduleRealtimeReload())
+  useRealtime('conciliacoes', () => scheduleRealtimeReload())
+  useRealtime('comissao_recebimentos', () => scheduleRealtimeReload())
+  useRealtime('endorsements', () => scheduleRealtimeReload())
+  useRealtime('comissoes_previstas', () => scheduleRealtimeReload())
 
   const endorsementPolicyIds = useMemo(() => {
     const set = new Set<string>()

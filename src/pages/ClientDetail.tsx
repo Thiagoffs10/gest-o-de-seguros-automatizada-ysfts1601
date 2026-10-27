@@ -63,6 +63,7 @@ import { ClientFormDialog } from '@/components/ClientFormDialog'
 import { BRAZILIAN_STATES, TIPOS_DE_SEGURO } from '@/lib/constants'
 import { useToast } from '@/hooks/use-toast'
 import { useRealtime } from '@/hooks/use-realtime'
+import { useCoalescedCallback } from '@/hooks/use-coalesced-callback'
 
 export default function ClientDetail() {
   const { id } = useParams<{ id: string }>()
@@ -119,10 +120,13 @@ export default function ClientDetail() {
   useEffect(() => {
     loadData()
   }, [loadData])
-  useRealtime('policies', () => loadData())
-  useRealtime('payments', () => loadData())
-  useRealtime('communications', () => loadData())
-  useRealtime('reminders', () => loadData())
+
+  const { schedule: scheduleRealtimeReload } = useCoalescedCallback(() => loadData(), 250)
+
+  useRealtime('policies', () => scheduleRealtimeReload())
+  useRealtime('payments', () => scheduleRealtimeReload())
+  useRealtime('communications', () => scheduleRealtimeReload())
+  useRealtime('reminders', () => scheduleRealtimeReload())
 
   const handleUpdateClient = async (formData: any) => {
     if (!id) return

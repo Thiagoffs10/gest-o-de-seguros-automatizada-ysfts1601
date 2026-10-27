@@ -31,6 +31,7 @@ import { GlobalFilters } from '@/components/GlobalFilters'
 import { buildFilterString } from '@/lib/constants'
 import { usePermissions } from '@/hooks/use-permissions'
 import { useRealtime } from '@/hooks/use-realtime'
+import { useCoalescedCallback } from '@/hooks/use-coalesced-callback'
 import { downloadXlsx } from '@/lib/excel-export'
 import { useToast } from '@/hooks/use-toast'
 import { createClient, updateClient, deleteClient, findClientByDocument } from '@/services/clients'
@@ -107,8 +108,11 @@ export default function Clients() {
       .catch(() => [])
   }, [loadClients])
 
-  useRealtime('clients', () => loadClients())
-  useRealtime('policies', () => loadPolicies())
+  const { schedule: scheduleClientsReload } = useCoalescedCallback(() => loadClients(), 250)
+  const { schedule: schedulePoliciesReload } = useCoalescedCallback(() => loadPolicies(), 250)
+
+  useRealtime('clients', () => scheduleClientsReload())
+  useRealtime('policies', () => schedulePoliciesReload())
 
   // Mapa de oportunidades por cliente
   const clientOppsCount = useMemo(() => {

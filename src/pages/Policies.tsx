@@ -52,6 +52,7 @@ import { buildFilterString } from '@/lib/constants'
 import { exportPoliciesToCsv } from '@/lib/export-utils'
 import { useToast } from '@/hooks/use-toast'
 import { useRealtime } from '@/hooks/use-realtime'
+import { useCoalescedCallback } from '@/hooks/use-coalesced-callback'
 import { usePermissions } from '@/hooks/use-permissions'
 import { extractFieldErrors, getErrorMessage, type FieldErrors } from '@/lib/pocketbase/errors'
 import { formatCurrency } from '@/lib/utils'
@@ -223,9 +224,15 @@ export default function Policies() {
     setLoading(true)
     loadData()
   }, [loadData])
-  useRealtime('policies', () => {
+
+  // Coalescência de refetches do realtime para evitar rajadas e re-renderizações simultâneas
+  const { schedule: scheduleRealtimeReload } = useCoalescedCallback(() => {
     loadData()
     loadAuxData()
+  }, 250)
+
+  useRealtime('policies', () => {
+    scheduleRealtimeReload()
   })
 
   const handleSubmit = async (formData: any) => {

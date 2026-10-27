@@ -79,6 +79,7 @@ import { EstornoRecebimentoModal } from '@/components/EstornoRecebimentoModal'
 import { RotateCcw } from 'lucide-react'
 import { useToast } from '@/hooks/use-toast'
 import { useRealtime } from '@/hooks/use-realtime'
+import { useCoalescedCallback } from '@/hooks/use-coalesced-callback'
 import { usePermissions } from '@/hooks/use-permissions'
 import { extractFieldErrors, getErrorMessage, type FieldErrors } from '@/lib/pocketbase/errors'
 import { formatDateDisplay, todayLocalDate } from '@/lib/utils'
@@ -178,31 +179,28 @@ export default function PolicyDetail() {
   useEffect(() => {
     loadData()
   }, [id])
-  // Carregamento com debounce/guard para evitar re-renderizações e reaberturas múltiplas via WebSocket
-  useRealtime('policies', () => {
+
+  // Carregamento com debounce/coalescência e guard de operação para evitar re-renderizações e reaberturas múltiplas via WebSocket
+  const { schedule: scheduleRealtimeReload } = useCoalescedCallback(() => {
     if (!isOperationInProgressRef.current) {
       loadData()
     }
+  }, 250)
+
+  useRealtime('policies', () => {
+    scheduleRealtimeReload()
   })
   useRealtime('payments', () => {
-    if (!isOperationInProgressRef.current) {
-      loadData()
-    }
+    scheduleRealtimeReload()
   })
   useRealtime('comissao_recebimentos', () => {
-    if (!isOperationInProgressRef.current) {
-      loadData()
-    }
+    scheduleRealtimeReload()
   })
   useRealtime('comissoes_previstas', () => {
-    if (!isOperationInProgressRef.current) {
-      loadData()
-    }
+    scheduleRealtimeReload()
   })
   useRealtime('endorsements', () => {
-    if (!isOperationInProgressRef.current) {
-      loadData()
-    }
+    scheduleRealtimeReload()
   })
 
   const handleSubmit = async (formData: any) => {

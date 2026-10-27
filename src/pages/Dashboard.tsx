@@ -35,6 +35,7 @@ import { DevTrackingPanel } from '@/components/DevTrackingPanel'
 import { PendenciasPanel } from '@/components/PendenciasPanel'
 import { PortfolioOpportunitiesCard } from '@/components/PortfolioOpportunitiesCard'
 import { useRealtime } from '@/hooks/use-realtime'
+import { useCoalescedCallback } from '@/hooks/use-coalesced-callback'
 import { usePermissions } from '@/hooks/use-permissions'
 import { formatCurrency } from '@/lib/utils'
 import { computePeriodFromFilters, isDateInPeriod } from '@/lib/date-filter'
@@ -102,7 +103,10 @@ export default function Dashboard() {
   const maskValue = (value: number) =>
     showFinancials && isAdmin ? `R$ ${formatCurrency(value)}` : 'R$ ••••••'
 
-  const loadData = async () => {
+  const loadData = async (isBackground = false) => {
+    if (!isBackground) {
+      setLoading(true)
+    }
     try {
       const [cls, pols, pays, custos, tps, recs] = await Promise.all([
         getClients(),
@@ -120,18 +124,23 @@ export default function Dashboard() {
       setRecebimentos(recs)
     } catch {
       /* intentionally ignored */
+    } finally {
+      setLoading(false)
     }
-    setLoading(false)
   }
 
   useEffect(() => {
-    loadData()
+    loadData(false)
   }, [])
-  useRealtime('clients', () => loadData())
-  useRealtime('policies', () => loadData())
-  useRealtime('payments', () => loadData())
-  useRealtime('custos_fixos', () => loadData())
-  useRealtime('comissao_recebimentos', () => loadData())
+
+  // Coalescência de refetches do realtime (250ms) para evitar rajadas e re-execuções simultâneas
+  const { schedule: scheduleRealtimeReload } = useCoalescedCallback(() => loadData(true), 250)
+
+  useRealtime('clients', () => scheduleRealtimeReload())
+  useRealtime('policies', () => scheduleRealtimeReload())
+  useRealtime('payments', () => scheduleRealtimeReload())
+  useRealtime('custos_fixos', () => scheduleRealtimeReload())
+  useRealtime('comissao_recebimentos', () => scheduleRealtimeReload())
 
   const period = useMemo(() => computePeriodFromFilters(filters), [filters])
 
