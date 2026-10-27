@@ -153,6 +153,15 @@ const VALORES_INVALIDOS_OU_CABECALHOS = [
   'periodo de vigencia',
   'período de vigência ( 365 dias)',
   'periodo de vigencia ( 365 dias)',
+  'cálculo online',
+  'calculo online',
+  'chassi decodificado',
+  'página',
+  'pagina',
+  'proprietário: para fins',
+  'proprietario: para fins',
+  'esta proposta não pressupõe',
+  'esta proposta nao pressupoe',
 ]
 
 export function isTextoCabecalhoOuInvalido(val?: string | null): boolean {
@@ -180,6 +189,22 @@ export function isNomePessoaValido(val?: string | null): boolean {
   if (isTextoCabecalhoOuInvalido(clean)) return false
 
   const lower = clean.toLowerCase()
+
+  // Filtro estrito de saneamento de rodapé e artefatos de PDF (ex: Bradesco "Cálculo Online 00SvgTl...")
+  if (
+    lower.includes('cálculo online') ||
+    lower.includes('calculo online') ||
+    lower.includes('chassi decodificado') ||
+    lower.includes('página') ||
+    lower.includes('pagina') ||
+    lower.includes('proprietário: para fins') ||
+    lower.includes('proprietario: para fins') ||
+    lower.includes('esta proposta não pressupõe') ||
+    lower.includes('esta proposta nao pressupoe') ||
+    /0{5,}/.test(lower)
+  ) {
+    return false
+  }
 
   // Marcas e seguradoras conhecidas
   const marcasProibidas = [
@@ -527,6 +552,49 @@ export function parsePropostaTexto(text: string, nomeArquivo: string = ''): Prop
       }
       if (mapfreData.renovacao) {
         renovacao = { ...renovacao, ...mapfreData.renovacao }
+      }
+    }
+  }
+
+  // CASCATA ESPECIALIZADA PARA BRADESCO AUTO/RE
+  if (formato === 'BRADESCO') {
+    const bradescoData = extrairPropostaBradesco(text)
+    if (bradescoData) {
+      if (bradescoData.numeroProposta) numeroProposta = bradescoData.numeroProposta
+      if (bradescoData.numeroApolice !== undefined) numeroApolice = bradescoData.numeroApolice
+      if (bradescoData.tipoSeguro) tipoSeguro = bradescoData.tipoSeguro
+      if (bradescoData.vigenciaInicio && bradescoData.vigenciaFim) {
+        vigencias = { inicio: bradescoData.vigenciaInicio, fim: bradescoData.vigenciaFim }
+      }
+      if (bradescoData.premioLiquido !== undefined) {
+        premios.liquido = bradescoData.premioLiquido
+      }
+      if (bradescoData.iof !== undefined) {
+        premios.iof = bradescoData.iof
+      }
+      if (bradescoData.premioTotal !== undefined) {
+        premios.total = bradescoData.premioTotal
+      }
+      if (bradescoData.quantidadeParcelas !== undefined) {
+        parcelamento.parcelas = bradescoData.quantidadeParcelas
+      }
+      if (bradescoData.formaPagamento) {
+        parcelamento.forma = bradescoData.formaPagamento
+      }
+      if (bradescoData.parcelamentoDescricao) {
+        parcelamento.descricao = bradescoData.parcelamentoDescricao
+      }
+      if (bradescoData.segurado) {
+        segurado = { ...segurado, ...bradescoData.segurado }
+      }
+      if (bradescoData.condutorPrincipal) {
+        condutor = { ...condutor, ...bradescoData.condutorPrincipal }
+      }
+      if (bradescoData.veiculo) {
+        veiculo = { ...veiculo, ...bradescoData.veiculo }
+      }
+      if (bradescoData.renovacao) {
+        renovacao = { ...renovacao, ...bradescoData.renovacao }
       }
     }
   }
@@ -4922,4 +4990,464 @@ export function extrairPropostaMapfre(text: string): {
     veiculo,
     renovacao,
   }
+}
+
+// =========================================================================
+// EXTRATOR ESPECIALIZADO: BRADESCO AUTO/RE (Propostas e Renovações)
+// =========================================================================
+
+export function extrairPropostaBradesco(text: string): {
+  numeroProposta?: string
+  numeroApolice?: string
+  tipoSeguro?: string
+  vigenciaInicio?: string
+  vigenciaFim?: string
+  premioLiquido?: number
+  iof?: number
+  premioTotal?: number
+  formaPagamento?: string
+  quantidadeParcelas?: number
+  parcelamentoDescricao?: string
+  segurado?: Partial<PropostaClienteExtraido>
+  condutorPrincipal?: Partial<PropostaCondutorExtraido>
+  veiculo?: Partial<PropostaVeiculoExtraido>
+  renovacao?: Partial<PropostaRenovacaoExtraida>
+} | null {
+  if (!/bradesco/i.test(text)) {
+    return null
+  }
+
+  // 1. NÚMERO DA PROPOSTA
+  // Ex: "Proposta: 867700708" ou no cabeçalho
+  let numeroProposta: string | undefined
+  const propMatch =
+    /(?:^|[|\n\s])\*{0,2}Proposta(?:\s*n[ºo.]|\s*número)?\*{0,2}[:\s]+([0-9]{6,20})\b/i.exec(text)
+  if (propMatch) {
+    numeroProposta = propMatch[1].trim()
+  }
+
+  // 2. VIGÊNCIA
+  // Ex: "DADOS DO SEGURO Vigência: das 24h de 31/10/2026 às 24h de 31/10/2027"
+  let vigenciaInicio: string | undefined
+  let vigenciaFim: string | undefined
+  const vigMatch =
+    /vig[êe]ncia[*\s|:]+das?\s+[0-9]{1,2}h(?:[0-9]{2})?\s+(?:de|do\s+dia)\s+(\d{1,2}[/.-]\d{1,2}[/.-]\d{4})\s+(?:at[ée]|às|as)\s+[0-9]{1,2}h(?:[0-9]{2})?\s+(?:de|do\s+dia)\s+(\d{1,2}[/.-]\d{1,2}[/.-]\d{4})/i.exec(
+      text,
+    ) ||
+    /das?\s+24h(?:\s*00)?\s+(?:de|do\s+dia)\s+(\d{1,2}[/.-]\d{1,2}[/.-]\d{4})\s+(?:at[ée]|às|as)\s+(?:as?\s+)?24h(?:\s*00)?\s+(?:de|do\s+dia)\s+(\d{1,2}[/.-]\d{1,2}[/.-]\d{4})/i.exec(
+      text,
+    )
+
+  if (vigMatch) {
+    vigenciaInicio = parseDataFlexivel(vigMatch[1])
+    vigenciaFim = parseDataFlexivel(vigMatch[2])
+  }
+
+  // 3. SEGURADO & ENDEREÇO
+  // ÂNCORA OBRIGATÓRIA: "DADOS DO PROPONENTE"
+  // Ex: "DADOS DO PROPONENTE Nome: LUCAS RUFINO DA SILVA CPF/CNPJ: 114.772.254-47 Tipo Pessoa: Física Sexo: Masculino Data de Nascimento: 17/09/1996 Doc. Ident.: 9382299 Natureza do Doc.: RECIFE Órgão Exp.: SDS Data de Exp.: 11/10/2019 Estado Civil: Endereço de Pernoite: Rua Cabrobo 53 Bairro: Janga Cidade / UF: Paulista-Pe CEP: 53437-160 Endereço de Correspondência: Rua Cabrobo 53 Bairro: Janga Cidade / UF: Paulista-Pe CEP: 53437-160 Tel. Comercial: Tel. Residencial: Tel. Celular: 55 (81) 98576-1027 E-mail: lucas10rufino@hotmail.com Segurado é o proprietário do veículo ? Sim Segurado é o principal condutor ? Não"
+  const segurado: Partial<PropostaClienteExtraido> = {
+    tipoPessoa: 'PF',
+  }
+
+  // Isolar seção DADOS DO PROPONENTE
+  const propSecMatch =
+    /(?:DADOS\s+DO\s+PROPONENTE|PROPONENTE)[\s\S]*?(?=(?:DADOS\s+DO\s+SEGURO|OBJETO\s+DO\s+SEGURO|COBERTURAS|PR[ÊE]MIOS|QUESTION[ÁA]RIO|\n{3,}|$))/i.exec(
+      text,
+    )
+  const propSecText = propSecMatch ? propSecMatch[0] : text
+
+  // 3.1 Nome do Segurado (ancorado em DADOS DO PROPONENTE Nome:)
+  const nomeSegMatch =
+    /(?:DADOS\s+DO\s+PROPONENTE[\s\S]*?)?\*{0,2}Nome:\*{0,2}\s*([^\n*|]+?)(?=\s*\*{0,2}(?:CPF\/CNPJ|CPF|CNPJ|Tipo\s+Pessoa|Sexo|Data)|\||\n|$)/i.exec(
+      propSecText,
+    )
+  if (nomeSegMatch) {
+    const rawNome = sanitizarTextoExtraido(nomeSegSegMatchBradesco(nomeSegMatch[1]))
+    if (isNomePessoaValido(rawNome)) {
+      segurado.nome = rawNome
+    }
+  }
+
+  // 3.2 CPF / CNPJ do Proponente
+  const cpfSegMatch =
+    /\*{0,2}(?:CPF\/CNPJ|CPF):\*{0,2}\s*([0-9]{3}\.[0-9]{3}\.[0-9]{3}-[0-9]{2}|[0-9]{11})\b/i.exec(
+      propSecText,
+    )
+  if (cpfSegMatch) {
+    const limpo = cpfSegMatch[1].replace(/\D/g, '')
+    if (limpo.length === 11 && isValidCpf(limpo)) {
+      segurado.cpfCnpj = limpo
+    }
+  }
+
+  // 3.3 Tipo Pessoa
+  const tpMatch = /\*{0,2}Tipo\s+Pessoa:\*{0,2}\s*([A-Za-z]+)/i.exec(propSecText)
+  if (tpMatch) {
+    const tp = tpMatch[1].toUpperCase()
+    if (tp.includes('JUR') || tp === 'PJ') {
+      segurado.tipoPessoa = 'PJ'
+    } else {
+      segurado.tipoPessoa = 'PF'
+    }
+  }
+
+  // 3.4 Data de Nascimento
+  const nascMatch =
+    /\*{0,2}(?:Data\s+de\s+Nascimento|Data\s+Nasc\.?):\*{0,2}\s*(\d{1,2}[/.-]\d{1,2}[/.-]\d{4})/i.exec(
+      propSecText,
+    )
+  if (nascMatch) {
+    segurado.dataNascimento = parseDataFlexivel(nascMatch[1])
+  }
+
+  // 3.5 Endereço (Endereço de Pernoite ou Correspondência)
+  // Ex: "Endereço de Pernoite: Rua Cabrobo 53 Bairro: Janga Cidade / UF: Paulista-Pe CEP: 53437-160 Tel. Comercial: Tel. Residencial: Tel. Celular: 55 (81) 98576-1027 E-mail: lucas10rufino@hotmail.com Segurado é o proprietário do veículo ? Sim"
+  const endPernoiteMatch =
+    /(?:Endere[çc]o\s+de\s+Pernoite|Endere[çc]o\s+de\s+Correspond[êe]ncia|Endere[çc]o)[:\s]+([\s\S]*?)(?=(?:Endere[çc]o\s+de\s+Correspond[êe]ncia|Tel\.|Telefone|E-?mail|Segurado\s+[ée]|OBJETO|DADOS\s+DO\s+SEGURO|\n\n|$))/i.exec(
+      propSecText,
+    )
+  const endBlock = endPernoiteMatch ? endPernoiteMatch[1] : propSecText
+
+  // Extrair Rua: parar no primeiro marcador de Bairro:, Cidade / UF:, CEP:, Tel., E-mail:, Segurado é...
+  const ruaMatch =
+    /^(?:Rua|Av\.|Avenida|Travessa|Alameda|Rodovia|[A-Za-z0-9À-ÿ\s]+?)(?=\s*(?:Bairro:|Cidade\s*\/\s*UF:|Cidade:|UF:|CEP:|Tel\.|Telefone|E-?mail|Segurado\s+[ée])|\||\n|$)/i.exec(
+      endBlock.trim(),
+    ) ||
+    /^(.*?)(?=\s*(?:Bairro:|Cidade\s*\/\s*UF:|Cidade:|UF:|CEP:|Tel\.|Telefone|E-?mail|Segurado\s+[ée])|\||\n|$)/i.exec(
+      endBlock.trim(),
+    )
+
+  if (ruaMatch) {
+    let r = sanitizarTextoExtraido(ruaMatch[1] || ruaMatch[0])
+    // Cortar se engoliu marcadores
+    r = r.split(/\b(?:Bairro|Cidade|UF|CEP|Tel|E-?mail|Segurado)\b/i)[0].trim()
+    if (r && !isTextoCabecalhoOuInvalido(r)) {
+      segurado.rua = r
+    }
+  }
+
+  // Extrair Bairro
+  const bairroMatch =
+    /(?:Bairro)[:\s]+([^\n*|]+?)(?=\s*(?:Cidade\s*\/\s*UF|Cidade|UF|CEP|Tel\.|Telefone|E-?mail|Segurado)|\||\n|$)/i.exec(
+      endBlock,
+    )
+  if (bairroMatch) {
+    const b = sanitizarTextoExtraido(bairroMatch[1])
+    if (b && !isTextoCabecalhoOuInvalido(b)) {
+      segurado.bairro = b
+    }
+  }
+
+  // Extrair Cidade / UF: "Cidade / UF: Paulista-Pe"
+  const cidUfMatch =
+    /(?:Cidade\s*\/\s*UF|Cidade)[:\s]+([A-Za-zÀ-ÿ\s]+?)\s*[-/]\s*([A-Za-z]{2})\b/i.exec(endBlock) ||
+    /(?:Cidade\s*\/\s*UF|Cidade)[:\s]+([A-Za-zÀ-ÿ\s]+?)(?=\s*(?:UF:|CEP:|Tel|E-?mail)|\||\n|$)/i.exec(
+      endBlock,
+    )
+  if (cidUfMatch) {
+    const c = sanitizarTextoExtraido(cidUfMatch[1])
+    if (c && !isTextoCabecalhoOuInvalido(c)) {
+      segurado.cidade = c
+    }
+    if (cidUfMatch[2]) {
+      const ufCand = cidUfMatch[2].toUpperCase().trim()
+      if (BRAZILIAN_STATES.includes(ufCand)) {
+        segurado.estado = ufCand
+      }
+    }
+  }
+
+  if (!segurado.estado) {
+    const ufAvulsa = /(?:UF)[:\s]+([A-Za-z]{2})\b/i.exec(endBlock)
+    if (ufAvulsa && BRAZILIAN_STATES.includes(ufAvulsa[1].toUpperCase())) {
+      segurado.estado = ufAvulsa[1].toUpperCase()
+    }
+  }
+
+  // Extrair CEP: "CEP: 53437-160"
+  const cepMatch = /(?:CEP)[:\s]+([0-9]{5}-?[0-9]{3})\b/i.exec(endBlock)
+  if (cepMatch) {
+    const rawCep = cepMatch[1].replace(/\D/g, '')
+    segurado.cep = `${rawCep.slice(0, 5)}-${rawCep.slice(5)}`
+  }
+
+  // 3.6 Telefone celular: descartar prefixo "55 "
+  // Ex: "Tel. Celular: 55 (81) 98576-1027"
+  const celMatch =
+    /(?:Tel\.\s*Celular|Celular|Telefone)[:\s]+(?:55\s*)?(\(?[0-9]{2}\)?\s*[0-9]{4,5}[-\s]?[0-9]{4})/i.exec(
+      propSecText,
+    )
+  if (celMatch) {
+    segurado.telefone = celMatch[1].trim()
+  }
+
+  // 3.7 E-mail (minúsculas)
+  const emailMatch =
+    /\*{0,2}E-?mail:\*{0,2}\s*([a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,})/i.exec(propSecText)
+  if (emailMatch) {
+    segurado.email = emailMatch[1].trim().toLowerCase()
+  }
+
+  // 4. VEÍCULO
+  // OBJETO DO SEGURO |Tipo do Veículo: Argo Drive 1.0 6v Flex|||Chassi:|9BD358A4NKYJ07863||| |Marca:|FIAT||Placa:|PCW7629||Nº Eixos:|02|| |Ano Fab.:|2018|Ano Mod.:|Zero KM:|Não||Antifurto:|Não|| |Código FIPE: 0014940|
+  const veiculo: Partial<PropostaVeiculoExtraido> = {
+    codigoFipe: '',
+  }
+
+  const veicSecMatch =
+    /OBJETO\s+DO\s+SEGURO[\s\S]*?(?=(?:PR[ÊE]MIOS|COBERTURAS|QUESTION[ÁA]RIO|\n{3,}|$))/i.exec(text)
+  const veicText = veicSecMatch ? veicSecMatch[0] : text
+
+  const tipoVeicMatch =
+    /(?:Tipo\s+do\s+Ve[íi]culo|Modelo|Ve[íi]culo)[:\s*|]+([^\n|*]+?)(?=(?:\s*[|*]?\s*(?:Chassi|Marca|Placa|Ano|Zero))|\||\n|$)/i.exec(
+      veicText,
+    )
+  if (tipoVeicMatch) {
+    const rawMod = sanitizarTextoExtraido(tipoVeicMatch[1])
+    if (rawMod && !isTextoCabecalhoOuInvalido(rawMod)) {
+      veiculo.marcaModelo = rawMod
+    }
+  }
+
+  const placaMatch = /(?:Placa)[:\s*|]+([A-Z]{3}[-\s]?[0-9][A-Z0-9][0-9]{2})\b/i.exec(veicText)
+  if (placaMatch) {
+    veiculo.placa = placaMatch[1].replace(/[-\s]/g, '').toUpperCase()
+  }
+
+  const chassiMatch = /(?:Chassi)[:\s*|]+([A-HJ-NPR-Z0-9]{17})\b/i.exec(veicText)
+  if (chassiMatch) {
+    veiculo.chassi = chassiMatch[1].toUpperCase()
+  }
+
+  const fipeMatch = /(?:C[oó]digo\s+FIPE|FIPE)[:\s*|]+([0-9]{6,8})\b/i.exec(veicText)
+  if (fipeMatch) {
+    veiculo.codigoFipe = fipeMatch[1].trim()
+  }
+
+  const anoFabMatch = /(?:Ano\s+Fab\.?)[:\s*|]+(19\d{2}|20\d{2})\b/i.exec(veicText)
+  if (anoFabMatch) {
+    veiculo.anoFabricacao = parseInt(anoFabMatch[1], 10)
+  }
+
+  const anoModMatch = /(?:Ano\s+Mod\.?)[:\s*|]+(19\d{2}|20\d{2})\b/i.exec(veicText)
+  if (anoModMatch) {
+    veiculo.anoModelo = parseInt(anoModMatch[1], 10)
+  }
+
+  // 5. RENOVAÇÃO
+  // "DADOS DO SEGURO ... Renovação: Sim Cia: 544 Suc.: 867 Apólice.: 368553 Item: 0001 CI: 53125123673761 Bônus: 04 Sinistro? Não Quant.: 00"
+  const renovacao: Partial<PropostaRenovacaoExtraida> = {}
+  const renovSimMatch = /Renova[çc][ãa]o:\s*Sim\b/i.exec(text)
+  if (renovSimMatch) {
+    renovacao.isRenovacao = true
+
+    // Cia: 544 -> Bradesco
+    const ciaMatch = /Cia:\s*([0-9]+)/i.exec(text)
+    if (ciaMatch) {
+      if (ciaMatch[1] === '544') {
+        renovacao.seguradoraAnterior = 'Bradesco'
+      } else {
+        renovacao.seguradoraAnterior = `Cia ${ciaMatch[1]}`
+      }
+    }
+
+    const apoliceMatch = /Ap[oó]lice\.?:\s*([0-9]{4,20})\b/i.exec(text)
+    if (apoliceMatch) {
+      renovacao.apoliceAnterior = apoliceMatch[1].trim()
+    }
+
+    const bonusMatch = /B[oó]nus:\s*([0-9]{1,2})\b/i.exec(text)
+    if (bonusMatch) {
+      renovacao.classeBonus = bonusMatch[1].trim()
+    }
+  }
+
+  // 6. PRÊMIOS
+  // "PRÊMIOS (R$) LÍQUIDO (Auto+RCF+APP): 2.198,15 |Prêmio Residencial:|0,00|Quant. Parcelas:|10| |Custo de Emissão:|0,00|Taxa de Juros:|0,00%| |Adic. Fracionamento:|0,00|1º Parcela:|236,10| |IOF:|162,22|Demais:|236,03| TOTAL: 2.360,37"
+  // Isolar seção PRÊMIOS para não pegar outros totais ou franquias
+  const premiosSecMatch =
+    /PR[ÊE]MIOS\s*(?:\([^)]*\))?[\s\S]*?(?=(?:FORMAS\s+DE\s+COBRAN[ÇC]A|QUESTION[ÁA]RIO|DISPOSI[ÇC][ÕO]ES|\n{4,}|$))/i.exec(
+      text,
+    )
+  const premiosSecText = premiosSecMatch ? premiosSecMatch[0] : text
+
+  let premioLiquido: number | undefined
+  let iof: number | undefined
+  let premioTotal: number | undefined
+
+  const liqMatch = /L[ÍI]QUIDO(?:\s*\([^)]*\))?[:\s*|]+([0-9]{1,3}(?:\.[0-9]{3})*,[0-9]{2})/i.exec(
+    premiosSecText,
+  )
+  if (liqMatch) {
+    premioLiquido = parseMoeda(liqMatch[1])
+  }
+
+  const iofMatch = /IOF[:\s*|]+([0-9]{1,3}(?:\.[0-9]{3})*,[0-9]{2})/i.exec(premiosSecText)
+  if (iofMatch) {
+    iof = parseMoeda(iofMatch[1])
+  }
+
+  const totMatch = /TOTAL[:\s*|]+([0-9]{1,3}(?:\.[0-9]{3})*,[0-9]{2})/i.exec(premiosSecText)
+  if (totMatch) {
+    premioTotal = parseMoeda(totMatch[1])
+  }
+
+  // 7. PARCELAMENTO & FORMA DE PAGAMENTO
+  // Quant. Parcelas: 10
+  // 1º Parcela: 236,10
+  // Demais: 236,03
+  // FORMAS DE COBRANÇA - (R$) 1ª Parcela: Ccb Debito Em Conta ... Demais Parcelas: Debito Em Conta Corrente
+  let quantidadeParcelas: number | undefined
+  let formaPagamento: string | undefined
+  let parcelamentoDescricao: string | undefined
+
+  const quantParcMatch = /Quant\.?\s*Parcelas[:\s*|]+([0-9]{1,2})\b/i.exec(text)
+  if (quantParcMatch) {
+    quantidadeParcelas = parseInt(quantParcMatch[1], 10)
+  }
+
+  const cobrancaMatch =
+    /FORMAS\s+DE\s+COBRAN[ÇC]A[\s\S]*?(?=(?:QUESTION[ÁA]RIO|DADOS|OBRIGA[ÇC][ÕO]ES|\n\n\n|$))/i.exec(
+      text,
+    )
+  const cobText = cobrancaMatch ? cobrancaMatch[0] : text
+
+  if (/debito\s+em\s+conta|ccb\s+debito\s+em\s+conta/i.test(cobText)) {
+    formaPagamento = 'Débito em Conta'
+  } else if (/boleto/i.test(cobText)) {
+    formaPagamento = 'Boleto'
+  } else if (/cr[ée]dito|cart[ãa]o/i.test(cobText)) {
+    formaPagamento = 'Crédito'
+  }
+
+  const primParcMatch = /(?:1[ºª]?\s*Parcela)[:\s*|]+([0-9]{1,3}(?:\.[0-9]{3})*,[0-9]{2})/i.exec(
+    text,
+  )
+  const demaisParcMatch = /(?:Demais)[:\s*|]+([0-9]{1,3}(?:\.[0-9]{3})*,[0-9]{2})/i.exec(text)
+
+  if (quantidadeParcelas) {
+    if (primParcMatch && demaisParcMatch && quantidadeParcelas > 1) {
+      const rest = quantidadeParcelas - 1
+      parcelamentoDescricao = `${quantidadeParcelas}x (1ª R$ ${primParcMatch[1]} + ${rest}x R$ ${demaisParcMatch[1]})`
+    } else if (primParcMatch) {
+      parcelamentoDescricao = `${quantidadeParcelas}x de R$ ${primParcMatch[1]}`
+    } else {
+      parcelamentoDescricao = `${quantidadeParcelas}x`
+    }
+  }
+
+  // 8. CONDUTOR PRINCIPAL
+  // QUESTIONÁRIO DE AVALIAÇÂO DE RISCO
+  // "Características do principal condutor Características do proprietário Nome: AILTON CAVALCANTI DA SILVA Tipo Pessoa: Física CPF/CNPJ: 419.591.084-68 Nome: LUCAS RUFINO DA SILVA Data Nasc.: 18/11/1964 CPF/CNPJ: 114.772.254-47 Sexo: Masculino Estado Civil: Casado/uniao Estavel"
+  // Regra fixa do usuário: extrair condutorPrincipal.nome = "AILTON CAVALCANTI DA SILVA", cpf "419.591.084-68", nascimento 18/11/1964, mesmoQueSegurado false.
+  const condutorPrincipal: Partial<PropostaCondutorExtraido> = {
+    mesmoQueSegurado: false,
+  }
+
+  const questSecMatch =
+    /QUESTION[ÁA]RIO\s+DE\s+AVALIA[ÇC][ÃA]O\s+DE\s+RISCO[\s\S]*?(?=(?:DECLARA[ÇC][ÕO]ES|DISPOSI[ÇC][ÕO]ES|SAC|OUVIDORIA|\n{4,}|$))/i.exec(
+      text,
+    )
+  const questText = questSecMatch ? questSecMatch[0] : text
+
+  // Isolar o trecho entre Características do principal condutor e próximas características ou fim da seção
+  const princCondMatch =
+    /Caracter[íi]sticas\s+do\s+principal\s+condutor[\s\S]*?(?=(?:Caracter[íi]sticas\s+do\s+ve[íi]culo|Uso\s+do\s+ve[íi]culo|Garagem|Resid[êe]ncia|\n\n\n|$))/i.exec(
+      questText,
+    )
+  const princCondText = princCondMatch ? princCondMatch[0] : questText
+
+  // Procurar pares de Nome / CPF no bloco de risco, excluindo o CPF do segurado se for diferente
+  const nomesRisco = [
+    ...princCondText.matchAll(
+      /Nome:\s*([A-Za-zÀ-ÿ\s.-]+?)(?=\s*(?:Tipo\s+Pessoa|CPF|Data|Sexo|Estado)|\||\n|$)/gi,
+    ),
+  ]
+
+  let condNomeEscolhido = ''
+  for (const nm of nomesRisco) {
+    const cand = sanitizarTextoExtraido(nm[1])
+    if (
+      isNomePessoaValido(cand) &&
+      (!segurado.nome || cand.toLowerCase() !== segurado.nome.toLowerCase())
+    ) {
+      condNomeEscolhido = cand
+      break
+    }
+  }
+
+  // Se não achou nome diferente do segurado, checa primeiro nome após Características do principal condutor
+  if (!condNomeEscolhido && nomesRisco.length > 0) {
+    const cand = sanitizarTextoExtraido(nomesRisco[0][1])
+    if (isNomePessoaValido(cand)) {
+      condNomeEscolhido = cand
+    }
+  }
+
+  if (condNomeEscolhido) {
+    condutorPrincipal.nome = condNomeEscolhido
+  }
+
+  // CPF do condutor (se tiver CPF diferente do segurado no bloco de condutor, priorizar ele)
+  const cpfsRisco = [
+    ...princCondText.matchAll(
+      /(?:CPF\/CNPJ|CPF):\s*([0-9]{3}\.[0-9]{3}\.[0-9]{3}-[0-9]{2}|[0-9]{11})\b/gi,
+    ),
+  ]
+  for (const cm of cpfsRisco) {
+    const limpo = cm[1].replace(/\D/g, '')
+    if (limpo.length === 11 && isValidCpf(limpo)) {
+      if (!segurado.cpfCnpj || limpo !== segurado.cpfCnpj) {
+        condutorPrincipal.cpf = limpo
+        break
+      }
+    }
+  }
+
+  // Se não achou CPF diferente, e o condutor for o mesmo que segurado, usa o CPF do primeiro
+  if (!condutorPrincipal.cpf && cpfsRisco.length > 0) {
+    const limpo = cpfsRisco[0][1].replace(/\D/g, '')
+    if (limpo.length === 11 && isValidCpf(limpo)) {
+      condutorPrincipal.cpf = limpo
+    }
+  }
+
+  // Data de nascimento do condutor
+  const nascCondMatch =
+    /(?:Data\s+Nasc\.?|Data\s+de\s+Nascimento):\s*(\d{1,2}[/.-]\d{1,2}[/.-]\d{4})/i.exec(
+      princCondText,
+    )
+  if (nascCondMatch) {
+    condutorPrincipal.dataNascimento = parseDataFlexivel(nascCondMatch[1])
+  }
+
+  if (condutorPrincipal.nome && segurado.nome) {
+    condutorPrincipal.mesmoQueSegurado =
+      condutorPrincipal.nome.trim().toLowerCase() === segurado.nome.trim().toLowerCase()
+  }
+
+  return {
+    numeroProposta,
+    numeroApolice: '',
+    tipoSeguro: 'Auto',
+    vigenciaInicio,
+    vigenciaFim,
+    premioLiquido,
+    iof,
+    premioTotal,
+    formaPagamento,
+    quantidadeParcelas,
+    parcelamentoDescricao,
+    segurado,
+    condutorPrincipal,
+    veiculo,
+    renovacao,
+  }
+}
+
+function nomeSegSegMatchBradesco(val: string): string {
+  // Corta se o nome engoliu rótulos subsequentes
+  const p = val.split(/\b(?:CPF|CNPJ|Tipo\s+Pessoa|Sexo|Data)\b/i)[0]
+  return p.trim()
 }
