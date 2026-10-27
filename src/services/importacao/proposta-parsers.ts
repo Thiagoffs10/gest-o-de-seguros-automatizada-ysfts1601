@@ -321,57 +321,93 @@ export function detectarFormatoProposta(
   const t = text.toLowerCase()
   const n = (nomeArquivo || '').toLowerCase()
 
-  // HDI Seguros tem prioridade no início da cascata (evita casar com Porto Seguro citado como seguradora anterior)
+  // Regra de Ouro: limpar referências a "Seguradora Anterior" antes de detectar formato,
+  // pois propostas de renovação frequentemente mencionam a seguradora anterior (ex: "Seguradora Anterior: 5886 - PORTO SEGURO")
+  // e essa menção nunca deve classificar o documento como pertencente à seguradora anterior.
+  const tSemSeguradoraAnterior = t
+    .replace(/(?:seguradora\s+anterior|cia\s+anterior|companhia\s+anterior)[*\s|:]+[^\n|]*/gi, '')
+    .replace(/fim\s+da\s+vig[êe]ncia\s+anterior[*\s|:]+[^\n|]*/gi, '')
+    .replace(/n[ºo.]?\s+ap[oó]lice\s+anterior[*\s|:]+[^\n|]*/gi, '')
+
+  // 1. ALLIANZ: Identificação estrita por identidade do emissor / cabeçalho / marca
+  // Deve vir antes da Porto para evitar que renovações Allianz vindas da Porto casem com Porto.
+  if (
+    n.includes('allianz') ||
+    tSemSeguradoraAnterior.includes('allianz seguros') ||
+    tSemSeguradoraAnterior.includes('allianz seguros s.a.') ||
+    tSemSeguradoraAnterior.includes('allianz.com.br') ||
+    tSemSeguradoraAnterior.includes('allianz auto') ||
+    tSemSeguradoraAnterior.includes('allianz condomínio') ||
+    tSemSeguradoraAnterior.includes('allianz condominio') ||
+    tSemSeguradoraAnterior.includes('escolher a allianz') ||
+    /(?:^|[#\n\s|*])allianz(?:\s+seguros)?(?:[#\n\s|*]|$)/i.test(tSemSeguradoraAnterior)
+  ) {
+    return 'ALLIANZ'
+  }
+
+  // 2. HDI Seguros tem prioridade
   // Detecção por "HDI SEGUROS" / "Hdi Auto Perfil" / SUSEP 6572 / "hdi.com.br"
   if (
     n.includes('hdi') ||
-    t.includes('hdi seguros') ||
-    t.includes('hdi auto') ||
-    t.includes('hdi auto perfil') ||
-    t.includes('hdi seguros s.a.') ||
-    t.includes('hdi seguros s.a. - 6572') ||
-    (t.includes('6572') && t.includes('hdi')) ||
-    t.includes('www.hdi.com.br') ||
-    t.includes('pacote de servicos hdi') ||
-    /\bhdi\b/i.test(t)
+    tSemSeguradoraAnterior.includes('hdi seguros') ||
+    tSemSeguradoraAnterior.includes('hdi auto') ||
+    tSemSeguradoraAnterior.includes('hdi auto perfil') ||
+    tSemSeguradoraAnterior.includes('hdi seguros s.a.') ||
+    tSemSeguradoraAnterior.includes('hdi seguros s.a. - 6572') ||
+    (tSemSeguradoraAnterior.includes('6572') && tSemSeguradoraAnterior.includes('hdi')) ||
+    tSemSeguradoraAnterior.includes('www.hdi.com.br') ||
+    tSemSeguradoraAnterior.includes('pacote de servicos hdi') ||
+    /\bhdi\b/i.test(tSemSeguradoraAnterior)
   ) {
     return 'HDI'
   }
 
-  // Azul Seguros tem prioridade (mesmo quando emitida via Porto Seguro ou contendo menção a Porto)
+  // 3. Azul Seguros tem prioridade (mesmo quando emitida via Porto Seguro ou contendo menção a Porto)
   if (
     n.includes('azul') ||
-    t.includes('azul tradicional') ||
-    t.includes('azul seguros') ||
-    t.includes('proposta de seguro auto / azul') ||
-    t.includes('proposta de seguro auto\nazul tradicional') ||
-    (t.includes('azul') && t.includes('porto seguro'))
+    tSemSeguradoraAnterior.includes('azul tradicional') ||
+    tSemSeguradoraAnterior.includes('azul seguros') ||
+    tSemSeguradoraAnterior.includes('proposta de seguro auto / azul') ||
+    tSemSeguradoraAnterior.includes('proposta de seguro auto\nazul tradicional') ||
+    (tSemSeguradoraAnterior.includes('azul') && tSemSeguradoraAnterior.includes('porto seguro'))
   ) {
     return 'AZUL_SEGUROS'
   }
 
+  // 4. Porto Seguro (utilizando texto sem seguradora anterior)
   if (
     n.includes('porto') ||
-    t.includes('porto seguro') ||
-    t.includes('porto seguro cia de seguros')
+    tSemSeguradoraAnterior.includes('porto seguro') ||
+    tSemSeguradoraAnterior.includes('porto seguro cia de seguros')
   ) {
     return 'PORTO_SEGURO'
   }
-  if (n.includes('allianz') || t.includes('allianz seguros') || t.includes('allianz')) {
-    return 'ALLIANZ'
-  }
+
+  // 5. Yelum / Liberty
   if (
     n.includes('yelum') ||
-    t.includes('yelum seguradora') ||
-    t.includes('yelum') ||
-    t.includes('liberty')
+    tSemSeguradoraAnterior.includes('yelum seguradora') ||
+    tSemSeguradoraAnterior.includes('yelum') ||
+    tSemSeguradoraAnterior.includes('liberty')
   ) {
     return 'YELUM'
   }
-  if (n.includes('mapfre') || t.includes('mapfre seguros') || t.includes('mapfre')) {
+
+  // 6. Mapfre
+  if (
+    n.includes('mapfre') ||
+    tSemSeguradoraAnterior.includes('mapfre seguros') ||
+    tSemSeguradoraAnterior.includes('mapfre')
+  ) {
     return 'MAPFRE'
   }
-  if (n.includes('bradesco') || t.includes('bradesco seguros') || t.includes('bradesco auto')) {
+
+  // 7. Bradesco
+  if (
+    n.includes('bradesco') ||
+    tSemSeguradoraAnterior.includes('bradesco seguros') ||
+    tSemSeguradoraAnterior.includes('bradesco auto')
+  ) {
     return 'BRADESCO'
   }
 
@@ -419,16 +455,17 @@ export function parsePropostaTexto(text: string, nomeArquivo: string = ''): Prop
   let condutor = extrairCondutor(text, segurado.nome, segurado.cpfCnpj)
   let renovacao = extrairRenovacao(text)
 
-  // CASCATA ESPECIALIZADA PARA ALLIANZ CONDOMÍNIO (Layout Novo / Direto)
-  // Acionado quando o texto contém "allianz condomínio" E ("essa é a proposta do seu seguro" OU "suas informações")
+  // CASCATA ESPECIALIZADA PARA ALLIANZ (Auto / Moto vs Condomínio)
   const tLower = text.toLowerCase()
-  if (tLower.includes('allianz condomínio') || tLower.includes('allianz condominio')) {
-    if (
-      tLower.includes('essa é a proposta do seu seguro') ||
-      tLower.includes('essa e a proposta do seu seguro') ||
-      tLower.includes('suas informações') ||
-      tLower.includes('suas informacoes')
-    ) {
+  if (formato === 'ALLIANZ') {
+    const isCondominio =
+      (tLower.includes('allianz condomínio') || tLower.includes('allianz condominio')) &&
+      (tLower.includes('essa é a proposta do seu seguro') ||
+        tLower.includes('essa e a proposta do seu seguro') ||
+        tLower.includes('ramo: 16 - condomínio') ||
+        tLower.includes('ramo: 16 - condominio'))
+
+    if (isCondominio) {
       const allianzCond = extrairAllianzCondominioCliente(text)
       if (allianzCond) {
         tipoSeguro = 'Condomínio'
@@ -465,6 +502,47 @@ export function parsePropostaTexto(text: string, nomeArquivo: string = ''): Prop
           codigoFipe: '',
           anoFabricacao: undefined,
           anoModelo: undefined,
+        }
+      }
+    } else {
+      // ALLIANZ AUTO / MOTO DEDICADO
+      const allianzAuto = extrairPropostaAllianzAutoMoto(text)
+      if (allianzAuto) {
+        if (allianzAuto.numeroProposta) numeroProposta = allianzAuto.numeroProposta
+        if (allianzAuto.numeroApolice !== undefined) numeroApolice = allianzAuto.numeroApolice
+        if (allianzAuto.tipoSeguro) tipoSeguro = allianzAuto.tipoSeguro
+        if (allianzAuto.vigenciaInicio && allianzAuto.vigenciaFim) {
+          vigencias = { inicio: allianzAuto.vigenciaInicio, fim: allianzAuto.vigenciaFim }
+        }
+        if (allianzAuto.premioLiquido !== undefined) {
+          premios.liquido = allianzAuto.premioLiquido
+        }
+        if (allianzAuto.iof !== undefined) {
+          premios.iof = allianzAuto.iof
+        }
+        if (allianzAuto.premioTotal !== undefined) {
+          premios.total = allianzAuto.premioTotal
+        }
+        if (allianzAuto.quantidadeParcelas !== undefined) {
+          parcelamento.parcelas = allianzAuto.quantidadeParcelas
+        }
+        if (allianzAuto.formaPagamento) {
+          parcelamento.forma = allianzAuto.formaPagamento
+        }
+        if (allianzAuto.parcelamentoDescricao) {
+          parcelamento.descricao = allianzAuto.parcelamentoDescricao
+        }
+        if (allianzAuto.segurado) {
+          segurado = { ...segurado, ...allianzAuto.segurado }
+        }
+        if (allianzAuto.condutorPrincipal) {
+          condutor = { ...condutor, ...allianzAuto.condutorPrincipal }
+        }
+        if (allianzAuto.veiculo) {
+          veiculo = { ...veiculo, ...allianzAuto.veiculo }
+        }
+        if (allianzAuto.renovacao) {
+          renovacao = { ...renovacao, ...allianzAuto.renovacao }
         }
       }
     }
@@ -3109,6 +3187,453 @@ function extrairRenovacao(text: string): PropostaRenovacaoExtraida {
 // =========================================================================
 // EXTRATOR ESPECIALIZADO: ALLIANZ CONDOMÍNIO (Layout Novo / Direto)
 // =========================================================================
+
+// =========================================================================
+// EXTRATOR ESPECIALIZADO: ALLIANZ AUTO / MOTO
+// Atende a propostas Allianz Auto / Moto em Markdown com tabelas GFM
+// e rótulos inline em negrito ("**Nome:** ...", "**CPF:** ...", etc.)
+// =========================================================================
+
+export function extrairPropostaAllianzAutoMoto(text: string): {
+  numeroProposta?: string
+  numeroApolice?: string
+  tipoSeguro?: string
+  vigenciaInicio?: string
+  vigenciaFim?: string
+  premioLiquido?: number
+  iof?: number
+  premioTotal?: number
+  formaPagamento?: string
+  quantidadeParcelas?: number
+  parcelamentoDescricao?: string
+  segurado?: Partial<PropostaClienteExtraido>
+  condutorPrincipal?: Partial<PropostaCondutorExtraido>
+  veiculo?: Partial<PropostaVeiculoExtraido>
+  renovacao?: Partial<PropostaRenovacaoExtraida>
+} | null {
+  // 1. Número da proposta
+  let numeroProposta: string | undefined
+  const propMatch =
+    /(?:N[ºo.]?\s*(?:da\s+)?Proposta[*\s|:]+)([0-9]{6,15})\b/i.exec(text) ||
+    /N[ºo.]?\s*Proposta[*\s|:]+([0-9]{6,15})\b/i.exec(text)
+  if (propMatch) {
+    numeroProposta = propMatch[1].trim()
+  }
+
+  // 2. Tipo de Seguro (ex: "Ramo: 31 - Moto" -> Moto; "Ramo: 31 - Automóvel" -> Auto)
+  let tipoSeguro = 'Auto'
+  const ramoMatch = /Ramo[*\s|:]+(?:[0-9]{1,3}\s*-\s*)?([A-Za-zÀ-ÿ]+)/i.exec(text)
+  if (ramoMatch) {
+    const rawRamo = ramoMatch[1].trim().toLowerCase()
+    if (rawRamo.includes('moto')) {
+      tipoSeguro = 'Moto'
+    } else if (rawRamo.includes('auto')) {
+      tipoSeguro = 'Auto'
+    }
+  } else if (/proteger a sua moto|\bmoto\b/i.test(text) && !/autom[oó]vel/i.test(text)) {
+    tipoSeguro = 'Moto'
+  }
+
+  // 3. Vigência
+  // Ex: "|Vigência: das 24H de 27/10/2026 às 24H de 27/10/2027|"
+  let vigenciaInicio: string | undefined
+  let vigenciaFim: string | undefined
+  const vigMatch =
+    /Vig[êe]ncia[*\s|:]+das?\s+[0-9]{1,2}H(?:\s*00)?\s+de\s+(\d{1,2}[/.-]\d{1,2}[/.-]\d{4})\s+[aà]s\s+[0-9]{1,2}H(?:\s*00)?\s+de\s+(\d{1,2}[/.-]\d{1,2}[/.-]\d{4})/i.exec(
+      text,
+    )
+  if (vigMatch) {
+    vigenciaInicio = parseDataFlexivel(vigMatch[1])
+    vigenciaFim = parseDataFlexivel(vigMatch[2])
+  }
+
+  // 4. Bloco SUAS INFORMAÇÕES (Segurado)
+  // Ex: "### SUAS INFORMAÇÕES **Nome:** EDNALDO JOSE DOS SANTOS **CPF/CNPJ:** 624.691.004-10 **Tel:** 81981906190 **E-mail:** igorsantoscontador@icloud.com **Endereço:** R. CANELA, 23, QB 11 - OURO PRETO-OLINDA/PE - 53370440"
+  const segurado: Partial<PropostaClienteExtraido> = {
+    tipoPessoa: 'PF',
+  }
+
+  const suasInfoSecMatch =
+    /(?:#+\s*|\*{0,2})SUAS\s+INFORMA[ÇC][ÕO]ES\*{0,2}[\s\S]*?(?=(?:(?:#+\s*|\*{0,2})INFORMA[ÇC][ÕO]ES\s+DO\s+CONDUTOR|(?:#+\s*|\*{0,2})INFORMA[ÇC][ÕO]ES\s+DO\s+SEGURO|$))/i.exec(
+      text,
+    )
+  const suasInfoSec = suasInfoSecMatch ? suasInfoSecMatch[0] : ''
+
+  if (suasInfoSec) {
+    // (a) Nome
+    const nomeM =
+      /\*{0,2}Nome:\*{0,2}\s*([^\n|*]+?)(?=(?:\s+\*{0,2}CPF|\s+\*{0,2}CNPJ|\s+\*{0,2}Tel|\s+\*{0,2}E-mail|\s*\||\n|$))/i.exec(
+        suasInfoSec,
+      )
+    if (nomeM) {
+      const candNome = sanitizarTextoExtraido(nomeM[1])
+      if (candNome && isNomePessoaValido(candNome)) {
+        segurado.nome = candNome
+      }
+    }
+
+    // (b) CPF/CNPJ
+    const docM =
+      /\*{0,2}(?:CPF\/CNPJ|CPF|CNPJ):\*{0,2}\s*([0-9]{2,3}\.?[0-9]{3}\.?[0-9]{3}(?:\/[0-9]{4})?-?[0-9]{2}|[0-9]{11,14})\b/i.exec(
+        suasInfoSec,
+      )
+    if (docM) {
+      const cleanDoc = docM[1].replace(/\D/g, '')
+      if (cleanDoc.length === 11) {
+        segurado.cpfCnpj = cleanDoc
+        segurado.tipoPessoa = 'PF'
+      } else if (cleanDoc.length === 14) {
+        segurado.cpfCnpj = cleanDoc
+        segurado.tipoPessoa = 'PJ'
+      }
+    }
+
+    // (c) Telefone: "**Tel:** 81981906190"
+    const telM =
+      /\*{0,2}(?:Tel|Telefone|Celular):\*{0,2}\s*(\(?[0-9]{2}\)?\s*[0-9]{4,5}[-\s]?[0-9]{4}|[0-9]{8,11})\b/i.exec(
+        suasInfoSec,
+      )
+    if (telM) {
+      const rawTel = telM[1].replace(/\D/g, '')
+      if (rawTel.length === 11) {
+        segurado.telefone = `(${rawTel.slice(0, 2)}) ${rawTel.slice(2, 7)}-${rawTel.slice(7)}`
+      } else if (rawTel.length === 10) {
+        segurado.telefone = `(${rawTel.slice(0, 2)}) ${rawTel.slice(2, 6)}-${rawTel.slice(6)}`
+      } else if (rawTel.length === 8 || rawTel.length === 9) {
+        // Sem DDD: verifica se há PE/Recife/Olinda no documento para inferir DDD 81
+        if (/olinda|recife|\bpe\b/i.test(text)) {
+          const comDdd = `81${rawTel}`
+          if (comDdd.length === 11) {
+            segurado.telefone = `(${comDdd.slice(0, 2)}) ${comDdd.slice(2, 7)}-${comDdd.slice(7)}`
+          } else if (comDdd.length === 10) {
+            segurado.telefone = `(${comDdd.slice(0, 2)}) ${comDdd.slice(2, 6)}-${comDdd.slice(6)}`
+          }
+        }
+      }
+    }
+
+    // (d) E-mail: "**E-mail:** igorsantoscontador@icloud.com"
+    const emailM =
+      /\*{0,2}E-?mail:\*{0,2}\s*([a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,})/i.exec(suasInfoSec)
+    if (emailM) {
+      segurado.email = emailM[1].trim()
+    }
+
+    // (e) Endereço:
+    // Ex: "**Endereço:** R. CANELA, 23, QB 11 - OURO PRETO-OLINDA/PE - 53370440"
+    // Ex 2: "Endereço: AV DEZESSETE DE AGOSTO, 1070, AP 202 - CASA FORTE - RECIFE/PE - 52061540"
+    const endM =
+      /\*{0,2}Endere[çc]o:\*{0,2}\s*([^\n|]+?)(?=(?:\s+\*{0,2}[A-Z][a-z]+:|\n|\||$))/i.exec(
+        suasInfoSec,
+      )
+    if (endM) {
+      const rawEnd = sanitizarTextoExtraido(endM[1])
+      // Divide por hífen: partes = ["R. CANELA, 23, QB 11", "OURO PRETO-OLINDA/PE", "53370440"] ou ["AV DEZESSETE DE AGOSTO, 1070, AP 202", "CASA FORTE", "RECIFE/PE", "52061540"]
+      const partes = rawEnd.split('-').map((p) => p.trim())
+      if (partes.length >= 2) {
+        // Rua e número na primeira parte
+        const logradouroComp = partes[0]
+        const pedacosLogr = logradouroComp.split(',').map((p) => p.trim())
+        segurado.rua = pedacosLogr[0] || ''
+        if (pedacosLogr.length >= 2) {
+          segurado.numero = pedacosLogr.slice(1).join(', ')
+        }
+
+        // Analisar demais partes para CEP, Bairro, Cidade e UF
+        for (let i = 1; i < partes.length; i++) {
+          const parte = partes[i]
+
+          // CEP de 8 dígitos colado ou com hífen: 53370440 ou 53370-440
+          const cepMatch = /\b([0-9]{5}-?[0-9]{3})\b/.exec(parte)
+          if (cepMatch && !segurado.cep) {
+            const rawCep = cepMatch[1].replace(/\D/g, '')
+            segurado.cep = `${rawCep.slice(0, 5)}-${rawCep.slice(5)}`
+            continue
+          }
+
+          // Cidade/UF com possível bairro antes (ex: "OURO PRETO-OLINDA/PE" ou "RECIFE/PE")
+          const cidUfMatch = /([A-Za-zÀ-ÿ\s.-]+?)\/([A-Z]{2})\b/.exec(parte)
+          if (cidUfMatch) {
+            const miolo = cidUfMatch[1].trim()
+            segurado.estado = cidUfMatch[2].trim().toUpperCase()
+
+            // Se o miolo contém hífen intermediário tipo "OURO PRETO-OLINDA"
+            if (miolo.includes('-')) {
+              const subPedacos = miolo.split('-').map((sp) => sp.trim())
+              if (!segurado.bairro && subPedacos.length >= 2) {
+                segurado.bairro = subPedacos[0]
+                segurado.cidade = subPedacos.slice(1).join(' ')
+              } else {
+                segurado.cidade = subPedacos[subPedacos.length - 1]
+              }
+            } else {
+              segurado.cidade = miolo
+            }
+            continue
+          }
+
+          // Se for bairro isolado
+          if (!segurado.bairro && !isTextoCabecalhoOuInvalido(parte)) {
+            segurado.bairro = parte
+          }
+        }
+      } else {
+        segurado.rua = rawEnd
+      }
+    }
+  }
+
+  // Fallback nome segurado na saudação inicial da Allianz: "Olá **EDNALDO JOSE DOS SANTOS**," ou "Olá EDNALDO JOSE DOS SANTOS,"
+  if (!segurado.nome) {
+    const saudacaoMatch = /Ol[áa]\s+\*{0,2}([A-ZÀ-ÿ\s.-]{4,80})\*{0,2}\s*,?\s*Agradecemos/i.exec(
+      text,
+    )
+    if (saudacaoMatch) {
+      const candNome = sanitizarTextoExtraido(saudacaoMatch[1])
+      if (candNome && isNomePessoaValido(candNome)) {
+        segurado.nome = candNome
+      }
+    }
+  }
+
+  // 5. Bloco INFORMAÇÕES DO CONDUTOR PRINCIPAL
+  // Ex: "### INFORMAÇÕES DO CONDUTOR PRINCIPAL **Nome:** EDNALDO IGOR ROMAO DOS SANTOS **CPF:** 119.127.044-04 **Idade:** 27 anos **Estado Civil:** Casado[a] ou convive em união estável"
+  const condutorPrincipal: Partial<PropostaCondutorExtraido> = {
+    mesmoQueSegurado: false,
+  }
+
+  const condSecMatch =
+    /(?:#+\s*|\*{0,2})INFORMA[ÇC][ÕO]ES\s+DO\s+CONDUTOR(?:\s+PRINCIPAL)?\*{0,2}[\s\S]*?(?=(?:(?:#+\s*|\*{0,2})INFORMA[ÇC][ÕO]ES\s+DO\s+SEGURO|(?:#+\s*|\*{0,2})INFORMA[ÇC][ÕO]ES\s+DE\s+PAGAMENTO|$))/i.exec(
+      text,
+    )
+  const condSec = condSecMatch ? condSecMatch[0] : ''
+
+  if (condSec) {
+    // Nome do condutor
+    const condNomeMatch =
+      /\*{0,2}Nome:\*{0,2}\s*([^\n|*]+?)(?=(?:\s+\*{0,2}CPF|\s+\*{0,2}Idade|\s+\*{0,2}Estado|\s*\||\n|$))/i.exec(
+        condSec,
+      )
+    if (condNomeMatch) {
+      const candCondNome = sanitizarTextoExtraido(condNomeMatch[1])
+      if (
+        candCondNome &&
+        isNomePessoaValido(candCondNome) &&
+        candCondNome.toUpperCase() !== 'PRINCIPAL' &&
+        candCondNome.toUpperCase() !== 'CONDUTOR PRINCIPAL'
+      ) {
+        condutorPrincipal.nome = candCondNome
+      }
+    }
+
+    // CPF do condutor
+    const condCpfMatch =
+      /\*{0,2}CPF:\*{0,2}\s*([0-9]{3}\.?[0-9]{3}\.?[0-9]{3}-?[0-9]{2}|[0-9]{11})\b/i.exec(condSec)
+    if (condCpfMatch) {
+      const cleanCpf = condCpfMatch[1].replace(/\D/g, '')
+      if (cleanCpf.length === 11 && isValidCpf(cleanCpf)) {
+        condutorPrincipal.cpf = cleanCpf
+      }
+    }
+
+    // Data de nascimento não vem no PDF da Allianz (apenas Idade: 27 anos)
+    // Deixar undefined para gerar campo faltante birth_date com motivo
+  }
+
+  // Avaliar se condutor é a mesma pessoa que o segurado
+  if (condutorPrincipal.nome && segurado.nome) {
+    const nomeC = condutorPrincipal.nome.trim().toUpperCase()
+    const nomeS = segurado.nome.trim().toUpperCase()
+    const cpfC = condutorPrincipal.cpf
+    const cpfS = segurado.cpfCnpj
+    if (cpfC && cpfS && cpfC !== cpfS) {
+      condutorPrincipal.mesmoQueSegurado = false
+    } else if (nomeC === nomeS) {
+      condutorPrincipal.mesmoQueSegurado = true
+    } else {
+      condutorPrincipal.mesmoQueSegurado = false
+    }
+  } else if (!condutorPrincipal.nome && segurado.nome) {
+    condutorPrincipal.nome = segurado.nome
+    condutorPrincipal.cpf = segurado.cpfCnpj
+    condutorPrincipal.mesmoQueSegurado = true
+  }
+
+  // 6. Bloco VEÍCULO
+  // No layout Allianz Auto/Moto:
+  // |Veículo: YAMAHA XTZ 150 CROSSER S|Produto: Moto 1212|
+  // |Cód. FIPE: 827108-9|Versão: 000161/161.00|
+  // |Placa: SLE3E09|Condições Gerais: 10/2026|
+  // |Chassi: 9C6DG25D0R0022075|Classe Bônus: 03|
+  // **Ano/Modelo:** 2024
+  const veiculo: Partial<PropostaVeiculoExtraido> = {}
+
+  // Marca/Modelo
+  const veicModeloMatch =
+    /\*{0,2}Ve[íi]culo:\*{0,2}\s*([^\n|*]+?)(?=(?:\s*\||\s+\*{0,2}Produto:|\n|$))/i.exec(text)
+  if (veicModeloMatch) {
+    const candMod = sanitizarTextoExtraido(veicModeloMatch[1])
+    if (candMod && !isTextoCabecalhoOuInvalido(candMod)) {
+      veiculo.marcaModelo = candMod
+    }
+  }
+
+  // Placa
+  const placaMatch = /\*{0,2}Placa:\*{0,2}\s*([A-Z]{3}[0-9][A-Z0-9][0-9]{2})\b/i.exec(text)
+  if (placaMatch) {
+    veiculo.placa = placaMatch[1].toUpperCase()
+  }
+
+  // Chassi
+  const chassiMatch = /\*{0,2}Chassi:\*{0,2}\s*([A-HJ-NPR-Z0-9]{17})\b/i.exec(text)
+  if (chassiMatch) {
+    veiculo.chassi = chassiMatch[1].toUpperCase()
+  }
+
+  // FIPE
+  const fipeMatch = /\*{0,2}C[oó]d\.\s*FIPE:\*{0,2}\s*([0-9]{6}-[0-9]|[0-9]{6,8})\b/i.exec(text)
+  if (fipeMatch) {
+    veiculo.codigoFipe = fipeMatch[1].trim()
+  }
+
+  // Ano/Modelo
+  const anoModMatch = /\*{0,2}Ano\/Modelo:\*{0,2}\s*(19\d{2}|20\d{2})\b/i.exec(text)
+  if (anoModMatch) {
+    veiculo.anoModelo = parseInt(anoModMatch[1], 10)
+  }
+
+  // 7. RENOVAÇÃO
+  // |Tipo de Seguro: Renovação de outra seguradora sem sinistro|
+  // |Zero Km: Não|Grupo: 00 Seguradora Anterior: 5886 - PORTO SEGURO|
+  // **Nº. Apólice Anterior:** 12844437 **Cód. CI:** 58825492569657
+  const renovacao: Partial<PropostaRenovacaoExtraida> = {}
+  const tLow = text.toLowerCase()
+  if (
+    tLow.includes('renovação') ||
+    tLow.includes('renovacao') ||
+    tLow.includes('seguradora anterior') ||
+    tLow.includes('apólice anterior') ||
+    tLow.includes('apolice anterior')
+  ) {
+    renovacao.isRenovacao = true
+
+    // Seguradora Anterior: "Seguradora Anterior: 5886 - PORTO SEGURO"
+    const segAntMatch =
+      /Seguradora\s+Anterior:\s*(?:[0-9]{1,5}\s*-\s*)?([A-Za-zÀ-ÿ\s.-]+?)(?=(?:\s*\||\s+\*{0,2}[A-Z]|\n|$))/i.exec(
+        text,
+      )
+    if (segAntMatch) {
+      const candSeg = sanitizarTextoExtraido(segAntMatch[1])
+        .replace(/^[:\s-]+/, '')
+        .trim()
+      // Se tiver "Fim da vigência" colado, remove
+      const corteFim = candSeg.split(/\bfim\s+da\s+vig[êe]ncia\b/i)[0].trim()
+      if (corteFim && !isTextoCabecalhoOuInvalido(corteFim)) {
+        renovacao.seguradoraAnterior = corteFim
+      }
+    }
+
+    // Apólice Anterior: "**Nº. Apólice Anterior:** 12844437"
+    const apAntMatch = /N[ºo.]?\s*\.?\s*Ap[oó]lice\s+Anterior:\*{0,2}\s*([0-9.\-/]{4,25})\b/i.exec(
+      text,
+    )
+    if (apAntMatch) {
+      renovacao.apoliceAnterior = apAntMatch[1].trim()
+    }
+
+    // Classe de Bônus: "Classe Bônus: 03"
+    const bonusMatch = /Classe\s+B[oó]nus:\s*([0-9]{1,2})\b/i.exec(text)
+    if (bonusMatch) {
+      renovacao.classeBonus = bonusMatch[1].trim()
+    }
+  }
+
+  // 8. PRÊMIOS E VALORES
+  // OFERTA ESCOLHIDA:
+  // |Preço Líquido|||R$ 641,94|
+  // |Preço Total (IOF + Juros inclusos)|||R$ 689,31|
+  // E no pagamento:
+  // "**IOF:** R$ 47,37"
+  let premioLiquido: number | undefined
+  let iof: number | undefined
+  let premioTotal: number | undefined
+
+  // Tabela OFERTA ESCOLHIDA ou Seção de Pagamento
+  const preLiqMatch =
+    /Pre[çc]o\s+L[íi]quido[|*\s:]+R?\$?\s*([0-9]{1,3}(?:\.[0-9]{3})*,[0-9]{2})\b/i.exec(text)
+  if (preLiqMatch) {
+    premioLiquido = parseMoeda(preLiqMatch[1])
+  }
+
+  const preTotMatch =
+    /Pre[çc]o\s+Total\s*(?:\([^)]*\))?[|*\s:]+R?\$?\s*([0-9]{1,3}(?:\.[0-9]{3})*,[0-9]{2})\b/i.exec(
+      text,
+    )
+  if (preTotMatch) {
+    premioTotal = parseMoeda(preTotMatch[1])
+  }
+
+  const iofMatch = /\*{0,2}IOF:\*{0,2}\s*R?\$?\s*([0-9]{1,3}(?:\.[0-9]{3})*,[0-9]{2})\b/i.exec(text)
+  if (iofMatch) {
+    iof = parseMoeda(iofMatch[1])
+  } else if (premioTotal && premioLiquido) {
+    iof = Math.max(0, Math.round((premioTotal - premioLiquido) * 100) / 100)
+  }
+
+  // 9. PAGAMENTO E PARCELAMENTO
+  // Ex: "### Boleto Bancário" + "**em 1 parcela**" + "1 R$ 689,31"
+  let formaPagamento = 'Boleto'
+  let quantidadeParcelas = 1
+  let parcelamentoDescricao = ''
+
+  if (/cart[ãa]o\s+de\s+cr[ée]dito/i.test(text)) {
+    formaPagamento = 'Crédito'
+  } else if (/d[ée]bito\s+em\s+conta/i.test(text)) {
+    formaPagamento = 'Débito em conta'
+  } else if (/boleto/i.test(text)) {
+    formaPagamento = 'Boleto'
+  }
+
+  const parcEmMatch = /em\s+(\d{1,2})\s*parcelas?\b/i.exec(text)
+  if (parcEmMatch) {
+    quantidadeParcelas = parseInt(parcEmMatch[1], 10)
+  }
+
+  // Descrição do parcelamento: "1x de R$ 689,31"
+  // Procura valor da parcela sob ### Parcelas Valor da Parcela ou <u>1 R$ 689,31</u>
+  const parcValorMatch =
+    /(?:<u>\s*|\b)1\s+R\$\s*([0-9]{1,3}(?:\.[0-9]{3})*,[0-9]{2})/i.exec(text) ||
+    /Valor\s+da\s+Parcela[*\s|:#]+(?:1\s+)?R?\$?\s*([0-9]{1,3}(?:\.[0-9]{3})*,[0-9]{2})/i.exec(text)
+  if (parcValorMatch) {
+    const vlrParc = parcValorMatch[1].trim()
+    parcelamentoDescricao = `${quantidadeParcelas}x de R$ ${vlrParc}`
+  } else if (premioTotal && quantidadeParcelas === 1) {
+    const formatted = formatMoedaSimples(premioTotal)
+    parcelamentoDescricao = `1x de R$ ${formatted}`
+  }
+
+  return {
+    numeroProposta,
+    numeroApolice: '',
+    tipoSeguro,
+    vigenciaInicio,
+    vigenciaFim,
+    premioLiquido,
+    iof,
+    premioTotal,
+    formaPagamento,
+    quantidadeParcelas,
+    parcelamentoDescricao,
+    segurado,
+    condutorPrincipal,
+    veiculo,
+    renovacao,
+  }
+}
+
+function formatMoedaSimples(v: number): string {
+  return v.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })
+}
 
 export function extrairAllianzCondominioCliente(text: string): {
   numeroProposta?: string
