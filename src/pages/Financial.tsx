@@ -2642,8 +2642,21 @@ export default function Financial() {
       </Card>
 
       <Card className="shadow-sm overflow-hidden border">
-        <CardHeader>
-          <CardTitle className="text-base font-bold">Repasses de Parceiros</CardTitle>
+        <CardHeader className="flex flex-row items-center justify-between pb-3">
+          <div>
+            <CardTitle className="text-base font-bold">Repasses de Parceiros</CardTitle>
+            <p className="text-xs text-slate-500 mt-0.5">
+              Acompanhe as comissões devidas aos parceiros e gerencie repasses e fechamentos.
+            </p>
+          </div>
+          <Button
+            variant="outline"
+            size="sm"
+            className="text-xs text-slate-700 hover:text-blue-600 h-8"
+            onClick={() => navigate('/relatorio-comissoes')}
+          >
+            Abrir Relatório & Histórico de Fechamentos
+          </Button>
         </CardHeader>
         <div className="overflow-x-auto">
           <table className="w-full text-left text-sm text-slate-700">

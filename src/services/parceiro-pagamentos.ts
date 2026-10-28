@@ -79,6 +79,107 @@ export const deleteParceiroDebito = async (id: string): Promise<boolean> => {
   return pb.collection('parceiro_debitos').delete(id)
 }
 
+export interface EstornoParceiroResult {
+  success: boolean
+  pagamento_id: string
+  reverted_policies_count: number
+  reverted_debitos_count: number
+  message?: string
+  error?: string
+}
+
+export const estornarParceiroPagamento = async (
+  pagamentoId: string,
+): Promise<EstornoParceiroResult> => {
+  if (!pagamentoId) {
+    throw new Error('ID do pagamento não informado para estorno.')
+  }
+
+  try {
+    const res = await pb.send<EstornoParceiroResult>('/backend/v1/parceiro-estorno', {
+      method: 'POST',
+      body: { pagamento_id: pagamentoId },
+    })
+    return res
+  } catch (err: any) {
+    const serverMessage =
+      err?.response?.message ||
+      err?.response?.error ||
+      err?.data?.message ||
+      err?.data?.error ||
+      err?.message ||
+      'Falha no endpoint de estorno do servidor.'
+    console.warn(
+      '[estornarParceiroPagamento] Endpoint falhou, tentando fallback client seguro:',
+      serverMessage,
+      err,
+    )
+
+    // FALLBACK CLIENT SEGURO: caso o endpoint customizado falhe
+    try {
+      const pagRecord = await pb
+        .collection('parceiro_pagamentos')
+        .getOne<ParceiroPagamento>(pagamentoId)
+
+      let policyIds: string[] = []
+      try {
+        if (typeof pagRecord.policies_ids === 'string') {
+          policyIds = JSON.parse(pagRecord.policies_ids)
+        } else if (Array.isArray(pagRecord.policies_ids)) {
+          policyIds = pagRecord.policies_ids
+        }
+      } catch {
+        policyIds = []
+      }
+
+      // Reverter apólices
+      let revertedPoliciesCount = 0
+      for (const pId of policyIds) {
+        try {
+          await pb.collection('policies').update(pId, {
+            pago_parceiro: false,
+            data_pagamento_parceiro: '',
+          })
+          revertedPoliciesCount++
+        } catch (polErr) {
+          console.warn(`[estornarParceiroPagamento] Erro ao reverter apólice ${pId}:`, polErr)
+        }
+      }
+
+      // Reverter débitos vinculados
+      let revertedDebitosCount = 0
+      try {
+        const debitos = await pb.collection('parceiro_debitos').getFullList({
+          filter: `pagamento = "${pagamentoId}"`,
+        })
+        for (const deb of debitos) {
+          await pb.collection('parceiro_debitos').update(deb.id, {
+            status: 'Pendente',
+            pagamento: null,
+          })
+          revertedDebitosCount++
+        }
+      } catch (debErr) {
+        console.warn('[estornarParceiroPagamento] Erro ao reverter débitos vinculados:', debErr)
+      }
+
+      // Deletar registro de pagamento
+      await pb.collection('parceiro_pagamentos').delete(pagamentoId)
+
+      return {
+        success: true,
+        pagamento_id: pagamentoId,
+        reverted_policies_count: revertedPoliciesCount,
+        reverted_debitos_count: revertedDebitosCount,
+        message: 'Repasse estornado com sucesso (fallback).',
+      }
+    } catch (fallbackErr: any) {
+      const msg = fallbackErr?.message || serverMessage || 'Erro ao estornar repasse de parceiro.'
+      throw new Error(msg)
+    }
+  }
+}
+
 export interface FechamentoParceiroResult {
   success: boolean
   pagamento_id: string

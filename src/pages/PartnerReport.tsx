@@ -14,12 +14,14 @@ import {
   DollarSign,
   AlertCircle,
   CreditCard,
+  RotateCcw,
 } from 'lucide-react'
 import { getPolicies, updatePolicyFinancial } from '@/services/policies'
 import { getParceiros } from '@/services/parceiros'
 import { findClientByDocument } from '@/services/clients'
 import {
   getParceiroPagamentos,
+  estornarParceiroPagamento,
   getParceiroDebitosPendentes,
   getDebitosPendentesPorParceiros,
   createParceiroDebito,
@@ -65,6 +67,7 @@ import { maskDocument, formatClientDocument } from '@/lib/document-validators'
 import { formatDateDisplay, todayLocalDate, extractDateOnly } from '@/lib/utils'
 import { useToast } from '@/hooks/use-toast'
 import { useAuth } from '@/hooks/use-auth'
+import { useCoalescedCallback } from '@/hooks/use-coalesced-callback'
 import { getErrorMessage } from '@/lib/pocketbase/errors'
 
 const fmt = (v: number) =>
@@ -132,6 +135,10 @@ export default function PartnerReport() {
   const [observacaoPagamento, setObservacaoPagamento] = useState<string>('')
   const [isSavingPagamento, setIsSavingPagamento] = useState(false)
 
+  // Estado para Estorno de Repasse
+  const [estornoTarget, setEstornoTarget] = useState<ParceiroPagamento | null>(null)
+  const [isEstornando, setIsEstornando] = useState(false)
+
   // Seleção de apólices com checkbox (para atalho de fechamento pontual / seleção)
   const [selectedPolicyIds, setSelectedPolicyIds] = useState<string[]>([])
 
@@ -152,6 +159,26 @@ export default function PartnerReport() {
       /* ignored */
     }
   }, [])
+
+  // Coalescência de recarregamento para evitar rajadas e re-renderizações múltiplas
+  const { schedule: scheduleCoalescedReload } = useCoalescedCallback(async () => {
+    await loadData()
+    if (selectedPartner && selectedPartner !== 'all') {
+      const [hist, debtList] = await Promise.all([
+        getParceiroPagamentos(selectedPartner),
+        getParceiroDebitosPendentes(selectedPartner),
+      ])
+      setPagamentosHistorico(hist)
+      setDebitos(
+        debtList.map((d) => ({
+          id: d.id,
+          descricao: d.descricao,
+          valor: d.valor,
+          data: d.data,
+        })),
+      )
+    }
+  }, 250)
 
   useEffect(() => {
     loadData()
@@ -188,7 +215,14 @@ export default function PartnerReport() {
         })
         .catch(() => {})
     } else {
-      setPagamentosHistorico([])
+      // Quando estiver em "Todos os parceiros", carregar todos os pagamentos para consulta no histórico geral
+      getParceiroPagamentos()
+        .then((pags) => {
+          setPagamentosHistorico(pags)
+        })
+        .catch(() => {
+          setPagamentosHistorico([])
+        })
     }
   }, [selectedPartner])
 
@@ -887,6 +921,35 @@ export default function PartnerReport() {
     }
   }
 
+  const handleConfirmEstorno = async () => {
+    if (!estornoTarget) return
+    setIsEstornando(true)
+    try {
+      const res = await estornarParceiroPagamento(estornoTarget.id)
+      if (!res.success) {
+        throw new Error(res.error || 'Falha ao processar estorno.')
+      }
+
+      toast({
+        title: 'Repasse estornado com sucesso!',
+        description: `${res.reverted_policies_count} apólice(s) voltaram ao status Pendente.`,
+      })
+
+      setEstornoTarget(null)
+
+      // Atualiza a tela via callback coalescido uma única vez
+      scheduleCoalescedReload()
+    } catch (err: any) {
+      toast({
+        title: 'Erro ao estornar repasse',
+        description: getErrorMessage(err),
+        variant: 'destructive',
+      })
+    } finally {
+      setIsEstornando(false)
+    }
+  }
+
   const showNotFoundMessage = documentNotFound
   const showNoCommissionsMessage = !!foundClient && reportEntries.length === 0
 
@@ -915,17 +978,15 @@ export default function PartnerReport() {
             </p>
           </div>
         </div>
-        {selectedPartner !== 'all' && (
-          <Button
-            variant="outline"
-            size="sm"
-            className="text-slate-700 hover:text-blue-600"
-            onClick={() => setIsHistoricoOpen(true)}
-          >
-            <History className="w-4 h-4 mr-1.5" />
-            Histórico de Pagamentos ({pagamentosHistorico.length})
-          </Button>
-        )}
+        <Button
+          variant="outline"
+          size="sm"
+          className="text-slate-700 hover:text-blue-600"
+          onClick={() => setIsHistoricoOpen(true)}
+        >
+          <History className="w-4 h-4 mr-1.5" />
+          Histórico de Pagamentos ({pagamentosHistorico.length})
+        </Button>
       </div>
 
       {/* Card de Filtros e Ajustes */}
@@ -1713,17 +1774,22 @@ export default function PartnerReport() {
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2">
               <History className="w-5 h-5 text-blue-600" />
-              Histórico de Pagamentos —{' '}
-              {parceiros.find((p) => p.id === selectedPartner)?.nome || 'Parceiro'}
+              Histórico de Pagamentos
+              {selectedPartner !== 'all' && (
+                <span>
+                  {' '}
+                  — {parceiros.find((p) => p.id === selectedPartner)?.nome || 'Parceiro'}
+                </span>
+              )}
             </DialogTitle>
             <DialogDescription>
-              Registros consolidados de fechamentos e repasses realizados anteriormente.
+              Registro consolidado dos fechamentos financeiros e repasses realizados aos parceiros.
             </DialogDescription>
           </DialogHeader>
 
           {pagamentosHistorico.length === 0 ? (
             <div className="py-8 text-center text-slate-500 text-xs">
-              Nenhum histórico de pagamento registrado ainda para este parceiro.
+              Nenhum histórico de pagamento registrado ainda.
             </div>
           ) : (
             <div className="space-y-3 py-2">
@@ -1744,15 +1810,32 @@ export default function PartnerReport() {
                         <span className="font-bold text-slate-900 text-sm">
                           Pago em {formatDateDisplay(pag.data_pagamento)}
                         </span>
+                        {selectedPartner === 'all' && (
+                          <span className="text-blue-700 font-medium text-xs block">
+                            Parceiro:{' '}
+                            {parceiros.find((p) => p.id === pag.parceiro)?.nome || 'Parceiro'}
+                          </span>
+                        )}
                         {pag.usuario_nome && (
                           <span className="text-slate-600 text-[11px] block">
                             Registrado por: {pag.usuario_nome}
                           </span>
                         )}
                       </div>
-                      <Badge className="bg-emerald-600 text-white text-xs font-bold px-2.5 py-1">
-                        Líquido: R$ {fmt(pag.valor_liquido)}
-                      </Badge>
+                      <div className="flex items-center gap-2">
+                        <Badge className="bg-emerald-600 text-white text-xs font-bold px-2.5 py-1">
+                          Líquido: R$ {fmt(pag.valor_liquido)}
+                        </Badge>
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          className="h-7 text-xs border-rose-300 text-rose-700 hover:bg-rose-50 hover:text-rose-800"
+                          onClick={() => setEstornoTarget(pag)}
+                          title="Estornar este repasse e devolver apólices para pendentes"
+                        >
+                          <RotateCcw className="w-3.5 h-3.5 mr-1" /> Estornar
+                        </Button>
+                      </div>
                     </div>
 
                     <div className="grid grid-cols-3 gap-2 text-slate-700 pt-1">
@@ -1804,6 +1887,82 @@ export default function PartnerReport() {
           </DialogFooter>
         </DialogContent>
       </Dialog>
+
+      {/* DIÁLOGO DE CONFIRMAÇÃO: Estorno de Repasse */}
+      <AlertDialog
+        open={!!estornoTarget}
+        onOpenChange={(open) => !open && !isEstornando && setEstornoTarget(null)}
+      >
+        <AlertDialogContent className="sm:max-w-md">
+          <AlertDialogHeader>
+            <AlertDialogTitle className="flex items-center gap-2 text-rose-700">
+              <RotateCcw className="w-5 h-5 text-rose-600" />
+              Confirmar Estorno de Repasse
+            </AlertDialogTitle>
+            <AlertDialogDescription className="text-slate-600 text-xs leading-relaxed">
+              Esta ação desfará o fechamento de repasse selecionado e devolverá as apólices
+              vinculadas ao status de <strong>Pendente</strong>.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+
+          {estornoTarget && (
+            <div className="bg-slate-50 border rounded-lg p-3 space-y-2 text-xs">
+              <div className="flex justify-between">
+                <span className="text-slate-500">Parceiro:</span>
+                <span className="font-semibold text-slate-800">
+                  {parceiros.find((p) => p.id === estornoTarget.parceiro)?.nome ||
+                    parceiros.find((p) => p.id === selectedPartner)?.nome ||
+                    'Parceiro'}
+                </span>
+              </div>
+              <div className="flex justify-between">
+                <span className="text-slate-500">Data do Pagamento:</span>
+                <span className="font-semibold text-slate-800">
+                  {formatDateDisplay(estornoTarget.data_pagamento)}
+                </span>
+              </div>
+              <div className="flex justify-between">
+                <span className="text-slate-500">Total Comissões Repasse:</span>
+                <span className="font-semibold text-slate-800">
+                  R$ {fmt(estornoTarget.total_comissoes)}
+                </span>
+              </div>
+              {estornoTarget.total_debitos > 0 && (
+                <div className="flex justify-between text-amber-700">
+                  <span>Débitos Abatidos (voltarão a Pendente):</span>
+                  <span className="font-semibold">- R$ {fmt(estornoTarget.total_debitos)}</span>
+                </div>
+              )}
+              {estornoTarget.taxa_pix > 0 && (
+                <div className="flex justify-between text-slate-500">
+                  <span>Taxa PIX Registrada:</span>
+                  <span>- R$ {fmt(estornoTarget.taxa_pix)}</span>
+                </div>
+              )}
+              <div className="flex justify-between border-t pt-2 text-sm font-bold text-slate-900">
+                <span>Valor Líquido Pago:</span>
+                <span className="text-emerald-700">R$ {fmt(estornoTarget.valor_liquido)}</span>
+              </div>
+            </div>
+          )}
+
+          <p className="text-[11px] text-slate-500 leading-tight">
+            Nota: Os recebimentos de comissão da seguradora não serão alterados. Apenas o repasse ao
+            parceiro será desfeito.
+          </p>
+
+          <AlertDialogFooter>
+            <AlertDialogCancel disabled={isEstornando}>Cancelar</AlertDialogCancel>
+            <AlertDialogAction
+              className="bg-rose-600 hover:bg-rose-700 text-white"
+              onClick={handleConfirmEstorno}
+              disabled={isEstornando}
+            >
+              {isEstornando ? 'Estornando...' : 'Confirmar Estorno'}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   )
 }

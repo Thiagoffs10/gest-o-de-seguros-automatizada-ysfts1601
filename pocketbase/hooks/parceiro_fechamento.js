@@ -337,3 +337,107 @@ routerAdd(
   },
   $apis.requireAuth(),
 )
+
+routerAdd(
+  'POST',
+  '/backend/v1/parceiro-estorno',
+  (e) => {
+    var auth = e.auth
+    if (!auth) return e.unauthorizedError('Autenticação necessária.')
+
+    var role = auth.getString('role')
+    if (role !== 'Admin' && role !== 'Administrador' && role !== 'Gerente') {
+      return e.forbiddenError(
+        'Apenas administradores e gerentes podem realizar estorno de repasses.',
+      )
+    }
+
+    var body = e.requestInfo().body || {}
+    var pagamentoId = body.pagamento_id || body.id
+    if (!pagamentoId) {
+      return e.badRequestError('ID do pagamento não informado.')
+    }
+
+    var result = null
+
+    try {
+      $app.runInTransaction((txApp) => {
+        var pagRecord = null
+        try {
+          pagRecord = txApp.findRecordById('parceiro_pagamentos', pagamentoId)
+        } catch (_) {
+          throw new Error('Registro de pagamento não encontrado ou já estornado.')
+        }
+
+        // 1. Extrair IDs das apólices
+        var rawPolicies = pagRecord.getString('policies_ids') || '[]'
+        var policyIds = []
+        try {
+          policyIds = JSON.parse(rawPolicies)
+        } catch (_) {
+          policyIds = []
+        }
+        if (!Array.isArray(policyIds)) {
+          policyIds = []
+        }
+
+        // 2. Atualizar apólices vinculadas: pago_parceiro = false, data_pagamento_parceiro = ''
+        // Comissões da seguradora (comissao_recebimentos) NUNCA são tocadas
+        var revertedPoliciesCount = 0
+        for (var pI = 0; pI < policyIds.length; pI++) {
+          var pId = policyIds[pI]
+          try {
+            var pol = txApp.findRecordById('policies', pId)
+            pol.set('pago_parceiro', false)
+            pol.set('data_pagamento_parceiro', '')
+            txApp.save(pol)
+            revertedPoliciesCount++
+          } catch (_) {
+            // apólice pode ter sido removida ou arquivada
+          }
+        }
+
+        // 3. Desvincular e reverter débitos que apontavam para este pagamento
+        var safePagId = String(pagamentoId).replace(/["\\]/g, '')
+        var debitos = txApp.findRecordsByFilter(
+          'parceiro_debitos',
+          'pagamento = "' + safePagId + '"',
+          '-created',
+          500,
+          0,
+        )
+
+        var revertedDebitosCount = 0
+        for (var dI = 0; dI < debitos.length; dI++) {
+          var deb = debitos[dI]
+          deb.set('status', 'Pendente')
+          deb.set('pagamento', '')
+          txApp.save(deb)
+          revertedDebitosCount++
+        }
+
+        // 4. Remover o registro de parceiro_pagamentos
+        txApp.delete(pagRecord)
+
+        result = {
+          success: true,
+          pagamento_id: pagamentoId,
+          reverted_policies_count: revertedPoliciesCount,
+          reverted_debitos_count: revertedDebitosCount,
+          message: 'Repasse estornado com sucesso.',
+        }
+      })
+    } catch (err) {
+      $app.logger().error('Erro no estorno de repasse de parceiro', 'error', String(err))
+      var errMsg = String(err.message || err)
+      return e.json(400, {
+        success: false,
+        message: errMsg,
+        error: errMsg,
+      })
+    }
+
+    return e.json(200, result)
+  },
+  $apis.requireAuth(),
+)
