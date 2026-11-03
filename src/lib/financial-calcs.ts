@@ -488,14 +488,15 @@ export function computePendenciasComissao60(
   for (const r of recebimentos) {
     const vBruto = Number(r.valor_bruto) || 0
     if (r.policy) {
-      recGrossByPolicy.set(r.policy, (recGrossByPolicy.get(r.policy) || 0) + vBruto)
-      if (r.data_recebimento) {
+      // Estornos (valor negativo) NÃO renovam o prazo — só baixas reais
+      if (vBruto > 0 && r.data_recebimento) {
         const dPart = extractDatePart(r.data_recebimento)
         const curr = lastReceiptByPolicy.get(r.policy)
         if (dPart && (!curr || dPart > curr)) {
           lastReceiptByPolicy.set(r.policy, dPart)
         }
       }
+      recGrossByPolicy.set(r.policy, (recGrossByPolicy.get(r.policy) || 0) + vBruto)
     }
     if (r.comissao_prevista) {
       recGrossByPrev.set(
