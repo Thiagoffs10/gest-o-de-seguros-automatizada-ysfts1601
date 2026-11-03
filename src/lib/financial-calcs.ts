@@ -413,13 +413,15 @@ export function computeQuickPayLiquidacao(
 export interface PendenciaComissao60Item {
   policy: Policy
   dataReferencia: string // YYYY-MM-DD
-  origemReferencia: 'competencia' | 'start_date' | 'created'
+  origemReferencia: 'competencia' | 'start_date' | 'created' | 'ultimo_recebimento'
   diasParados: number
   comissaoPrevista: number
   valorRecebidoBruto: number
   saldoPendente: number
   competenciaSugerida?: string
   comissaoPrevistaId?: string
+  /** Data do recebimento mais recente da apólice (renova o prazo de 60 dias) */
+  ultimoRecebimento?: string
 }
 
 export interface PendenciasComissao60Result {
@@ -463,10 +465,11 @@ export function calculateElapsedDays(dataReferencia: string, todayStr?: string):
  * Regras:
  * 1. Apólice não cancelada (status !== 'Cancelada').
  * 2. Saldo pendente > 0.009 e não quitada (isPolicyCommissionSettled == false).
- * 3. Data de referência:
- *    - Se tiver competência MM/AAAA mais antiga pendente em `comissoesPrevistas` -> 1º dia do mês (YYYY-MM-01).
- *    - Senão -> data de início de vigência da apólice (start_date).
- *    - Senão -> data de criação do registro (created).
+ * 3. Data de referência (RENOVAÇÃO POR RECEBIMENTO):
+ *    - Se a apólice tem algum recebimento registrado, a contagem parte da data do
+ *      recebimento MAIS RECENTE (cada baixa renova o prazo em 60 dias a partir daquela data).
+ *    - Se nunca houve baixa: competência MM/AAAA mais antiga pendente em `comissoesPrevistas`
+ *      -> 1º dia do mês (YYYY-MM-01); senão start_date; senão created.
  * 4. Dias corridos > 60 (exatamente 60 NÃO entra; 61 entra).
  * 5. Ordenado do mais antigo (maior diasParados) para o mais novo.
  */
@@ -479,11 +482,20 @@ export function computePendenciasComissao60(
   // Mapa de recebimentos brutos por apólice e por previsão
   const recGrossByPolicy = new Map<string, number>()
   const recGrossByPrev = new Map<string, number>()
+  // Data do recebimento MAIS RECENTE por apólice (renova o prazo de 60 dias)
+  const lastReceiptByPolicy = new Map<string, string>()
 
   for (const r of recebimentos) {
     const vBruto = Number(r.valor_bruto) || 0
     if (r.policy) {
       recGrossByPolicy.set(r.policy, (recGrossByPolicy.get(r.policy) || 0) + vBruto)
+      if (r.data_recebimento) {
+        const dPart = extractDatePart(r.data_recebimento)
+        const curr = lastReceiptByPolicy.get(r.policy)
+        if (dPart && (!curr || dPart > curr)) {
+          lastReceiptByPolicy.set(r.policy, dPart)
+        }
+      }
     }
     if (r.comissao_prevista) {
       recGrossByPrev.set(
@@ -612,13 +624,19 @@ export function computePendenciasComissao60(
     if (totalSaldo <= 0.009) continue
 
     // Determinar data de referência:
+    // 0. Recebimento MAIS RECENTE da apólice — cada baixa renova o prazo de 60 dias
     // 1. Competência (1º dia do mês YYYY-MM-01)
     // 2. start_date
     // 3. created
     let dataReferencia = ''
-    let origemReferencia: 'competencia' | 'start_date' | 'created' = 'created'
+    let origemReferencia: 'competencia' | 'start_date' | 'created' | 'ultimo_recebimento' =
+      'created'
+    const ultimoRec = lastReceiptByPolicy.get(p.id)
 
-    if (oldestCompFirstDay) {
+    if (ultimoRec) {
+      dataReferencia = ultimoRec
+      origemReferencia = 'ultimo_recebimento'
+    } else if (oldestCompFirstDay) {
       dataReferencia = oldestCompFirstDay
       origemReferencia = 'competencia'
     } else if (p.start_date) {
@@ -646,6 +664,7 @@ export function computePendenciasComissao60(
         saldoPendente: totalSaldo,
         competenciaSugerida: oldestCompLabel,
         comissaoPrevistaId: oldestCompPrevId,
+        ultimoRecebimento: ultimoRec,
       })
     }
   }

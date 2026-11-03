@@ -20,6 +20,7 @@ import {
 } from '@/services/importacao/sistema-alertas'
 import { getRecebimentosLegados } from '@/services/importacao/recebimentos-legados'
 import { formatCurrency } from '@/lib/utils'
+import { formatBRDate } from '@/lib/date-filter'
 import { useToast } from '@/hooks/use-toast'
 import { PendenciaComissao60Item, PendenciasComissao60Result } from '@/lib/financial-calcs'
 import { Clock, ArrowDownCircle, ChevronDown, ChevronUp } from 'lucide-react'
@@ -193,8 +194,9 @@ export const AlertasCentral: React.FC<AlertasCentralProps> = ({
                 </Badge>
               </div>
               <p className="text-slate-600 dark:text-slate-400 text-[11px] mt-0.5">
-                Valores pendentes com mais de 60 dias corridos desde a competência/início de
-                vigência.
+                Valores pendentes com mais de 60 dias corridos desde o último recebimento (ou desde
+                a competência/início de vigência, quando nunca houve baixa). Cada nova baixa renova
+                o prazo.
               </p>
             </div>
           </div>
@@ -319,7 +321,11 @@ export const AlertasCentral: React.FC<AlertasCentralProps> = ({
                         </td>
                         <td className="p-2.5 font-medium">{segNome}</td>
                         <td className="p-2.5 text-center">
-                          {item.competenciaSugerida ? (
+                          {item.origemReferencia === 'ultimo_recebimento' ? (
+                            <span className="text-[11px] text-slate-600">
+                              Última baixa {formatBRDate(item.dataReferencia)}
+                            </span>
+                          ) : item.competenciaSugerida ? (
                             <Badge
                               variant="outline"
                               className="text-[10px] px-1.5 py-0 border-blue-200 bg-blue-50/60 text-blue-700"

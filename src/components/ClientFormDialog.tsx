@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import {
   Dialog,
   DialogContent,
@@ -109,6 +109,9 @@ export function ClientFormDialog({
     const formatted = maskCnpj(rawValue)
     set('cnpj', formatted)
     const digits = formatted.replace(/\D/g, '')
+    // Validação de duplicidade em tempo real quando o CNPJ completa 14 dígitos
+    clearDupError('cnpj')
+    scheduleDupCheck('cnpj', formatted)
 
     if (digits.length === 14) {
       if (!isValidCnpj(digits)) {
@@ -184,25 +187,90 @@ export function ClientFormDialog({
     return Object.keys(errs).length === 0
   }
 
-  const checkDuplicateDocument = async (): Promise<boolean> => {
+  const dupTimers = useRef<Record<string, ReturnType<typeof setTimeout>>>({})
+
+  const docDigits = (field: 'cpf' | 'cnpj') =>
+    (field === 'cpf' ? form.cpf : form.cnpj).replace(/\D/g, '')
+
+  /**
+   * Verifica se o documento informado já pertence a OUTRO cliente cadastrado.
+   * Edição do próprio cliente (mesmo id) NÃO é duplicidade.
+   * Compara por dígitos, então formatações diferentes do mesmo documento também pegam.
+   */
+  const checkDuplicateDoc = async (field: 'cpf' | 'cnpj'): Promise<boolean> => {
+    const digits = docDigits(field)
+    // CPF = 11 dígitos, CNPJ = 14 — qualquer outro tamanho não é documento completo
+    if (digits.length !== 11 && digits.length !== 14) return true
     try {
-      if (form.tipo_pessoa === 'PF' && form.cpf.trim()) {
-        const existing = await getClients('', `cpf = "${form.cpf}"`)
-        if (existing.length > 0 && existing[0].id !== initialData?.id) {
-          setErrors((prev) => ({ ...prev, cpf: 'Este CPF já está cadastrado' }))
-          return false
-        }
-      } else if (form.tipo_pessoa === 'PJ' && form.cnpj.trim()) {
-        const existing = await getClients('', `cnpj = "${form.cnpj}"`)
-        if (existing.length > 0 && existing[0].id !== initialData?.id) {
-          setErrors((prev) => ({ ...prev, cnpj: 'Este CNPJ já está cadastrado' }))
-          return false
-        }
+      const all = await getClients()
+      const match = all.find((c) => {
+        // Não marcar como duplicado o próprio registro em edição
+        if (initialData?.id && c.id === initialData.id) return false
+        const cpfDigits = (c.cpf || '').replace(/\D/g, '')
+        const cnpjDigits = (c.cnpj || '').replace(/\D/g, '')
+        return cpfDigits === digits || cnpjDigits === digits
+      })
+      if (match) {
+        const label = field === 'cpf' ? 'CPF' : 'CNPJ'
+        const docExistente = match.cpf || match.cnpj || ''
+        const docFormatado =
+          docExistente.replace(/\D/g, '').length === 11
+            ? maskCpf(docExistente)
+            : maskCnpj(docExistente)
+        setErrors((prev) => ({
+          ...prev,
+          [field]: `${label} já cadastrado${
+            match.name ? ` para o cliente ${match.name}` : ''
+          }${docFormatado ? ` (${docFormatado})` : ''} — verifique se não é o mesmo cliente antes de prosseguir`,
+        }))
+        return false
       }
+      // Documento livre: limpa aviso de duplicidade anterior deste campo, se houver
+      setErrors((prev) => {
+        if (prev[field] && prev[field].includes('já cadastrado')) {
+          const next = { ...prev }
+          delete next[field]
+          return next
+        }
+        return prev
+      })
+      return true
     } catch {
-      /* network error — allow submit, backend will enforce uniqueness */
+      /* erro de rede não deve travar o cadastro sozinho */
+      return true
     }
-    return true
+  }
+
+  // Validação em tempo real: dispara após o usuário parar de digitar (600ms)
+  const scheduleDupCheck = (field: 'cpf' | 'cnpj', value: string) => {
+    if (dupTimers.current[field]) clearTimeout(dupTimers.current[field])
+    const digits = value.replace(/\D/g, '')
+    if (digits.length !== 11 && digits.length !== 14) return
+    dupTimers.current[field] = setTimeout(() => {
+      checkDuplicateDoc(field)
+    }, 600)
+  }
+
+  const handleDocBlur = (field: 'cpf' | 'cnpj') => {
+    if (dupTimers.current[field]) clearTimeout(dupTimers.current[field])
+    checkDuplicateDoc(field)
+  }
+
+  // Ao editar o campo, limpa o aviso de duplicidade anterior (será reavaliado)
+  const clearDupError = (field: 'cpf' | 'cnpj') => {
+    setErrors((prev) => {
+      if (prev[field] && prev[field].includes('já cadastrado')) {
+        const next = { ...prev }
+        delete next[field]
+        return next
+      }
+      return prev
+    })
+  }
+
+  const checkDuplicateDocument = async (): Promise<boolean> => {
+    const field: 'cpf' | 'cnpj' = form.tipo_pessoa === 'PF' ? 'cpf' : 'cnpj'
+    return checkDuplicateDoc(field)
   }
 
   const handleCopiarRelatorio = async () => {
@@ -235,7 +303,14 @@ export function ClientFormDialog({
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
     if (!validate()) return
-    if (!(await checkDuplicateDocument())) return
+    if (!(await checkDuplicateDocument())) {
+      toast({
+        title: 'Documento já cadastrado',
+        description: 'Verifique se não é o mesmo cliente antes de prosseguir.',
+        variant: 'destructive',
+      })
+      return
+    }
     setLoading(true)
     const payload = { ...form }
     if (payload.tipo_pessoa === 'PF') {
@@ -312,7 +387,13 @@ export function ClientFormDialog({
                 <Label className="text-xs font-semibold">CPF *</Label>
                 <Input
                   value={form.cpf}
-                  onChange={(e) => set('cpf', maskCpf(e.target.value))}
+                  onChange={(e) => {
+                    const masked = maskCpf(e.target.value)
+                    set('cpf', masked)
+                    clearDupError('cpf')
+                    scheduleDupCheck('cpf', masked)
+                  }}
+                  onBlur={() => handleDocBlur('cpf')}
                   placeholder="000.000.000-00"
                 />
                 {errors.cpf && <p className="text-xs text-red-500 mt-0.5">{errors.cpf}</p>}
@@ -332,6 +413,7 @@ export function ClientFormDialog({
                   <Input
                     value={form.cnpj}
                     onChange={(e) => handleCnpjChange(e.target.value)}
+                    onBlur={() => handleDocBlur('cnpj')}
                     placeholder="00.000.000/0000-00"
                   />
                 </div>
