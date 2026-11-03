@@ -338,7 +338,9 @@ describe('Comissão sem baixa há mais de 60 dias (computePendenciasComissao60)'
     expect(resParcial300.countApolices).toBe(1)
     expect(resParcial300.itens[0].saldoPendente).toBe(600)
     expect(resParcial300.itens[0].competenciaSugerida).toBe('02/2026')
-    expect(resParcial300.itens[0].dataReferencia).toBe('2026-02-01')
+    // Regra do usuário: com recebimento registrado, a referência é a data do recebimento MAIS RECENTE
+    expect(resParcial300.itens[0].dataReferencia).toBe('2026-01-20')
+    expect(resParcial300.itens[0].origemReferencia).toBe('ultimo_recebimento')
 
     // 5.c: Recebimento global adicional de R$ 400 (total recebido R$ 700):
     // prev1 (300) quitada, prev2 (300) quitada, prev3 sobra saldo de R$ 200.
@@ -361,7 +363,9 @@ describe('Comissão sem baixa há mais de 60 dias (computePendenciasComissao60)'
     expect(resParcial700.countApolices).toBe(1)
     expect(resParcial700.itens[0].saldoPendente).toBe(200)
     expect(resParcial700.itens[0].competenciaSugerida).toBe('03/2026')
-    expect(resParcial700.itens[0].dataReferencia).toBe('2026-03-01')
+    // Referência passa a ser a data do recebimento mais recente (2026-02-15), não a competência
+    expect(resParcial700.itens[0].dataReferencia).toBe('2026-02-15')
+    expect(resParcial700.itens[0].origemReferencia).toBe('ultimo_recebimento')
 
     // 5.d: Apólice totalmente coberta por recebimentos globais (mais R$ 200, total R$ 900)
     // SAI completamente do alerta!
@@ -416,6 +420,57 @@ describe('Comissão sem baixa há mais de 60 dias (computePendenciasComissao60)'
     expect(res.itens[1].policy.id).toBe('p-1') // 120 dias
     expect(res.itens[2].policy.id).toBe('p-3') // 78 dias
     expect(res.totalValorPendente).toBe(600)
+  })
+
+  it('Cenário 6: cada nova baixa RENOVA o prazo de 60 dias a partir da data do recebimento (caso Edson)', () => {
+    // Vigência antiga (156 dias) mas com recebimento parcial recente: NÃO alerta
+    const polRenovada: Policy = {
+      id: 'p-edson',
+      policy_code: 600,
+      start_date: '2026-01-01',
+      commission: 537.45,
+      status: 'Ativa',
+    } as any
+    const recEdson: ComissaoRecebimento = {
+      id: 'rec-edson',
+      policy: 'p-edson',
+      valor_bruto: 96.74,
+      valor_liquido: 94.81,
+      data_recebimento: '2026-05-01', // 31 dias antes de 2026-06-01
+    } as any
+    const recAntigo: ComissaoRecebimento = {
+      id: 'rec-edson-antigo',
+      policy: 'p-edson',
+      valor_bruto: 182.81,
+      valor_liquido: 179.15,
+      data_recebimento: '2026-01-11 14:35:29.000Z',
+    } as any
+
+    const resOk = computePendenciasComissao60(
+      [polRenovada],
+      [recAntigo, recEdson],
+      [],
+      todaySimulado,
+    )
+    expect(resOk.countApolices).toBe(0)
+    expect(resOk.totalValorPendente).toBe(0)
+
+    // Recebimento mais recente com 61+ dias: VOLTA a alertar, contando a partir dele
+    const recEdson61: ComissaoRecebimento = {
+      ...recEdson,
+      data_recebimento: '2026-04-01', // 61 dias antes de 2026-06-01
+    } as any
+    const resAlerta = computePendenciasComissao60(
+      [polRenovada],
+      [recAntigo, recEdson61],
+      [],
+      todaySimulado,
+    )
+    expect(resAlerta.countApolices).toBe(1)
+    expect(resAlerta.itens[0].policy.id).toBe('p-edson')
+    expect(resAlerta.itens[0].origemReferencia).toBe('ultimo_recebimento')
+    expect(resAlerta.itens[0].dataReferencia).toBe('2026-04-01')
+    expect(resAlerta.itens[0].diasParados).toBe(61)
   })
 
   it('fallback para created quando start_date e competência estão ausentes', () => {
