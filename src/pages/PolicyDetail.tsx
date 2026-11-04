@@ -1027,7 +1027,7 @@ export default function PolicyDetail() {
             <p className="text-xs text-slate-500">Tipo de Venda</p>
             <p className="font-semibold">{policy.tipo_de_venda || '-'}</p>
           </div>
-          {policy.tipo_de_seguro === 'Auto' && (
+          {(policy.tipo_de_seguro || '').toUpperCase() === 'AUTO' && (
             <>
               <div>
                 <p className="text-xs text-slate-500 flex items-center gap-1">
@@ -1062,6 +1062,26 @@ export default function PolicyDetail() {
                   policy.modelo_veiculo !== veiculoVigente.modelo_veiculo && (
                     <p className="text-[10px] text-slate-400">Orig: {policy.modelo_veiculo}</p>
                   )}
+              </div>
+              <div>
+                <p className="text-xs text-slate-500">Ano do Veículo</p>
+                <p className="font-semibold text-slate-900">
+                  {veiculoVigente.ano_fabricacao || veiculoVigente.ano_modelo
+                    ? [veiculoVigente.ano_fabricacao, veiculoVigente.ano_modelo]
+                        .filter(Boolean)
+                        .join('/')
+                    : '-'}
+                </p>
+                {Boolean(
+                  (policy.ano_fabricacao || policy.ano_modelo) &&
+                  (policy.ano_fabricacao !== veiculoVigente.ano_fabricacao ||
+                    policy.ano_modelo !== veiculoVigente.ano_modelo),
+                ) && (
+                  <p className="text-[10px] text-slate-400">
+                    Orig:{' '}
+                    {[policy.ano_fabricacao, policy.ano_modelo].filter(Boolean).join('/') || ''}
+                  </p>
+                )}
               </div>
             </>
           )}
@@ -1225,7 +1245,7 @@ export default function PolicyDetail() {
         </CardHeader>
         <CardContent className="p-4 sm:p-5 space-y-4">
           {/* Visualização de sequência veicular quando houver histórico */}
-          {policy.tipo_de_seguro === 'Auto' && (
+          {(policy.tipo_de_seguro || '').toUpperCase() === 'AUTO' && (
             <div className="p-3 bg-slate-50 rounded-lg border text-xs">
               <span className="font-semibold text-slate-700 block mb-1.5">
                 Sequência Histórica do Veículo:
@@ -1515,6 +1535,20 @@ export default function PolicyDetail() {
                 <div>
                   <span className="text-slate-400 block text-[11px]">Modelo do Veículo</span>
                   <span>{selectedEndorsementDetail.modelo_veiculo || '-'}</span>
+                </div>
+                <div>
+                  <span className="text-slate-400 block text-[11px]">Ano do Veículo</span>
+                  <span>
+                    {selectedEndorsementDetail.ano_fabricacao ||
+                    selectedEndorsementDetail.ano_modelo
+                      ? [
+                          selectedEndorsementDetail.ano_fabricacao,
+                          selectedEndorsementDetail.ano_modelo,
+                        ]
+                          .filter(Boolean)
+                          .join('/')
+                      : '-'}
+                  </span>
                 </div>
               </div>
 

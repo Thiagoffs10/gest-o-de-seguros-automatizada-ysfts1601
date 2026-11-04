@@ -74,6 +74,8 @@ const DEFAULT_FORM = {
   placa: '',
   chassi: '',
   modelo_veiculo: '',
+  ano_fabricacao: '',
+  ano_modelo: '',
   valor_bruto: 0,
   valor_liquido: 0,
   forma_pagamento: '',
@@ -412,6 +414,8 @@ export function PolicyFormDialog({
         placa: initialData.placa || '',
         chassi: initialData.chassi || '',
         modelo_veiculo: initialData.modelo_veiculo || '',
+        ano_fabricacao: initialData.ano_fabricacao || '',
+        ano_modelo: initialData.ano_modelo || '',
         valor_bruto: vBruto,
         valor_liquido: vLiquido,
         forma_pagamento: initialData.forma_pagamento || '',
@@ -574,6 +578,8 @@ export function PolicyFormDialog({
       placa: toUpperTrim(p.veiculo.placa) || prev.placa,
       chassi: toUpperTrim(p.veiculo.chassi) || prev.chassi,
       modelo_veiculo: toUpperTrim(p.veiculo.marcaModelo) || prev.modelo_veiculo,
+      ano_fabricacao: p.veiculo.anoFabricacao || prev.ano_fabricacao,
+      ano_modelo: p.veiculo.anoModelo || prev.ano_modelo,
       valor_bruto: p.premioTotal || prev.valor_bruto,
       valor_liquido: p.premioLiquido || prev.valor_liquido,
       forma_pagamento: p.formaPagamento || prev.forma_pagamento,
@@ -888,7 +894,7 @@ export function PolicyFormDialog({
             </Select>
           </div>
 
-          {form.tipo_de_seguro === 'Auto' && (
+          {(form.tipo_de_seguro || '').toUpperCase() === 'AUTO' && (
             <div className="grid grid-cols-2 gap-2">
               <div>
                 <Label className="text-xs font-semibold">Placa</Label>
@@ -912,6 +918,30 @@ export function PolicyFormDialog({
                   className="uppercase"
                   value={form.modelo_veiculo}
                   onChange={(e) => set('modelo_veiculo', toUpperPT(e.target.value))}
+                />
+              </div>
+              <div>
+                <Label className="text-xs font-semibold">Ano de Fabricação</Label>
+                <Input
+                  value={form.ano_fabricacao || ''}
+                  onChange={(e) => {
+                    const raw = e.target.value.replace(/\D/g, '').slice(0, 4)
+                    set('ano_fabricacao', raw ? Number(raw) : '')
+                  }}
+                  placeholder="Ex: 2024"
+                  inputMode="numeric"
+                />
+              </div>
+              <div>
+                <Label className="text-xs font-semibold">Ano Modelo</Label>
+                <Input
+                  value={form.ano_modelo || ''}
+                  onChange={(e) => {
+                    const raw = e.target.value.replace(/\D/g, '').slice(0, 4)
+                    set('ano_modelo', raw ? Number(raw) : '')
+                  }}
+                  placeholder="Ex: 2025"
+                  inputMode="numeric"
                 />
               </div>
             </div>

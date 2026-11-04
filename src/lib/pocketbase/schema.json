@@ -1,5 +1,5 @@
 {
-  "generatedAt": "2026-11-03T21:01:11.030Z",
+  "generatedAt": "2026-11-04T19:56:56.753Z",
   "collections": [
     {
       "name": "users",
@@ -507,6 +507,18 @@
         {
           "name": "tipo_de_seguro",
           "type": "text",
+          "required": false,
+          "system": false
+        },
+        {
+          "name": "ano_fabricacao",
+          "type": "number",
+          "required": false,
+          "system": false
+        },
+        {
+          "name": "ano_modelo",
+          "type": "number",
           "required": false,
           "system": false
         }

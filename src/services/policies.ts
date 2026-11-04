@@ -83,6 +83,15 @@ export function preparePolicyPayload(data: Partial<Policy> & Record<string, any>
   if ('modelo_veiculo' in data)
     payload.modelo_veiculo = data.modelo_veiculo ? String(data.modelo_veiculo).trim() : ''
 
+  // Ano fabricação / ano modelo do veículo: inteiros opcionais (1900-2100)
+  const normalizeAnoVeiculo = (raw: any): number | null => {
+    if (raw === null || raw === undefined || raw === '') return null
+    const n = Math.round(Number(raw))
+    return Number.isFinite(n) && n >= 1900 && n <= 2100 ? n : null
+  }
+  if ('ano_fabricacao' in data) payload.ano_fabricacao = normalizeAnoVeiculo(data.ano_fabricacao)
+  if ('ano_modelo' in data) payload.ano_modelo = normalizeAnoVeiculo(data.ano_modelo)
+
   // Relations: PocketBase rejects empty string "" for relation fields
   if ('policy_number' in data) {
     payload.policy_number = data.policy_number ? String(data.policy_number).trim() : ''
@@ -597,6 +606,8 @@ export function prepareRenewalData(policy: Policy, endorsements?: Endorsement[])
   data.placa = veiculo.placa || ''
   data.chassi = veiculo.chassi || ''
   data.modelo_veiculo = veiculo.modelo_veiculo || ''
+  data.ano_fabricacao = veiculo.ano_fabricacao || null
+  data.ano_modelo = veiculo.ano_modelo || null
 
   // Identificação da anterior para a nota de histórico
   const numAnterior = policy.policy_number || policy.numero_proposta || policy.id

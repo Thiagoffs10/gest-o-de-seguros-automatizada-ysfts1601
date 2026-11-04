@@ -358,6 +358,8 @@ export function getVeiculoVigente(
   placa?: string
   chassi?: string
   modelo_veiculo?: string
+  ano_fabricacao?: number
+  ano_modelo?: number
   origem: string
 } {
   const vehicleEndorsements = endorsements
@@ -370,6 +372,8 @@ export function getVeiculoVigente(
       placa: latest.placa || policy.placa,
       chassi: latest.chassi || policy.chassi,
       modelo_veiculo: latest.modelo_veiculo || policy.modelo_veiculo,
+      ano_fabricacao: latest.ano_fabricacao || policy.ano_fabricacao,
+      ano_modelo: latest.ano_modelo || policy.ano_modelo,
       origem: `Endosso (${latest.tipo} - ${latest.data_endosso ? new Date(latest.data_endosso).toLocaleDateString('pt-BR') : ''})`,
     }
   }
@@ -378,6 +382,8 @@ export function getVeiculoVigente(
     placa: policy.placa,
     chassi: policy.chassi,
     modelo_veiculo: policy.modelo_veiculo,
+    ano_fabricacao: policy.ano_fabricacao,
+    ano_modelo: policy.ano_modelo,
     origem: 'Apólice original',
   }
 }

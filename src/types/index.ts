@@ -109,6 +109,8 @@ export interface Policy {
   placa?: string
   chassi?: string
   modelo_veiculo?: string
+  ano_fabricacao?: number
+  ano_modelo?: number
   start_date: string
   end_date: string
   renewal_date?: string
@@ -375,6 +377,8 @@ export interface Endorsement {
   placa?: string
   chassi?: string
   modelo_veiculo?: string
+  ano_fabricacao?: number
+  ano_modelo?: number
   valor_bruto?: number
   valor_liquido?: number
   comissao_percent?: number
