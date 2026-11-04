@@ -436,6 +436,8 @@ export default function PolicyDetail() {
 
   // Cálculo do veículo vigente (sem destruir registros históricos)
   const veiculoVigente = getVeiculoVigente(policy, endorsements)
+  const isSeguroAuto =
+    String(policy.tipo_de_seguro || policy.coverage_type || '').toUpperCase() === 'AUTO'
 
   const handleConfirmDeleteEndorsement = async () => {
     if (!deletingEndorsement || deleteEndorsementLoading) return
