@@ -30,6 +30,16 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select'
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from '@/components/ui/alert-dialog'
 import { useToast } from '@/hooks/use-toast'
 import { useRealtime } from '@/hooks/use-realtime'
 import { useCoalescedCallback } from '@/hooks/use-coalesced-callback'
@@ -93,6 +103,7 @@ export default function ConciliacaoMensal() {
   const [loading, setLoading] = useState(true)
   const [actionLoading, setActionLoading] = useState(false)
   const [detailModalType, setDetailModalType] = useState<ConciliacaoDetailType | null>(null)
+  const [confirmCloseOpen, setConfirmCloseOpen] = useState(false)
 
   const period = useMemo(() => computePeriod(String(mes), String(ano)), [mes, ano])
 
@@ -291,6 +302,17 @@ export default function ConciliacaoMensal() {
     const lucroPrevisto = expectedComm - expectedRepasses - totalCustos
     const lucroReal = receivedComm - paidRepasses - paidCustos
 
+    // Resíduos: recebimentos do período cuja apólice é de competência anterior (caixa do mês, origem antiga)
+    let residuosMesesAnteriores = 0
+    for (const r of recebimentos) {
+      if (!r.data_recebimento || !isDateInPeriod(period, r.data_recebimento)) continue
+      const pol = policies.find((p) => p.id === r.policy)
+      if (pol && !isDateInPeriod(period, pol.start_date)) {
+        const val = r.valor_liquido != null ? Number(r.valor_liquido) : Number(r.valor_bruto) || 0
+        residuosMesesAnteriores = Math.round((residuosMesesAnteriores + val) * 100) / 100
+      }
+    }
+
     // Comissão média trabalhada naquele mês (média ponderada pelo prêmio líquido: total comissões previstas ÷ total líquido × 100)
     const comissaoMedia = computeAverageCommissionPercent(periodPolicies, expectedComm)
 
@@ -333,6 +355,9 @@ export default function ConciliacaoMensal() {
       pendingRepasses,
       paidCustos,
       pendingCustos,
+      expectedRepasses,
+      totalCustos,
+      residuosMesesAnteriores,
       lucroPrevisto,
       lucroReal,
       pendencias,
@@ -648,7 +673,7 @@ export default function ConciliacaoMensal() {
     })
   }
 
-  const handleClose = async () => {
+  const handleClose = () => {
     if (m.pendencias.length > 0) {
       if (!isAdmin) {
         toast({
@@ -659,11 +684,14 @@ export default function ConciliacaoMensal() {
         })
         return
       }
-      const confirmar = window.confirm(
-        `Atenção! Existem pendências:\n\n${m.pendencias.join('\n')}\n\nDeseja fechar o mês mesmo assim?`,
-      )
-      if (!confirmar) return
+      setConfirmCloseOpen(true)
+      return
     }
+    executeClose()
+  }
+
+  const executeClose = async () => {
+    setConfirmCloseOpen(false)
     setActionLoading(true)
     try {
       // Resumo numérico consolidado (sem objetos grandes como arrays de apólices)
@@ -681,6 +709,9 @@ export default function ConciliacaoMensal() {
         pendingCustos: m.pendingCustos,
         lucroPrevisto: m.lucroPrevisto,
         lucroReal: m.lucroReal,
+        pendenciasLeftValor: m.comissaoVencidaValor,
+        pendenciasLeftItens: m.apolicesComissaoVencida.length,
+        residuosMesesAnteriores: m.residuosMesesAnteriores,
       }
       const resumo = JSON.stringify(resumoObj)
       const pendencias = JSON.stringify(m.pendencias)
@@ -932,21 +963,36 @@ export default function ConciliacaoMensal() {
               onClick={() => setDetailModalType('producao')}
             />
           </div>
+          <div className="text-[11px] font-bold uppercase tracking-wide text-slate-400 pt-1">
+            Lucro de Competência (Previsto)
+          </div>
           <Row
-            label="Receita (Comissões Recebidas)"
+            label="Comissões Geradas na Competência"
+            value={`R$ ${fmt(m.expectedComm)}`}
+            clickable
+            onClick={() => setDetailModalType('comissoes-previstas')}
+          />
+          <Row label="(-) Repasses da Competência" value={`R$ ${fmt(m.expectedRepasses)}`} red />
+          <Row label="(-) Custos da Competência" value={`R$ ${fmt(m.totalCustos)}`} red />
+          <Row label="= Lucro Previsto" value={`R$ ${fmt(m.lucroPrevisto)}`} bold />
+          <div className="text-[11px] font-bold uppercase tracking-wide text-slate-400 pt-2 mt-2 border-t">
+            Lucro de Caixa (Real)
+          </div>
+          <Row
+            label="Receita (Comissões Baixadas no Mês)"
             value={`R$ ${fmt(m.receivedComm)}`}
             clickable
             onClick={() => setDetailModalType('comissoes-recebidas')}
           />
           <Row
-            label="(-) Repasses Pagos"
+            label="(-) Repasses Pagos no Mês"
             value={`R$ ${fmt(m.paidRepasses)}`}
             red
             clickable
             onClick={() => setDetailModalType('repasses-pagos')}
           />
           <Row
-            label="(-) Custos Pagos"
+            label="(-) Custos Pagos no Mês"
             value={`R$ ${fmt(m.paidCustos)}`}
             red
             clickable
@@ -954,7 +1000,25 @@ export default function ConciliacaoMensal() {
           />
           <Row label="= Lucro Real" value={`R$ ${fmt(m.lucroReal)}`} blue bold />
           <div className="mt-3 pt-3 border-t space-y-1">
-            <Row label="Lucro Previsto" value={`R$ ${fmt(m.lucroPrevisto)}`} bold />
+            <div className="text-[11px] font-bold uppercase tracking-wide text-slate-400">
+              Ponte de Fechamento (Previsto → Real)
+            </div>
+            <Row label="Lucro Previsto do Mês" value={`R$ ${fmt(m.lucroPrevisto)}`} bold />
+            {m.comissaoVencidaValor > 0 && (
+              <Row
+                label="(-) Pendências deixadas para contas a receber"
+                value={`R$ ${fmt(m.comissaoVencidaValor)} (${m.apolicesComissaoVencida.length} itens)`}
+                amber
+              />
+            )}
+            {m.residuosMesesAnteriores > 0 && (
+              <Row
+                label="(+) Resíduos de meses anteriores recebidos neste mês"
+                value={`R$ ${fmt(m.residuosMesesAnteriores)}`}
+                green
+              />
+            )}
+            <Row label="= Lucro Real do Mês" value={`R$ ${fmt(m.lucroReal)}`} blue bold />
             {m.comissaoFuturaValor > 0 && (
               <div className="text-xs text-blue-700 bg-blue-50 border border-blue-200 rounded p-2 flex items-center justify-between">
                 <span>Fluxo normal: Comissões a receber nas próximas parcelas:</span>
@@ -1198,6 +1262,53 @@ export default function ConciliacaoMensal() {
           </Button>
         )}
       </div>
+      {/* Diálogo de confirmação de fechamento com pendências */}
+      <AlertDialog open={confirmCloseOpen} onOpenChange={setConfirmCloseOpen}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Fechar Mês?</AlertDialogTitle>
+            <AlertDialogDescription>
+              {m.pendencias.length > 0
+                ? 'Atenção! Existem pendências neste mês:'
+                : 'Nenhuma pendência detectada neste mês.'}
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          {m.pendencias.length > 0 && (
+            <ul className="list-disc list-inside text-sm text-amber-700 bg-amber-50 border border-amber-200 rounded-md p-3 space-y-1">
+              {m.pendencias.map((p, i) => (
+                <li key={i}>{p}</li>
+              ))}
+            </ul>
+          )}
+          <div className="text-xs rounded-md border border-blue-200 bg-blue-50 p-3 space-y-1 text-slate-700">
+            <p className="font-semibold text-blue-900">Ponte de fechamento:</p>
+            <p>Lucro Previsto do mês: R$ {fmt(m.lucroPrevisto)}</p>
+            {m.comissaoVencidaValor > 0 && (
+              <p>
+                (-) Pendências deixadas para CONTAS A RECEBER: R$ {fmt(m.comissaoVencidaValor)} (
+                {m.apolicesComissaoVencida.length} itens)
+              </p>
+            )}
+            {m.residuosMesesAnteriores > 0 && (
+              <p>
+                (+) Resíduos de meses anteriores recebidos neste mês: R${' '}
+                {fmt(m.residuosMesesAnteriores)}
+              </p>
+            )}
+            <p className="font-bold">= Lucro Real do mês: R$ {fmt(m.lucroReal)}</p>
+          </div>
+          <p className="text-xs text-slate-500">
+            As comissões vencidas em aberto ficarão como{' '}
+            <strong>contas a receber de competência fechada</strong> no Financeiro e NÃO somem no
+            fechamento. Ao receber cada uma depois, o valor entra no caixa do mês do recebimento — o
+            lucro previsto deste mês não muda.
+          </p>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancelar</AlertDialogCancel>
+            <AlertDialogAction onClick={() => executeClose()}>Fechar Mês</AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
       {/* Modal de Detalhamento Interativo */}
       <ConciliacaoDetailModal
         open={!!detailModalType}

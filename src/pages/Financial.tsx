@@ -101,6 +101,12 @@ import {
   computeQuickPayLiquidacao,
 } from '@/lib/financial-calcs'
 import { DevTrackingPanel } from '@/components/DevTrackingPanel'
+import {
+  getCompetenciasFechadas,
+  montarContasAReceberFechadas,
+  ContaAReceberFechada,
+} from '@/services/contas-a-receber-fechadas'
+import { ContasAReceberFechadasCard } from '@/components/financial/ContasAReceberFechadasCard'
 import { PortfolioExportButton } from '@/components/PortfolioExportButton'
 import { ImportarExtratoModal } from '@/components/ImportarExtratoModal'
 import { AlertasCentral } from '@/components/AlertasCentral'
@@ -179,6 +185,10 @@ export default function Financial() {
   const [isDeleteRecebimentoOpen, setIsDeleteRecebimentoOpen] = useState(false)
   const [deletingRecebimento, setDeletingRecebimento] = useState<ComissaoRecebimento | null>(null)
   const [deleteLoading, setDeleteLoading] = useState(false)
+
+  // Contas a receber de competências fechadas (Conciliação Mensal)
+  const [contasFechadas, setContasFechadas] = useState<ContaAReceberFechada[]>([])
+  const [confirmingContaId, setConfirmingContaId] = useState<string | null>(null)
 
   // Estados para trava e modal informativo de débitos pendentes na baixa rápida de repasse
   const [quickPayPolicy, setQuickPayPolicy] = useState<Policy | null>(null)
@@ -285,6 +295,19 @@ export default function Financial() {
       setProdutos(prods)
       setAllComissoesPrevistasList(prevs)
       hasLoadedInitialDataRef.current = true
+      // Contas a receber de competências fechadas: competências já fechadas na Conciliação
+      getCompetenciasFechadas()
+        .then((fechadas) => {
+          setContasFechadas(
+            montarContasAReceberFechadas({
+              policies: pols,
+              recebimentos: recs,
+              comissoesPrevistas: prevs,
+              fechadasSet: new Set(fechadas.map((f) => f.ano * 100 + f.mes)),
+            }),
+          )
+        })
+        .catch(() => setContasFechadas([]))
     } catch {
       /* ignored */
     } finally {
@@ -1337,6 +1360,28 @@ export default function Financial() {
     setRecebimentoInitialEndorsementId(endorsementId)
   }
 
+  const handleConfirmarContaFechada = async (conta: ContaAReceberFechada) => {
+    const key = `${conta.policyId}-${conta.comissaoPrevistaId ?? 'avulsa'}`
+    setConfirmingContaId(key)
+    try {
+      const policy = allPolicies.find((p) => p.id === conta.policyId)
+      if (!policy) {
+        toast({ title: 'Apólice não encontrada', variant: 'destructive' })
+        return
+      }
+      // Mesmo fluxo de baixa já existente ("Confirmar recebimento" → comissao_recebimentos),
+      // pré-preenchido com competência fechada, previsão e saldo pendente.
+      handleOpenRegistrarRecebimento(
+        policy,
+        conta.competencia,
+        conta.comissaoPrevistaId,
+        conta.valor,
+      )
+    } finally {
+      setConfirmingContaId(null)
+    }
+  }
+
   const handleConfirmDeleteRecebimento = async () => {
     if (!deletingRecebimento || deleteLoading) return
     const recId = deletingRecebimento.id
@@ -1530,6 +1575,12 @@ export default function Financial() {
           )
           await loadData()
         }}
+      />
+      {/* CONTAS A RECEBER DE COMPETÊNCIAS FECHADAS (conciliação mensal) */}
+      <ContasAReceberFechadasCard
+        contas={contasFechadas}
+        confirmingId={confirmingContaId}
+        onConfirmar={handleConfirmarContaFechada}
       />
 
       {/* 5 BLOCOS OPERACIONAIS REORGANIZADOS COM TODOS OS CARDS CLICÁVEIS */}
