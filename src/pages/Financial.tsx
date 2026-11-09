@@ -119,6 +119,7 @@ import {
 import { FinanceiroOverviewCards } from '@/components/financial/FinanceiroOverviewCards'
 import { FinancialPeriodSelector } from '@/components/financial/FinancialPeriodSelector'
 import { ExtratoTabContent } from '@/components/financial/ExtratoTabContent'
+import { BackButton } from '@/components/BackButton'
 import { FileSpreadsheet, ChevronDown, ChevronRight, SlidersHorizontal, Plus } from 'lucide-react'
 import {
   Select,
@@ -1580,7 +1581,7 @@ export default function Financial() {
             <BackButton
               fallbackPath="/financeiro?aba=visao-geral"
               fallbackLabel="Visão Geral do Financeiro"
-              onBack={() => handleMudarAba('visao-geral')}
+              onClick={() => handleMudarAba('visao-geral')}
               className="mb-1"
             />
           )}
