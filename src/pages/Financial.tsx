@@ -110,6 +110,14 @@ import { ContasAReceberFechadasCard } from '@/components/financial/ContasARecebe
 import { PortfolioExportButton } from '@/components/PortfolioExportButton'
 import { ImportarExtratoModal } from '@/components/ImportarExtratoModal'
 import { AlertasCentral } from '@/components/AlertasCentral'
+import {
+  FinanceiroTabs,
+  AbaContainer,
+  normalizarAba,
+  AbaFinanceiro,
+} from '@/components/financial/FinanceiroTabs'
+import { FinanceiroOverviewCards } from '@/components/financial/FinanceiroOverviewCards'
+import { ExtratoTabContent } from '@/components/financial/ExtratoTabContent'
 import { FileSpreadsheet, ChevronDown, ChevronRight, SlidersHorizontal } from 'lucide-react'
 import {
   Select,
@@ -237,10 +245,26 @@ export default function Financial() {
   })
   const [prevLoading, setPrevLoading] = useState(false)
 
+  // Estado da aba ativa sincronizada com ?aba= na URL
+  const initialAba = normalizarAba(searchParams.get('aba'))
+  const [activeTab, setActiveTab] = useState<AbaFinanceiro>(initialAba)
+
+  const handleMudarAba = (novaAba: AbaFinanceiro) => {
+    const norm = normalizarAba(novaAba)
+    setActiveTab(norm)
+    const currentParams = new URLSearchParams(searchParams)
+    currentParams.set('aba', norm)
+    navigate({ search: currentParams.toString() }, { replace: true })
+  }
+
   const ITEMS_PER_PAGE = 10
 
   // Lê eventual ?policy=, ?competencia=, ?prevId= e ?valor= da URL (quando redirecionado de PolicyDetail)
   useEffect(() => {
+    const urlAba = searchParams.get('aba')
+    if (urlAba) {
+      setActiveTab(normalizarAba(urlAba))
+    }
     const urlPolicy = searchParams.get('policy')
     const urlComp = searchParams.get('competencia')
     const urlPrevId = searchParams.get('prevId')
@@ -1549,6 +1573,24 @@ export default function Financial() {
         </div>
         <div className="flex items-center gap-2">
           <Button
+            onClick={() => {
+              if (tablePolicies.length > 0) {
+                handleOpenRegistrarRecebimento(tablePolicies[0])
+              } else if (allPolicies.length > 0) {
+                handleOpenRegistrarRecebimento(allPolicies[0])
+              } else {
+                toast({
+                  title: 'Nenhuma apólice disponível',
+                  description: 'Cadastre uma apólice para registrar recebimento.',
+                })
+              }
+            }}
+            className="bg-blue-600 hover:bg-blue-700 text-white text-xs h-9 shadow-xs"
+          >
+            <Plus className="h-4 w-4 mr-1.5" />
+            Nova Baixa
+          </Button>
+          <Button
             onClick={() => setIsImportarExtratoOpen(true)}
             className="bg-emerald-600 hover:bg-emerald-700 text-white text-xs h-9 shadow-xs"
           >
@@ -1559,564 +1601,1311 @@ export default function Financial() {
         </div>
       </div>
 
-      {/* PAINEL CENTRAL DE ALERTAS DE INCONSISTÊNCIA E DUPLICIDADE + PENDÊNCIAS 60+ DIAS */}
-      <AlertasCentral
-        modulo="FINANCEIRO"
-        onVerApolice={(polId) => navigate(`/policies/${polId}`)}
-        pendencias60={pendencias60}
-        onRegistrarRecebimento={(policy, comp, prevId, saldo) =>
-          handleOpenRegistrarRecebimento(policy, comp, prevId, saldo)
-        }
-        onDispensarAlerta60={async (policyIds) => {
-          // Marca no backend e recarrega dados imediatamente
-          await dispensarAlertaComissao60Batch(
-            policyIds,
-            'Dispensado do alerta de comissões sem baixa há mais de 60 dias (legado/histórico)',
-          )
-          await loadData()
+      {/* BARRA DE NAVEGAÇÃO EM ABAS */}
+      <FinanceiroTabs
+        activeTab={activeTab}
+        onChange={handleMudarAba}
+        badges={{
+          aReceber: (metrics.pendingPoliciesList?.length || 0) + (contasFechadas?.length || 0),
+          repasses: metrics.partnerPols?.filter((p) => !p.pago_parceiro).length || 0,
         }}
       />
-      {/* CONTAS A RECEBER DE COMPETÊNCIAS FECHADAS (conciliação mensal) */}
-      <ContasAReceberFechadasCard
-        contas={contasFechadas}
-        confirmingId={confirmingContaId}
-        onConfirmar={handleConfirmarContaFechada}
-      />
 
-      {/* 5 BLOCOS OPERACIONAIS REORGANIZADOS COM TODOS OS CARDS CLICÁVEIS */}
-      <FinancialSummaryCards
-        // BLOCO 1: PRODUÇÃO E COMISSÕES
-        premioLiquidoVendido={metrics.premioLiquidoVendido}
-        premioBrutoVendido={metrics.premioBrutoVendido}
-        comissaoBrutaPrevista={metrics.comissaoBrutaPrevista}
-        issDeducoesPrevistas={metrics.issDeducoesPrevistas}
-        comissaoLiquidaPrevista={metrics.comissaoLiquidaPrevista}
-        onPremioLiquidoClick={() => setProducaoModalType('premio_liquido')}
-        onComissaoBrutaClick={() => setProducaoModalType('comissao_bruta')}
-        onIssDeducoesClick={() => setProducaoModalType('iss_deducoes')}
-        onPremioBrutoClick={() => setProducaoModalType('premio_bruto')}
-        onComissaoLiquidaClick={() => setProducaoModalType('comissao_liquida')}
-        // BLOCO 2: RECEBIMENTO DE COMISSÕES
-        receivedCommissions={metrics.receivedCommissions}
-        systemReceivedCommissions={metrics.systemReceivedCommissions}
-        legacyReceivedCommissions={metrics.legacyReceivedCommissions}
-        saldoParcialRecebido={metrics.saldoParcialRecebido}
-        comissoesNaoRecebidas={metrics.comissoesNaoRecebidas}
-        saldoTotalAReceber={metrics.saldoTotalAReceber}
-        onComissaoRecebidaClick={() => setRecebimentoModalType('recebida')}
-        onSaldoParcialClick={() => setRecebimentoModalType('parcial')}
-        onComissoesNaoRecebidasClick={() => setRecebimentoModalType('nao_recebida')}
-        onSaldoTotalClick={() => setRecebimentoModalType('saldo_total')}
-        // BLOCO 3: PROJEÇÃO DE RECEBIMENTOS
-        projecoesCompetencias={metrics.sortedCompCards}
-        onCompetenciaClick={(compRaw) => setSelectedProjecaoComp(compRaw)}
-        saldoSemPrevisao={metrics.saldoSemPrevisao}
-        countSemPrevisao={metrics.countSemPrevisao}
-        onSemPrevisaoClick={() => setRecebimentoModalType('sem_previsao')}
-        onExpectedProfitClick={() => setIsResultadoProjetadoOpen(true)}
-        onTotalPendentesClick={() => setRecebimentoModalType('total_acumulado')}
-        // RESULTADO PROJETADO (renomeado de Lucro Previsto, isolado na projeção)
-        expectedProfit={metrics.expectedProfit}
-        // BLOCO 4: RESULTADO REAL DO PERÍODO
-        realProfit={metrics.realProfit}
-        paidRepasses={metrics.paidRepasses}
-        paidCosts={metrics.paidCosts}
-        onRealProfitClick={() => setIsLucroRealModalOpen(true)}
-        onPaidRepassesClick={() => {
-          // Navega para a tela /relatorio-comissoes com filtro Pago e período atual
-          navigate(`/relatorio-comissoes?status=pago&year=${filters.year}&month=${filters.month}`)
-        }}
-        onPaidCostsClick={() => {
-          // Navega para a tela /custos-fixos com filtro Pago e período atual
-          navigate(`/custos-fixos?status=pago&year=${filters.year}&month=${filters.month}`)
-        }}
-        // BLOCO 5: OBRIGAÇÕES EM ABERTO
-        pendingRepasses={metrics.pendingRepasses}
-        pendingCosts={metrics.pendingCosts}
-        onPendingRepassesClick={() => {
-          // Navega para a tela /relatorio-comissoes com filtro Pendente
-          navigate(
-            `/relatorio-comissoes?status=pendente&year=${filters.year}&month=${filters.month}`,
-          )
-        }}
-        onPendingCostsClick={() => {
-          // Navega para a tela /custos-fixos com filtro Pendente
-          navigate(`/custos-fixos?status=pendente&year=${filters.year}&month=${filters.month}`)
-        }}
-        periodLabel={period.label}
-      />
+      {/* ABA 1: VISÃO GERAL */}
+      <AbaContainer active={activeTab === 'visao-geral'}>
+        <div className="space-y-6">
+          <FinanceiroOverviewCards
+            saldoAReceberMes={metrics.saldoTotalAReceber}
+            qtdAReceberMes={metrics.pendingPoliciesList?.length || 0}
+            saldoFechadas={contasFechadas.reduce((acc, c) => acc + (c.valor || 0), 0)}
+            qtdFechadas={contasFechadas.length}
+            saldo60d={pendencias60.reduce((acc, p) => acc + (p.saldoPendente || 0), 0)}
+            qtd60d={pendencias60.length}
+            saldoRepasses={metrics.pendingRepasses}
+            qtdRepasses={metrics.partnerPols?.filter((p) => !p.pago_parceiro).length || 0}
+            periodLabel={period.label}
+            onCardClick={(tab, filter) => {
+              handleMudarAba(tab)
+              if (filter?.status) {
+                setStatusFilter(filter.status)
+              }
+              if (filter?.comm) {
+                setCommFilter(filter.comm)
+              }
+            }}
+          />
 
-      <DevTrackingPanel
-        policies={allPolicies}
-        period={period}
-        totalReceitas={metrics.receivedCommissions}
-      />
+          {/* PAINEL CENTRAL DE ALERTAS DE INCONSISTÊNCIA E DUPLICIDADE + PENDÊNCIAS 60+ DIAS */}
+          <AlertasCentral
+            modulo="FINANCEIRO"
+            onVerApolice={(polId) => navigate(`/policies/${polId}`)}
+            pendencias60={pendencias60}
+            onRegistrarRecebimento={(policy, comp, prevId, saldo) =>
+              handleOpenRegistrarRecebimento(policy, comp, prevId, saldo)
+            }
+            onDispensarAlerta60={async (policyIds) => {
+              await dispensarAlertaComissao60Batch(
+                policyIds,
+                'Dispensado do alerta de comissões sem baixa há mais de 60 dias (legado/histórico)',
+              )
+              await loadData()
+            }}
+          />
 
-      {/* BARRA DE FILTROS: PRINCIPAIS EM DESTAQUE E MENOS USADOS EM 'MAIS FILTROS' */}
-      <div className="space-y-2 bg-slate-50/70 p-3 rounded-lg border">
-        <div className="flex flex-wrap items-center justify-between gap-2.5">
-          {/* Filtros Principais: Período (Ano/Mês), Seguradora e Status */}
-          <div className="flex flex-wrap items-center gap-2">
-            <div>
-              <Select
-                value={filters.year || 'ALL'}
-                onValueChange={(v) => setFilters((prev) => ({ ...prev, year: v }))}
-              >
-                <SelectTrigger className="w-[105px] h-9 text-xs bg-white">
-                  <SelectValue placeholder="Ano" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="ALL">Todos os anos</SelectItem>
-                  {['2024', '2025', '2026', '2027'].map((y) => (
-                    <SelectItem key={y} value={y}>
-                      {y}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
-            <div>
-              <Select
-                value={filters.month || 'ALL'}
-                onValueChange={(v) => setFilters((prev) => ({ ...prev, month: v }))}
-              >
-                <SelectTrigger className="w-[130px] h-9 text-xs bg-white">
-                  <SelectValue placeholder="Mês" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="ALL">Todos os meses</SelectItem>
-                  <SelectItem value="1">Janeiro</SelectItem>
-                  <SelectItem value="2">Fevereiro</SelectItem>
-                  <SelectItem value="3">Março</SelectItem>
-                  <SelectItem value="4">Abril</SelectItem>
-                  <SelectItem value="5">Maio</SelectItem>
-                  <SelectItem value="6">Junho</SelectItem>
-                  <SelectItem value="7">Julho</SelectItem>
-                  <SelectItem value="8">Agosto</SelectItem>
-                  <SelectItem value="9">Setembro</SelectItem>
-                  <SelectItem value="10">Outubro</SelectItem>
-                  <SelectItem value="11">Novembro</SelectItem>
-                  <SelectItem value="12">Dezembro</SelectItem>
-                </SelectContent>
-              </Select>
-            </div>
-            <div>
-              <Select
-                value={filters.seguradoraId || 'ALL'}
-                onValueChange={(v) =>
-                  setFilters((prev) => ({ ...prev, seguradoraId: v === 'ALL' ? undefined : v }))
-                }
-              >
-                <SelectTrigger className="w-[170px] h-9 text-xs bg-white">
-                  <SelectValue placeholder="Seguradora" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="ALL">Todas Seguradoras</SelectItem>
-                  {seguradoras.map((s) => (
-                    <SelectItem key={s.id} value={s.id}>
-                      {s.nome}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
-            <div>
-              <Select value={statusFilter} onValueChange={setStatusFilter}>
-                <SelectTrigger className="w-[150px] h-9 text-xs bg-white">
-                  <SelectValue placeholder="Status" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="ALL">Todos os Status</SelectItem>
-                  <SelectItem value="Ativa">Ativa</SelectItem>
-                  <SelectItem value="Renovação Pendente">Renovação Pendente</SelectItem>
-                  <SelectItem value="Vencida">Vencida</SelectItem>
-                  <SelectItem value="Expirada">Expirada</SelectItem>
-                  <SelectItem value="Cancelada">Cancelada</SelectItem>
-                </SelectContent>
-              </Select>
-            </div>
-          </div>
+          {/* 5 BLOCOS OPERACIONAIS COM CARDS DETALHADOS */}
+          <FinancialSummaryCards
+            // BLOCO 1: PRODUÇÃO E COMISSÕES
+            premioLiquidoVendido={metrics.premioLiquidoVendido}
+            premioBrutoVendido={metrics.premioBrutoVendido}
+            comissaoBrutaPrevista={metrics.comissaoBrutaPrevista}
+            issDeducoesPrevistas={metrics.issDeducoesPrevistas}
+            comissaoLiquidaPrevista={metrics.comissaoLiquidaPrevista}
+            onPremioLiquidoClick={() => setProducaoModalType('premio_liquido')}
+            onComissaoBrutaClick={() => setProducaoModalType('comissao_bruta')}
+            onIssDeducoesClick={() => setProducaoModalType('iss_deducoes')}
+            onPremioBrutoClick={() => setProducaoModalType('premio_bruto')}
+            onComissaoLiquidaClick={() => setProducaoModalType('comissao_liquida')}
+            // BLOCO 2: RECEBIMENTO DE COMISSÕES
+            receivedCommissions={metrics.receivedCommissions}
+            systemReceivedCommissions={metrics.systemReceivedCommissions}
+            legacyReceivedCommissions={metrics.legacyReceivedCommissions}
+            saldoParcialRecebido={metrics.saldoParcialRecebido}
+            comissoesNaoRecebidas={metrics.comissoesNaoRecebidas}
+            saldoTotalAReceber={metrics.saldoTotalAReceber}
+            onComissaoRecebidaClick={() => setRecebimentoModalType('recebida')}
+            onSaldoParcialClick={() => setRecebimentoModalType('parcial')}
+            onComissoesNaoRecebidasClick={() => setRecebimentoModalType('nao_recebida')}
+            onSaldoTotalClick={() => setRecebimentoModalType('saldo_total')}
+            // BLOCO 3: PROJEÇÃO DE RECEBIMENTOS
+            projecoesCompetencias={metrics.sortedCompCards}
+            onCompetenciaClick={(compRaw) => setSelectedProjecaoComp(compRaw)}
+            saldoSemPrevisao={metrics.saldoSemPrevisao}
+            countSemPrevisao={metrics.countSemPrevisao}
+            onSemPrevisaoClick={() => setRecebimentoModalType('sem_previsao')}
+            onExpectedProfitClick={() => setIsResultadoProjetadoOpen(true)}
+            onTotalPendentesClick={() => setRecebimentoModalType('total_acumulado')}
+            // RESULTADO PROJETADO (renomeado de Lucro Previsto, isolado na projeção)
+            expectedProfit={metrics.expectedProfit}
+            // BLOCO 4: RESULTADO REAL DO PERÍODO
+            realProfit={metrics.realProfit}
+            paidRepasses={metrics.paidRepasses}
+            paidCosts={metrics.paidCosts}
+            onRealProfitClick={() => setIsLucroRealModalOpen(true)}
+            onPaidRepassesClick={() => {
+              // Navega para a tela /relatorio-comissoes com filtro Pago e período atual
+              navigate(
+                `/relatorio-comissoes?status=pago&year=${filters.year}&month=${filters.month}`,
+              )
+            }}
+            onPaidCostsClick={() => {
+              // Navega para a tela /custos-fixos com filtro Pago e período atual
+              navigate(`/custos-fixos?status=pago&year=${filters.year}&month=${filters.month}`)
+            }}
+            // BLOCO 5: OBRIGAÇÕES EM ABERTO
+            pendingRepasses={metrics.pendingRepasses}
+            pendingCosts={metrics.pendingCosts}
+            onPendingRepassesClick={() => {
+              // Navega para a tela /relatorio-comissoes com filtro Pendente
+              navigate(
+                `/relatorio-comissoes?status=pendente&year=${filters.year}&month=${filters.month}`,
+              )
+            }}
+            onPendingCostsClick={() => {
+              // Navega para a tela /custos-fixos com filtro Pendente
+              navigate(`/custos-fixos?status=pendente&year=${filters.year}&month=${filters.month}`)
+            }}
+            periodLabel={period.label}
+          />
 
-          <div className="flex flex-wrap items-center gap-2">
-            <Input
-              placeholder="Buscar por Proposta / Cliente"
-              value={policySearchFilter}
-              onChange={(e) => setPolicySearchFilter(e.target.value)}
-              className="w-[190px] text-xs h-9 bg-white"
-            />
-            <Button
-              variant="outline"
-              size="sm"
-              onClick={() => setShowMoreFilters((prev) => !prev)}
-              className={`h-9 text-xs gap-1.5 ${
-                showMoreFilters ||
-                filters.partnerId ||
-                filters.tipoSeguro ||
-                commFilter !== 'ALL' ||
-                filters.dateFrom ||
-                filters.dateTo ||
-                cpfCnpjFilter
-                  ? 'border-blue-500 text-blue-700 bg-blue-50/50'
-                  : 'bg-white'
-              }`}
-            >
-              <SlidersHorizontal className="h-3.5 w-3.5" />
-              <span>Mais filtros</span>
-              {showMoreFilters ? (
-                <ChevronDown className="h-3.5 w-3.5 rotate-180 transition-transform" />
-              ) : (
-                <ChevronDown className="h-3.5 w-3.5 transition-transform" />
-              )}
-            </Button>
-            <Button
-              variant="ghost"
-              size="sm"
-              className="h-9 text-xs text-slate-500 hover:text-slate-800"
-              onClick={() => {
-                setFilters({
-                  year: String(new Date().getFullYear()),
-                  month: String(new Date().getMonth() + 1),
-                })
-                setStatusFilter('ALL')
-                setCommFilter('ALL')
-                setCpfCnpjFilter('')
-                setPolicySearchFilter('')
-              }}
-            >
-              Limpar
-            </Button>
-          </div>
+          <DevTrackingPanel
+            policies={allPolicies}
+            period={period}
+            totalReceitas={metrics.receivedCommissions}
+          />
         </div>
+      </AbaContainer>
 
-        {/* Filtros Secundários recolhidos em "Mais filtros" */}
-        {showMoreFilters && (
-          <div className="pt-2.5 mt-2 border-t border-slate-200 flex flex-wrap items-center gap-2.5 text-xs">
-            <div>
-              <Select value={commFilter} onValueChange={setCommFilter}>
-                <SelectTrigger className="w-[160px] h-8 text-xs bg-white">
-                  <SelectValue placeholder="Comissão" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="ALL">Todas as Comissões</SelectItem>
-                  <SelectItem value="received">Recebidas</SelectItem>
-                  <SelectItem value="pending">Pendentes</SelectItem>
-                </SelectContent>
-              </Select>
+      {/* ABA 2: A RECEBER */}
+      <AbaContainer active={activeTab === 'a-receber'}>
+        <div className="space-y-6">
+          {/* CONTAS A RECEBER DE COMPETÊNCIAS FECHADAS (conciliação mensal) */}
+          <ContasAReceberFechadasCard
+            contas={contasFechadas}
+            confirmingId={confirmingContaId}
+            onConfirmar={handleConfirmarContaFechada}
+          />
+
+          {/* BARRA DE FILTROS: PRINCIPAIS EM DESTAQUE E MENOS USADOS EM 'MAIS FILTROS' */}
+          <div className="space-y-2 bg-slate-50/70 p-3 rounded-lg border">
+            <div className="flex flex-wrap items-center justify-between gap-2.5">
+              {/* Filtros Principais: Período (Ano/Mês), Seguradora e Status */}
+              <div className="flex flex-wrap items-center gap-2">
+                <div>
+                  <Select
+                    value={filters.year || 'ALL'}
+                    onValueChange={(v) => setFilters((prev) => ({ ...prev, year: v }))}
+                  >
+                    <SelectTrigger className="w-[105px] h-9 text-xs bg-white">
+                      <SelectValue placeholder="Ano" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="ALL">Todos os anos</SelectItem>
+                      {['2024', '2025', '2026', '2027'].map((y) => (
+                        <SelectItem key={y} value={y}>
+                          {y}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+                <div>
+                  <Select
+                    value={filters.month || 'ALL'}
+                    onValueChange={(v) => setFilters((prev) => ({ ...prev, month: v }))}
+                  >
+                    <SelectTrigger className="w-[130px] h-9 text-xs bg-white">
+                      <SelectValue placeholder="Mês" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="ALL">Todos os meses</SelectItem>
+                      <SelectItem value="1">Janeiro</SelectItem>
+                      <SelectItem value="2">Fevereiro</SelectItem>
+                      <SelectItem value="3">Março</SelectItem>
+                      <SelectItem value="4">Abril</SelectItem>
+                      <SelectItem value="5">Maio</SelectItem>
+                      <SelectItem value="6">Junho</SelectItem>
+                      <SelectItem value="7">Julho</SelectItem>
+                      <SelectItem value="8">Agosto</SelectItem>
+                      <SelectItem value="9">Setembro</SelectItem>
+                      <SelectItem value="10">Outubro</SelectItem>
+                      <SelectItem value="11">Novembro</SelectItem>
+                      <SelectItem value="12">Dezembro</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+                <div>
+                  <Select
+                    value={filters.seguradoraId || 'ALL'}
+                    onValueChange={(v) =>
+                      setFilters((prev) => ({ ...prev, seguradoraId: v === 'ALL' ? undefined : v }))
+                    }
+                  >
+                    <SelectTrigger className="w-[170px] h-9 text-xs bg-white">
+                      <SelectValue placeholder="Seguradora" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="ALL">Todas Seguradoras</SelectItem>
+                      {seguradoras.map((s) => (
+                        <SelectItem key={s.id} value={s.id}>
+                          {s.nome}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+                <div>
+                  <Select value={statusFilter} onValueChange={setStatusFilter}>
+                    <SelectTrigger className="w-[150px] h-9 text-xs bg-white">
+                      <SelectValue placeholder="Status" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="ALL">Todos os Status</SelectItem>
+                      <SelectItem value="Ativa">Ativa</SelectItem>
+                      <SelectItem value="Renovação Pendente">Renovação Pendente</SelectItem>
+                      <SelectItem value="Vencida">Vencida</SelectItem>
+                      <SelectItem value="Expirada">Expirada</SelectItem>
+                      <SelectItem value="Cancelada">Cancelada</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+              </div>
+
+              <div className="flex flex-wrap items-center gap-2">
+                <Input
+                  placeholder="Buscar por Proposta / Cliente"
+                  value={policySearchFilter}
+                  onChange={(e) => setPolicySearchFilter(e.target.value)}
+                  className="w-[190px] text-xs h-9 bg-white"
+                />
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => setShowMoreFilters((prev) => !prev)}
+                  className={`h-9 text-xs gap-1.5 ${
+                    showMoreFilters ||
+                    filters.partnerId ||
+                    filters.tipoSeguro ||
+                    commFilter !== 'ALL' ||
+                    filters.dateFrom ||
+                    filters.dateTo ||
+                    cpfCnpjFilter
+                      ? 'border-blue-500 text-blue-700 bg-blue-50/50'
+                      : 'bg-white'
+                  }`}
+                >
+                  <SlidersHorizontal className="h-3.5 w-3.5" />
+                  <span>Mais filtros</span>
+                  {showMoreFilters ? (
+                    <ChevronDown className="h-3.5 w-3.5 rotate-180 transition-transform" />
+                  ) : (
+                    <ChevronDown className="h-3.5 w-3.5 transition-transform" />
+                  )}
+                </Button>
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  className="h-9 text-xs text-slate-500 hover:text-slate-800"
+                  onClick={() => {
+                    setFilters({
+                      year: String(new Date().getFullYear()),
+                      month: String(new Date().getMonth() + 1),
+                    })
+                    setStatusFilter('ALL')
+                    setCommFilter('ALL')
+                    setCpfCnpjFilter('')
+                    setPolicySearchFilter('')
+                  }}
+                >
+                  Limpar
+                </Button>
+              </div>
             </div>
-            <div>
-              <Select
-                value={filters.partnerId || 'ALL'}
-                onValueChange={(v) =>
-                  setFilters((prev) => ({ ...prev, partnerId: v === 'ALL' ? undefined : v }))
-                }
-              >
-                <SelectTrigger className="w-[160px] h-8 text-xs bg-white">
-                  <SelectValue placeholder="Parceiro" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="ALL">Todos os Parceiros</SelectItem>
-                  {parceiros.map((p) => (
-                    <SelectItem key={p.id} value={p.id}>
-                      {p.nome}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
-            <div>
-              <Input
-                placeholder="Filtrar por CPF/CNPJ"
-                value={cpfCnpjFilter}
-                onChange={(e) => setCpfCnpjFilter(e.target.value)}
-                className="w-[160px] text-xs h-8 bg-white"
-              />
-            </div>
-            <div className="flex items-center gap-1.5">
-              <span className="text-[11px] text-slate-500">De:</span>
-              <Input
-                type="date"
-                value={filters.dateFrom || ''}
-                onChange={(e) =>
-                  setFilters((prev) => ({ ...prev, dateFrom: e.target.value || undefined }))
-                }
-                className="w-[130px] text-xs h-8 bg-white"
-              />
-              <span className="text-[11px] text-slate-500">Até:</span>
-              <Input
-                type="date"
-                value={filters.dateTo || ''}
-                onChange={(e) =>
-                  setFilters((prev) => ({ ...prev, dateTo: e.target.value || undefined }))
-                }
-                className="w-[130px] text-xs h-8 bg-white"
-              />
-            </div>
+
+            {/* Filtros Secundários recolhidos em "Mais filtros" */}
+            {showMoreFilters && (
+              <div className="pt-2.5 mt-2 border-t border-slate-200 flex flex-wrap items-center gap-2.5 text-xs">
+                <div>
+                  <Select value={commFilter} onValueChange={setCommFilter}>
+                    <SelectTrigger className="w-[160px] h-8 text-xs bg-white">
+                      <SelectValue placeholder="Comissão" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="ALL">Todas as Comissões</SelectItem>
+                      <SelectItem value="received">Recebidas</SelectItem>
+                      <SelectItem value="pending">Pendentes</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+                <div>
+                  <Select
+                    value={filters.partnerId || 'ALL'}
+                    onValueChange={(v) =>
+                      setFilters((prev) => ({ ...prev, partnerId: v === 'ALL' ? undefined : v }))
+                    }
+                  >
+                    <SelectTrigger className="w-[160px] h-8 text-xs bg-white">
+                      <SelectValue placeholder="Parceiro" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="ALL">Todos os Parceiros</SelectItem>
+                      {parceiros.map((p) => (
+                        <SelectItem key={p.id} value={p.id}>
+                          {p.nome}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+                <div>
+                  <Input
+                    placeholder="Filtrar por CPF/CNPJ"
+                    value={cpfCnpjFilter}
+                    onChange={(e) => setCpfCnpjFilter(e.target.value)}
+                    className="w-[160px] text-xs h-8 bg-white"
+                  />
+                </div>
+                <div className="flex items-center gap-1.5">
+                  <span className="text-[11px] text-slate-500">De:</span>
+                  <Input
+                    type="date"
+                    value={filters.dateFrom || ''}
+                    onChange={(e) =>
+                      setFilters((prev) => ({ ...prev, dateFrom: e.target.value || undefined }))
+                    }
+                    className="w-[130px] text-xs h-8 bg-white"
+                  />
+                  <span className="text-[11px] text-slate-500">Até:</span>
+                  <Input
+                    type="date"
+                    value={filters.dateTo || ''}
+                    onChange={(e) =>
+                      setFilters((prev) => ({ ...prev, dateTo: e.target.value || undefined }))
+                    }
+                    className="w-[130px] text-xs h-8 bg-white"
+                  />
+                </div>
+              </div>
+            )}
           </div>
-        )}
-      </div>
 
-      {/* ETAPA 2B — ITEM 7: GESTÃO E VISÃO GERAL DE COMISSÕES */}
-      <Card className="shadow-sm overflow-hidden border">
-        <CardHeader className="bg-slate-50/70 border-b pb-3">
-          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
-            <div>
-              <CardTitle className="text-base font-bold text-slate-900">
-                Gestão e Visão Geral de Comissões
-              </CardTitle>
-              <p className="text-xs text-slate-500 mt-0.5">
-                Acompanhamento consolidado por contrato ou detalhado por competência/parcela
-                prevista
-              </p>
-            </div>
-            <div className="flex items-center gap-1.5 bg-slate-200/80 p-1 rounded-lg text-xs font-semibold">
-              <button
-                type="button"
-                onClick={() => setCommViewTab('apolices')}
-                className={`px-3 py-1 rounded-md transition-colors ${
-                  commViewTab === 'apolices'
-                    ? 'bg-white text-slate-900 shadow-xs'
-                    : 'text-slate-600 hover:text-slate-900'
-                }`}
-              >
-                Por Apólice
-              </button>
-              <button
-                type="button"
-                onClick={() => setCommViewTab('competencias')}
-                className={`px-3 py-1 rounded-md transition-colors ${
-                  commViewTab === 'competencias'
-                    ? 'bg-blue-600 text-white shadow-xs'
-                    : 'text-slate-600 hover:text-slate-900'
-                }`}
-              >
-                Por Competência (Previsões)
-              </button>
-            </div>
-          </div>
-        </CardHeader>
+          {/* ETAPA 2B — ITEM 7: GESTÃO E VISÃO GERAL DE COMISSÕES */}
+          <Card className="shadow-sm overflow-hidden border">
+            <CardHeader className="bg-slate-50/70 border-b pb-3">
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                <div>
+                  <CardTitle className="text-base font-bold text-slate-900">
+                    Gestão e Visão Geral de Comissões
+                  </CardTitle>
+                  <p className="text-xs text-slate-500 mt-0.5">
+                    Acompanhamento consolidado por contrato ou detalhado por competência/parcela
+                    prevista
+                  </p>
+                </div>
+                <div className="flex items-center gap-1.5 bg-slate-200/80 p-1 rounded-lg text-xs font-semibold">
+                  <button
+                    type="button"
+                    onClick={() => setCommViewTab('apolices')}
+                    className={`px-3 py-1 rounded-md transition-colors ${
+                      commViewTab === 'apolices'
+                        ? 'bg-white text-slate-900 shadow-xs'
+                        : 'text-slate-600 hover:text-slate-900'
+                    }`}
+                  >
+                    Por Apólice
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setCommViewTab('competencias')}
+                    className={`px-3 py-1 rounded-md transition-colors ${
+                      commViewTab === 'competencias'
+                        ? 'bg-blue-600 text-white shadow-xs'
+                        : 'text-slate-600 hover:text-slate-900'
+                    }`}
+                  >
+                    Por Competência (Previsões)
+                  </button>
+                </div>
+              </div>
+            </CardHeader>
 
-        {commViewTab === 'competencias' ? (
-          <div>
-            {/* Filtros server-side para competências */}
-            <div className="p-3 bg-slate-50/50 border-b flex flex-wrap items-center gap-2">
-              <Select
-                value={prevStatusFilter}
-                onValueChange={(val) => {
-                  setPrevStatusFilter(val)
-                  setPrevPage(1)
-                }}
-              >
-                <SelectTrigger className="w-[150px] bg-white h-8 text-xs">
-                  <SelectValue placeholder="Status" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="ALL">Todos os Status</SelectItem>
-                  <SelectItem value="Pendente">Pendentes</SelectItem>
-                  <SelectItem value="Parcial">Parciais</SelectItem>
-                  <SelectItem value="Recebida">Recebidas</SelectItem>
-                  <SelectItem value="Cancelada">Canceladas</SelectItem>
-                </SelectContent>
-              </Select>
+            {commViewTab === 'competencias' ? (
+              <div>
+                {/* Filtros server-side para competências */}
+                <div className="p-3 bg-slate-50/50 border-b flex flex-wrap items-center gap-2">
+                  <Select
+                    value={prevStatusFilter}
+                    onValueChange={(val) => {
+                      setPrevStatusFilter(val)
+                      setPrevPage(1)
+                    }}
+                  >
+                    <SelectTrigger className="w-[150px] bg-white h-8 text-xs">
+                      <SelectValue placeholder="Status" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="ALL">Todos os Status</SelectItem>
+                      <SelectItem value="Pendente">Pendentes</SelectItem>
+                      <SelectItem value="Parcial">Parciais</SelectItem>
+                      <SelectItem value="Recebida">Recebidas</SelectItem>
+                      <SelectItem value="Cancelada">Canceladas</SelectItem>
+                    </SelectContent>
+                  </Select>
 
-              <Select
-                value={prevSeguradoraFilter}
-                onValueChange={(val) => {
-                  setPrevSeguradoraFilter(val)
-                  setPrevPage(1)
-                }}
-              >
-                <SelectTrigger className="w-[180px] bg-white h-8 text-xs">
-                  <SelectValue placeholder="Seguradora" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="ALL">Todas as Seguradoras</SelectItem>
-                  {seguradoras.map((s) => (
-                    <SelectItem key={s.id} value={s.id}>
-                      {s.nome}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
+                  <Select
+                    value={prevSeguradoraFilter}
+                    onValueChange={(val) => {
+                      setPrevSeguradoraFilter(val)
+                      setPrevPage(1)
+                    }}
+                  >
+                    <SelectTrigger className="w-[180px] bg-white h-8 text-xs">
+                      <SelectValue placeholder="Seguradora" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="ALL">Todas as Seguradoras</SelectItem>
+                      {seguradoras.map((s) => (
+                        <SelectItem key={s.id} value={s.id}>
+                          {s.nome}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
 
-              <Select
-                value={prevProdutoFilter}
-                onValueChange={(val) => {
-                  setPrevProdutoFilter(val)
-                  setPrevPage(1)
-                }}
-              >
-                <SelectTrigger className="w-[180px] bg-white h-8 text-xs">
-                  <SelectValue placeholder="Produto" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="ALL">Todos os Produtos</SelectItem>
-                  {produtos.map((p) => (
-                    <SelectItem key={p.id} value={p.id}>
-                      {p.nome}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
+                  <Select
+                    value={prevProdutoFilter}
+                    onValueChange={(val) => {
+                      setPrevProdutoFilter(val)
+                      setPrevPage(1)
+                    }}
+                  >
+                    <SelectTrigger className="w-[180px] bg-white h-8 text-xs">
+                      <SelectValue placeholder="Produto" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="ALL">Todos os Produtos</SelectItem>
+                      {produtos.map((p) => (
+                        <SelectItem key={p.id} value={p.id}>
+                          {p.nome}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
 
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    className="h-8 text-xs px-2.5"
+                    onClick={() => {
+                      setPrevStatusFilter('ALL')
+                      setPrevSeguradoraFilter('ALL')
+                      setPrevProdutoFilter('ALL')
+                      setPrevPage(1)
+                    }}
+                  >
+                    Limpar
+                  </Button>
+                </div>
+
+                {/* Tabela de Previsões por Competência (ITEM 7) */}
+                <div className="overflow-x-auto">
+                  <table className="w-full text-left text-xs text-slate-700">
+                    <thead className="bg-slate-100 text-slate-600 font-semibold border-b">
+                      <tr>
+                        <th className="p-3">Origem</th>
+                        <th className="p-3">Cliente</th>
+                        <th className="p-3">Seguradora</th>
+                        <th className="p-3">Produto</th>
+                        <th className="p-3">Competência</th>
+                        <th className="p-3 text-right">Previsto</th>
+                        <th className="p-3 text-right">Recebido</th>
+                        <th className="p-3 text-right">Saldo</th>
+                        <th className="p-3 text-center">Situação</th>
+                        <th className="p-3 text-right">Ação</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-slate-100">
+                      {prevLoading ? (
+                        <tr>
+                          <td colSpan={10} className="text-center p-8 text-slate-500">
+                            Carregando previsões...
+                          </td>
+                        </tr>
+                      ) : prevPaginatedData.items.length === 0 ? (
+                        <tr>
+                          <td colSpan={10} className="text-center p-8 text-slate-500">
+                            Nenhuma comissão prevista encontrada para os filtros selecionados.
+                          </td>
+                        </tr>
+                      ) : (
+                        prevPaginatedData.items.map((prev) => {
+                          // Usar o resultado da reconciliação unificada ou calcular diretamente
+                          const recsDesta = recebimentos.filter((r) => {
+                            if (r.comissao_prevista === prev.id) return true
+                            if (r.policy === prev.policy) {
+                              const cRec =
+                                r.competencia?.trim() ||
+                                inferirCompetenciaRecebimento(r.data_recebimento)
+                              const cPrev = prev.competencia?.trim()
+                              return Boolean(cRec && cPrev && cRec === cPrev)
+                            }
+                            return false
+                          })
+                          const recBrutoDesta =
+                            Math.round(
+                              recsDesta.reduce((acc, r) => acc + (Number(r.valor_bruto) || 0), 0) *
+                                100,
+                            ) / 100
+                          const vPrev = Number(prev.valor_previsto) || 0
+                          const saldoDesta = Math.max(
+                            0,
+                            Math.round((vPrev - recBrutoDesta) * 100) / 100,
+                          )
+                          const targetPolicy =
+                            (prev as any).expand?.policy ||
+                            allPolicies.find((p) => p.id === prev.policy)
+
+                          const clientName =
+                            (prev as any).expand?.policy?.expand?.client?.name ||
+                            targetPolicy?.expand?.client?.name ||
+                            '-'
+                          const segNome =
+                            (prev as any).expand?.policy?.expand?.seguradora?.nome ||
+                            targetPolicy?.expand?.seguradora?.nome ||
+                            targetPolicy?.insurance_company ||
+                            '-'
+                          const prodNome =
+                            (prev as any).expand?.policy?.expand?.produto?.nome ||
+                            targetPolicy?.expand?.produto?.nome ||
+                            targetPolicy?.tipo_de_seguro ||
+                            '-'
+
+                          return (
+                            <tr key={prev.id} className="hover:bg-slate-50/80">
+                              <td className="p-3">
+                                {prev.endorsement ? (
+                                  <Badge
+                                    variant="outline"
+                                    className="text-[10px] bg-blue-50 text-blue-700 border-blue-200"
+                                  >
+                                    Endosso
+                                  </Badge>
+                                ) : (
+                                  <Badge
+                                    variant="outline"
+                                    className="text-[10px] bg-slate-50 text-slate-700 border-slate-200"
+                                  >
+                                    Apólice
+                                  </Badge>
+                                )}
+                              </td>
+                              <td className="p-3 font-semibold text-slate-900">{clientName}</td>
+                              <td className="p-3">{segNome}</td>
+                              <td className="p-3">{prodNome}</td>
+                              <td className="p-3 font-bold text-slate-800">
+                                {prev.competencia || `Parc. ${prev.parcela_numero}`}
+                              </td>
+                              <td className="p-3 text-right font-medium text-slate-900">
+                                R$ {fmtMoney(vPrev)}
+                              </td>
+                              <td className="p-3 text-right font-semibold text-emerald-700">
+                                R$ {fmtMoney(recBrutoDesta)}
+                              </td>
+                              <td className="p-3 text-right font-bold text-amber-700">
+                                R$ {fmtMoney(saldoDesta)}
+                              </td>
+                              <td className="p-3 text-center">
+                                <Badge
+                                  className={
+                                    prev.status === 'Recebida' || saldoDesta === 0
+                                      ? 'bg-emerald-600 text-white'
+                                      : prev.status === 'Parcial' || recBrutoDesta > 0
+                                        ? 'bg-blue-600 text-white'
+                                        : prev.status === 'Cancelada'
+                                          ? 'bg-red-500 text-white'
+                                          : 'bg-amber-500 text-white'
+                                  }
+                                >
+                                  {saldoDesta === 0 && vPrev > 0
+                                    ? 'Recebida'
+                                    : recBrutoDesta > 0
+                                      ? 'Parcial'
+                                      : prev.status || 'Pendente'}
+                                </Badge>
+                              </td>
+                              <td className="p-3 text-right">
+                                {targetPolicy && (
+                                  <Button
+                                    size="sm"
+                                    className="bg-emerald-600 hover:bg-emerald-700 text-white text-xs h-7 px-2 shadow-xs"
+                                    onClick={() =>
+                                      handleOpenRegistrarRecebimento(
+                                        targetPolicy,
+                                        prev.competencia,
+                                        prev.id,
+                                        saldoDesta > 0 ? saldoDesta : Number(prev.valor_previsto),
+                                        prev.endorsement,
+                                      )
+                                    }
+                                  >
+                                    <ArrowDownCircle className="w-3.5 h-3.5 mr-1" />
+                                    Receber
+                                  </Button>
+                                )}
+                              </td>
+                            </tr>
+                          )
+                        })
+                      )}
+                    </tbody>
+                  </table>
+                </div>
+
+                {/* Paginação server-side das previsões */}
+                <div className="p-3 border-t flex flex-col sm:flex-row items-center justify-between gap-2 bg-slate-50 text-xs text-slate-600">
+                  <span>
+                    Página {prevPaginatedData.page} de {prevPaginatedData.totalPages} (
+                    {prevPaginatedData.totalItems} previsões no total)
+                  </span>
+                  <div className="flex items-center gap-2">
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      className="h-8 px-2.5 text-xs"
+                      disabled={prevPage <= 1 || prevLoading}
+                      onClick={() => setPrevPage((p) => Math.max(1, p - 1))}
+                    >
+                      Anterior
+                    </Button>
+                    <span className="font-semibold px-1">
+                      {prevPage} / {prevPaginatedData.totalPages || 1}
+                    </span>
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      className="h-8 px-2.5 text-xs"
+                      disabled={prevPage >= prevPaginatedData.totalPages || prevLoading}
+                      onClick={() =>
+                        setPrevPage((p) => Math.min(prevPaginatedData.totalPages, p + 1))
+                      }
+                    >
+                      Próxima
+                    </Button>
+                  </div>
+                </div>
+              </div>
+            ) : (
+              <>
+                <div className="overflow-x-auto">
+                  <table className="w-full text-left text-sm text-slate-700">
+                    <thead className="bg-slate-100 text-slate-600 font-semibold border-b text-xs">
+                      <tr>
+                        <th className="p-3 w-8"></th>
+                        <th className="p-3">Apólice / Cliente</th>
+                        <th className="p-3">Seguradora</th>
+                        <th className="p-3 text-right">Valor Líquido Seguro</th>
+                        <th className="p-3 text-right">Comissão (%)</th>
+                        <th className="p-3 text-right">Comissão Prevista</th>
+                        <th className="p-3 text-right">Já Recebido</th>
+                        <th className="p-3 text-right">Saldo a Receber</th>
+                        <th className="p-3 text-center">Status</th>
+                        <th className="p-3 text-right">Ações</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-slate-100">
+                      {tablePolicies.length === 0 ? (
+                        <tr>
+                          <td colSpan={10} className="text-center p-6 text-slate-500">
+                            Nenhuma apólice encontrada.
+                          </td>
+                        </tr>
+                      ) : (
+                        paginatedCommPolicies.map((p) => {
+                          const hasActiveEndorsement = policiesWithActiveEndorsementInPeriod.has(
+                            p.id,
+                          )
+                          const policyPrevisoes = allComissoesPrevistasList.filter(
+                            (prev) => prev.policy === p.id && prev.status !== 'Cancelada',
+                          )
+                          const isExpanded = expandedPolicyIds.has(p.id)
+
+                          // Fallback padrão se não houver previsões cadastradas
+                          const fallbackPrevisto =
+                            p.commission != null
+                              ? Number(p.commission)
+                              : Math.round(
+                                  (((p.valor_liquido || p.premium_amount || 0) *
+                                    (p.commission_percent || 0)) /
+                                    100) *
+                                    100,
+                                ) / 100
+                          const fallbackPrevistoLiquido = Math.max(
+                            0,
+                            Math.round((fallbackPrevisto - Number(p.iss || 0)) * 100) / 100,
+                          )
+
+                          // 1. Previsto consolidado da apólice:
+                          let previsto = 0
+                          let saldo = 0
+
+                          if (policyPrevisoes.length > 0) {
+                            for (const prev of policyPrevisoes) {
+                              const vPrev = Number(prev.valor_previsto) || 0
+                              previsto = Math.round((previsto + vPrev) * 100) / 100
+
+                              // 2. Saldo: soma dos saldos reconciliados por previsão
+                              const recRes = reconciliacaoMap.get(prev.id)
+                              const s = recRes
+                                ? recRes.saldo
+                                : Math.max(
+                                    0,
+                                    Math.round(
+                                      (vPrev - (recRes ? recRes.valorRecebidoBruto : 0)) * 100,
+                                    ) / 100,
+                                  )
+                              saldo = Math.round((saldo + s) * 100) / 100
+                            }
+                          } else {
+                            previsto = fallbackPrevistoLiquido
+                          }
+
+                          // 3. Já Recebido: conta cada comissao_recebimento UMA única vez
+                          const hasRawGross = receivedGrossByPolicy.has(p.id)
+                          const rawRecBruto = receivedGrossByPolicy.get(p.id) || 0
+                          const recBrutoTotal = hasRawGross
+                            ? rawRecBruto
+                            : p.comissao_recebida
+                              ? previsto
+                              : 0
+
+                          const hasRawNet = receivedNetByPolicy.has(p.id)
+                          const rawRecLiquido = receivedNetByPolicy.get(p.id) || 0
+                          const recLiquidoTotal = hasRawNet
+                            ? rawRecLiquido
+                            : p.comissao_recebida
+                              ? previsto
+                              : 0
+
+                          // Fallback do saldo para quando não há previsões cadastradas
+                          if (policyPrevisoes.length === 0) {
+                            saldo = Math.max(0, Math.round((previsto - recBrutoTotal) * 100) / 100)
+                          }
+
+                          // 4. Status:
+                          const quitada =
+                            saldo <= 0.009 &&
+                            (recBrutoTotal > 0.009 || Boolean(p.comissao_recebida))
+                          const parcial = !quitada && recBrutoTotal > 0.009
+                          const totalBrutoEsperado = Math.max(
+                            previsto + Number(p.iss || 0),
+                            fallbackPrevisto,
+                          )
+                          const acima =
+                            quitada && previsto > 0 && recBrutoTotal > totalBrutoEsperado + 0.01
+                          const policyRecCount = recebimentos.filter(
+                            (r) => r.policy === p.id,
+                          ).length
+                          const clientName = p.expand?.client?.name || 'Cliente não identificado'
+                          const docNumber = p.numero_proposta || p.policy_number || '-'
+                          const segNome = p.expand?.seguradora?.nome || p.insurance_company || '-'
+                          const tipoSeguro = p.tipo_de_seguro || p.coverage_type || '-'
+
+                          // Valor líquido cadastrado do seguro e taxa % cadastrada
+                          const valorLiquidoSeguro =
+                            p.valor_liquido != null && Number(p.valor_liquido) > 0
+                              ? Number(p.valor_liquido)
+                              : p.premium_amount != null && Number(p.premium_amount) > 0
+                                ? Number(p.premium_amount)
+                                : 0
+
+                          const taxaCadastrada =
+                            p.commission_percent != null && Number(p.commission_percent) > 0
+                              ? Number(p.commission_percent)
+                              : valorLiquidoSeguro > 0 && previsto > 0
+                                ? Math.round(
+                                    ((previsto + Number(p.iss || 0)) / valorLiquidoSeguro) *
+                                      100 *
+                                      100,
+                                  ) / 100
+                                : 0
+
+                          return (
+                            <React.Fragment key={p.id}>
+                              {/* LINHA PRINCIPAL ESSENCIAL */}
+                              <tr
+                                className={`hover:bg-slate-50/80 transition-colors cursor-pointer ${
+                                  isExpanded ? 'bg-slate-50/60' : ''
+                                }`}
+                                onClick={() => togglePolicyExpanded(p.id)}
+                              >
+                                <td className="p-3 text-center text-slate-400">
+                                  <button
+                                    type="button"
+                                    className="p-1 hover:text-slate-800 rounded transition-colors"
+                                    onClick={(e) => {
+                                      e.stopPropagation()
+                                      togglePolicyExpanded(p.id)
+                                    }}
+                                    title={isExpanded ? 'Recolher detalhes' : 'Expandir detalhes'}
+                                  >
+                                    {isExpanded ? (
+                                      <ChevronDown className="w-4 h-4 text-blue-600" />
+                                    ) : (
+                                      <ChevronRight className="w-4 h-4" />
+                                    )}
+                                  </button>
+                                </td>
+                                <td className="p-3">
+                                  <div className="flex flex-col">
+                                    <span className="font-bold text-slate-900">{clientName}</span>
+                                    <div className="flex items-center gap-1.5 flex-wrap text-xs text-slate-500">
+                                      <span>Doc: {docNumber}</span>
+                                      {p.policy_number &&
+                                        p.numero_proposta &&
+                                        p.policy_number !== p.numero_proposta && (
+                                          <span className="text-[10px] text-slate-400">
+                                            (Apólice: {p.policy_number})
+                                          </span>
+                                        )}
+                                      {hasActiveEndorsement && (
+                                        <Badge className="bg-blue-600 hover:bg-blue-600 text-white text-[10px] px-1 py-0 font-medium">
+                                          Endosso
+                                        </Badge>
+                                      )}
+                                    </div>
+                                  </div>
+                                </td>
+                                <td className="p-3 font-medium text-slate-800">{segNome}</td>
+                                <td className="p-3 text-right font-medium text-slate-900 whitespace-nowrap">
+                                  {valorLiquidoSeguro > 0
+                                    ? `R$ ${fmtMoney(valorLiquidoSeguro)}`
+                                    : '—'}
+                                </td>
+                                <td className="p-3 text-right font-medium text-slate-700 whitespace-nowrap">
+                                  {taxaCadastrada > 0 ? `${fmtPercent(taxaCadastrada)}%` : '—'}
+                                </td>
+                                <td className="p-3 text-right font-bold text-slate-900 whitespace-nowrap">
+                                  R$ {fmtMoney(previsto)}
+                                </td>
+                                <td className="p-3 text-right">
+                                  <span className="font-semibold text-emerald-700 block">
+                                    R$ {fmtMoney(recBrutoTotal)}
+                                  </span>
+                                  {recLiquidoTotal > 0 && (
+                                    <span
+                                      className="text-[11px] text-blue-600 block"
+                                      title="Receita líquida creditada"
+                                    >
+                                      Líq: R$ {fmtMoney(recLiquidoTotal)}
+                                    </span>
+                                  )}
+                                </td>
+                                <td className="p-3 text-right font-bold text-amber-700">
+                                  R$ {fmtMoney(saldo)}
+                                </td>
+                                <td className="p-3 text-center">
+                                  {quitada ? (
+                                    <Badge className="bg-emerald-600 hover:bg-emerald-600 text-white font-medium">
+                                      {acima ? 'Recebida (Acima)' : 'Recebida'}
+                                    </Badge>
+                                  ) : parcial ? (
+                                    <Badge className="bg-blue-600 hover:bg-blue-600 text-white font-medium">
+                                      Parcial
+                                    </Badge>
+                                  ) : (
+                                    <Badge className="bg-amber-500 hover:bg-amber-500 text-white font-medium">
+                                      Pendente
+                                    </Badge>
+                                  )}
+                                </td>
+                                <td className="p-3 text-right" onClick={(e) => e.stopPropagation()}>
+                                  <div className="flex items-center justify-end gap-1">
+                                    {can('policies', 'update') && (
+                                      <Button
+                                        size="sm"
+                                        className={
+                                          quitada
+                                            ? 'bg-slate-100 hover:bg-slate-200 text-slate-700 border text-xs h-8 px-2'
+                                            : 'bg-emerald-600 hover:bg-emerald-700 text-white text-xs h-8 px-2 shadow-xs'
+                                        }
+                                        title="Registrar recebimento de comissão"
+                                        onClick={() => {
+                                          // Se houver previsão de endosso pendente no período, priorizar preenchimento
+                                          if (hasActiveEndorsement) {
+                                            const activeEndorsementPrev =
+                                              allComissoesPrevistasList.find((prev) => {
+                                                if (
+                                                  prev.policy !== p.id ||
+                                                  !prev.endorsement ||
+                                                  prev.status === 'Cancelada'
+                                                )
+                                                  return false
+                                                if (
+                                                  !isCompetenciaInPeriod(
+                                                    period,
+                                                    prev.competencia,
+                                                    prev.data_prevista,
+                                                  )
+                                                )
+                                                  return false
+                                                const recRes = reconciliacaoMap.get(prev.id)
+                                                const s = recRes
+                                                  ? recRes.saldo
+                                                  : Number(prev.valor_previsto) || 0
+                                                return s > 0.009
+                                              })
+                                            if (activeEndorsementPrev) {
+                                              const recRes = reconciliacaoMap.get(
+                                                activeEndorsementPrev.id,
+                                              )
+                                              const s = recRes
+                                                ? recRes.saldo
+                                                : Number(activeEndorsementPrev.valor_previsto) || 0
+                                              handleOpenRegistrarRecebimento(
+                                                p,
+                                                activeEndorsementPrev.competencia,
+                                                activeEndorsementPrev.id,
+                                                s,
+                                                activeEndorsementPrev.endorsement,
+                                              )
+                                              return
+                                            }
+                                          }
+                                          handleOpenRegistrarRecebimento(p)
+                                        }}
+                                      >
+                                        <ArrowDownCircle className="w-3.5 h-3.5 mr-1" />
+                                        Registrar
+                                      </Button>
+                                    )}
+                                    {policyRecCount > 0 && (
+                                      <Button
+                                        size="sm"
+                                        variant="ghost"
+                                        className="text-slate-600 hover:text-slate-900 h-8 px-2"
+                                        title={`Ver/Editar histórico de recebimentos (${policyRecCount})`}
+                                        onClick={() => setHistoryPolicy(p)}
+                                      >
+                                        <History className="w-3.5 h-3.5 mr-1" />
+                                        <span className="text-xs">{policyRecCount}</span>
+                                      </Button>
+                                    )}
+                                    {can('policies', 'update') && (
+                                      <Button
+                                        size="sm"
+                                        variant="ghost"
+                                        title="Editar Repasse Parceiro"
+                                        onClick={() => setEditPolicy(p)}
+                                      >
+                                        <Edit2 className="w-3.5 h-3.5" />
+                                      </Button>
+                                    )}
+                                  </div>
+                                </td>
+                              </tr>
+
+                              {/* LINHA EXPANSÍVEL: DETALHAMENTO COMPLETO (PARCELAS, IMPOSTOS, DATAS, PRÊMIO, REPASSE) */}
+                              {isExpanded && (
+                                <tr className="bg-slate-50/90 border-b border-slate-200">
+                                  <td colSpan={10} className="p-4 pl-11">
+                                    <div className="space-y-3 text-xs text-slate-700">
+                                      {/* Grid de Detalhes Cadastrais e Financeiros */}
+                                      <div className="grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-6 gap-3 p-3 bg-white rounded-md border border-slate-200/80">
+                                        <div>
+                                          <span className="text-[11px] text-slate-500 block">
+                                            Ramo / Tipo
+                                          </span>
+                                          <strong className="text-slate-800 font-medium">
+                                            {tipoSeguro}
+                                          </strong>
+                                        </div>
+                                        <div>
+                                          <span className="text-[11px] text-slate-500 block">
+                                            Prêmio Líquido
+                                          </span>
+                                          <strong className="text-slate-800 font-medium">
+                                            R$ {fmtMoney(p.valor_liquido || p.premium_amount || 0)}
+                                          </strong>
+                                        </div>
+                                        <div>
+                                          <span className="text-[11px] text-slate-500 block">
+                                            % Comissão
+                                          </span>
+                                          <strong className="text-slate-800 font-medium">
+                                            {p.commission_percent || 0}%
+                                          </strong>
+                                        </div>
+                                        <div>
+                                          <span className="text-[11px] text-slate-500 block">
+                                            ISS / Deduções
+                                          </span>
+                                          <strong className="text-slate-800 font-medium">
+                                            R$ {fmtMoney(Number(p.iss || 0))}
+                                          </strong>
+                                        </div>
+                                        <div>
+                                          <span className="text-[11px] text-slate-500 block">
+                                            Início de Vigência
+                                          </span>
+                                          <strong className="text-slate-800 font-medium">
+                                            {formatDateDisplay(p.start_date) || '-'}
+                                          </strong>
+                                        </div>
+                                        <div>
+                                          <span className="text-[11px] text-slate-500 block">
+                                            Fim de Vigência
+                                          </span>
+                                          <strong className="text-slate-800 font-medium">
+                                            {formatDateDisplay(p.end_date) || '-'}
+                                          </strong>
+                                        </div>
+                                        {p.tipo_de_venda === 'Parceiro' && (
+                                          <>
+                                            <div>
+                                              <span className="text-[11px] text-slate-500 block">
+                                                Parceiro
+                                              </span>
+                                              <strong className="text-blue-700 font-medium">
+                                                {p.expand?.parceiro?.nome || '-'}
+                                              </strong>
+                                            </div>
+                                            <div>
+                                              <span className="text-[11px] text-slate-500 block">
+                                                Repasse (R$)
+                                              </span>
+                                              <strong className="text-blue-700 font-medium">
+                                                R$ {fmtMoney(p.valor_repasse || 0)}
+                                              </strong>
+                                            </div>
+                                          </>
+                                        )}
+                                      </div>
+
+                                      {/* Subtabela de Parcelas / Previsões / Competências Vinculadas */}
+                                      {policyPrevisoes.length > 0 && (
+                                        <div className="border rounded-md overflow-hidden bg-white">
+                                          <div className="bg-slate-100/90 px-3 py-1.5 font-semibold text-slate-700 text-[11px] border-b flex items-center justify-between">
+                                            <span>
+                                              Previsões / Parcelas Cadastradas (
+                                              {policyPrevisoes.length})
+                                            </span>
+                                            <span className="text-[10px] text-slate-500 font-normal">
+                                              Reconciliação direta por parcela
+                                            </span>
+                                          </div>
+                                          <table className="w-full text-left text-xs text-slate-700">
+                                            <thead className="bg-slate-50 border-b text-[11px] text-slate-500">
+                                              <tr>
+                                                <th className="p-2">Parcela / Origem</th>
+                                                <th className="p-2">Competência</th>
+                                                <th className="p-2">Data Prevista</th>
+                                                <th className="p-2 text-right">Valor Previsto</th>
+                                                <th className="p-2 text-right">Valor Recebido</th>
+                                                <th className="p-2 text-right">Saldo</th>
+                                                <th className="p-2 text-center">Status</th>
+                                                <th className="p-2 text-right">Ação</th>
+                                              </tr>
+                                            </thead>
+                                            <tbody className="divide-y divide-slate-100">
+                                              {policyPrevisoes.map((prev) => {
+                                                const recRes = reconciliacaoMap.get(prev.id)
+                                                const vPrev = Number(prev.valor_previsto) || 0
+                                                const rBruto = recRes
+                                                  ? recRes.valorRecebidoBruto
+                                                  : 0
+                                                const sParc = recRes
+                                                  ? recRes.saldo
+                                                  : Math.max(
+                                                      0,
+                                                      Math.round((vPrev - rBruto) * 100) / 100,
+                                                    )
+                                                const isQuitadaParc = sParc <= 0.009
+
+                                                return (
+                                                  <tr
+                                                    key={prev.id}
+                                                    className="hover:bg-slate-50/60"
+                                                  >
+                                                    <td className="p-2 font-medium">
+                                                      {prev.endorsement ? (
+                                                        <Badge
+                                                          variant="outline"
+                                                          className="text-[10px] px-1 py-0 border-blue-200 bg-blue-50 text-blue-700 mr-1"
+                                                        >
+                                                          Endosso
+                                                        </Badge>
+                                                      ) : (
+                                                        <span className="text-slate-600">
+                                                          Parcela {prev.parcela_numero || 1}
+                                                        </span>
+                                                      )}
+                                                    </td>
+                                                    <td className="p-2 font-bold text-slate-800">
+                                                      {prev.competencia || '-'}
+                                                    </td>
+                                                    <td className="p-2 text-slate-600">
+                                                      {formatDateDisplay(prev.data_prevista) || '-'}
+                                                    </td>
+                                                    <td className="p-2 text-right font-medium">
+                                                      R$ {fmtMoney(vPrev)}
+                                                    </td>
+                                                    <td className="p-2 text-right font-semibold text-emerald-700">
+                                                      R$ {fmtMoney(rBruto)}
+                                                    </td>
+                                                    <td className="p-2 text-right font-bold text-amber-700">
+                                                      R$ {fmtMoney(sParc)}
+                                                    </td>
+                                                    <td className="p-2 text-center">
+                                                      <Badge
+                                                        className={`text-[10px] px-1.5 py-0 ${
+                                                          isQuitadaParc
+                                                            ? 'bg-emerald-600 text-white'
+                                                            : rBruto > 0
+                                                              ? 'bg-blue-600 text-white'
+                                                              : 'bg-amber-500 text-white'
+                                                        }`}
+                                                      >
+                                                        {isQuitadaParc
+                                                          ? 'Recebida'
+                                                          : rBruto > 0
+                                                            ? 'Parcial'
+                                                            : 'Pendente'}
+                                                      </Badge>
+                                                    </td>
+                                                    <td className="p-2 text-right">
+                                                      {!isQuitadaParc && (
+                                                        <Button
+                                                          size="sm"
+                                                          className="h-6 text-[11px] px-2 bg-emerald-600 hover:bg-emerald-700 text-white"
+                                                          onClick={() =>
+                                                            handleOpenRegistrarRecebimento(
+                                                              p,
+                                                              prev.competencia,
+                                                              prev.id,
+                                                              sParc > 0 ? sParc : vPrev,
+                                                              prev.endorsement,
+                                                            )
+                                                          }
+                                                        >
+                                                          Baixar
+                                                        </Button>
+                                                      )}
+                                                    </td>
+                                                  </tr>
+                                                )
+                                              })}
+                                            </tbody>
+                                          </table>
+                                        </div>
+                                      )}
+                                    </div>
+                                  </td>
+                                </tr>
+                              )}
+                            </React.Fragment>
+                          )
+                        })
+                      )}
+                    </tbody>
+                  </table>
+                </div>
+                <div className="p-3 border-t flex flex-col sm:flex-row items-center justify-between gap-2 bg-slate-50 text-xs text-slate-600">
+                  <span>
+                    Exibindo {tablePolicies.length === 0 ? 0 : (commPage - 1) * ITEMS_PER_PAGE + 1}{' '}
+                    a {Math.min(commPage * ITEMS_PER_PAGE, tablePolicies.length)} de{' '}
+                    {tablePolicies.length} registros
+                  </span>
+                  <div className="flex items-center gap-2">
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      className="h-8 px-2.5 text-xs"
+                      disabled={commPage <= 1}
+                      onClick={() => setCommPage((p) => Math.max(1, p - 1))}
+                    >
+                      Anterior
+                    </Button>
+                    <span className="font-semibold px-1">
+                      Página {commPage} de {totalCommPages}
+                    </span>
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      className="h-8 px-2.5 text-xs"
+                      disabled={commPage >= totalCommPages}
+                      onClick={() => setCommPage((p) => Math.min(totalCommPages, p + 1))}
+                    >
+                      Próxima
+                    </Button>
+                  </div>
+                </div>
+              </>
+            )}
+          </Card>
+        </div>
+      </AbaContainer>
+
+      {/* ABA 3: REPASSES */}
+      <AbaContainer active={activeTab === 'repasses'}>
+        <div className="space-y-6">
+          <Card className="shadow-sm overflow-hidden border">
+            <CardHeader className="flex flex-row items-center justify-between pb-3">
+              <div>
+                <CardTitle className="text-base font-bold">Repasses de Parceiros</CardTitle>
+                <p className="text-xs text-slate-500 mt-0.5">
+                  Acompanhe as comissões devidas aos parceiros e gerencie repasses e fechamentos.
+                </p>
+              </div>
               <Button
                 variant="outline"
                 size="sm"
-                className="h-8 text-xs px-2.5"
-                onClick={() => {
-                  setPrevStatusFilter('ALL')
-                  setPrevSeguradoraFilter('ALL')
-                  setPrevProdutoFilter('ALL')
-                  setPrevPage(1)
-                }}
+                className="text-xs text-slate-700 hover:text-blue-600 h-8"
+                onClick={() => navigate('/relatorio-comissoes')}
               >
-                Limpar
+                Abrir Relatório & Histórico de Fechamentos
               </Button>
-            </div>
-
-            {/* Tabela de Previsões por Competência (ITEM 7) */}
+            </CardHeader>
             <div className="overflow-x-auto">
-              <table className="w-full text-left text-xs text-slate-700">
+              <table className="w-full text-left text-sm text-slate-700">
                 <thead className="bg-slate-100 text-slate-600 font-semibold border-b">
                   <tr>
-                    <th className="p-3">Origem</th>
+                    <th className="p-3">Proposta</th>
                     <th className="p-3">Cliente</th>
-                    <th className="p-3">Seguradora</th>
-                    <th className="p-3">Produto</th>
-                    <th className="p-3">Competência</th>
-                    <th className="p-3 text-right">Previsto</th>
-                    <th className="p-3 text-right">Recebido</th>
-                    <th className="p-3 text-right">Saldo</th>
-                    <th className="p-3 text-center">Situação</th>
-                    <th className="p-3 text-right">Ação</th>
+                    <th className="p-3">Parceiro</th>
+                    <th className="p-3 text-right">Líquido</th>
+                    <th className="p-3 text-right">Repasse (R$)</th>
+                    <th className="p-3 text-right">Repasse (%)</th>
+                    <th className="p-3 text-center">Pago</th>
+                    <th className="p-3">Data Pagto</th>
+                    <th className="p-3">Forma</th>
+                    <th className="p-3 text-right">Ações</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-slate-100">
-                  {prevLoading ? (
+                  {metrics.partnerPols.length === 0 ? (
                     <tr>
-                      <td colSpan={10} className="text-center p-8 text-slate-500">
-                        Carregando previsões...
-                      </td>
-                    </tr>
-                  ) : prevPaginatedData.items.length === 0 ? (
-                    <tr>
-                      <td colSpan={10} className="text-center p-8 text-slate-500">
-                        Nenhuma comissão prevista encontrada para os filtros selecionados.
+                      <td colSpan={10} className="text-center p-6 text-slate-500">
+                        Nenhuma proposta/apólice de parceiro encontrada.
                       </td>
                     </tr>
                   ) : (
-                    prevPaginatedData.items.map((prev) => {
-                      // Usar o resultado da reconciliação unificada ou calcular diretamente
-                      const recsDesta = recebimentos.filter((r) => {
-                        if (r.comissao_prevista === prev.id) return true
-                        if (r.policy === prev.policy) {
-                          const cRec =
-                            r.competencia?.trim() ||
-                            inferirCompetenciaRecebimento(r.data_recebimento)
-                          const cPrev = prev.competencia?.trim()
-                          return Boolean(cRec && cPrev && cRec === cPrev)
-                        }
-                        return false
-                      })
-                      const recBrutoDesta =
-                        Math.round(
-                          recsDesta.reduce((acc, r) => acc + (Number(r.valor_bruto) || 0), 0) * 100,
-                        ) / 100
-                      const vPrev = Number(prev.valor_previsto) || 0
-                      const saldoDesta = Math.max(
-                        0,
-                        Math.round((vPrev - recBrutoDesta) * 100) / 100,
-                      )
-                      const targetPolicy =
-                        (prev as any).expand?.policy ||
-                        allPolicies.find((p) => p.id === prev.policy)
-
-                      const clientName =
-                        (prev as any).expand?.policy?.expand?.client?.name ||
-                        targetPolicy?.expand?.client?.name ||
-                        '-'
-                      const segNome =
-                        (prev as any).expand?.policy?.expand?.seguradora?.nome ||
-                        targetPolicy?.expand?.seguradora?.nome ||
-                        targetPolicy?.insurance_company ||
-                        '-'
-                      const prodNome =
-                        (prev as any).expand?.policy?.expand?.produto?.nome ||
-                        targetPolicy?.expand?.produto?.nome ||
-                        targetPolicy?.tipo_de_seguro ||
-                        '-'
+                    paginatedPartnerPols.map((p) => {
+                      const valorLiquido = Number(p.valor_liquido || p.premium_amount || 0)
+                      const valorRepasse = Number(p.valor_repasse || 0)
+                      const pctGravado =
+                        p.percentual_repasse != null && Number(p.percentual_repasse) > 0
+                          ? Number(p.percentual_repasse)
+                          : null
+                      const pctCalculado =
+                        pctGravado != null
+                          ? pctGravado
+                          : valorLiquido > 0 && valorRepasse > 0
+                            ? Math.round((valorRepasse / valorLiquido) * 100 * 10) / 10
+                            : null
 
                       return (
-                        <tr key={prev.id} className="hover:bg-slate-50/80">
-                          <td className="p-3">
-                            {prev.endorsement ? (
-                              <Badge
-                                variant="outline"
-                                className="text-[10px] bg-blue-50 text-blue-700 border-blue-200"
-                              >
-                                Endosso
-                              </Badge>
-                            ) : (
-                              <Badge
-                                variant="outline"
-                                className="text-[10px] bg-slate-50 text-slate-700 border-slate-200"
-                              >
-                                Apólice
-                              </Badge>
-                            )}
+                        <tr key={p.id} className="hover:bg-slate-50/80">
+                          <td
+                            className="p-3 font-bold text-slate-900"
+                            title={p.policy_number ? `Apólice: ${p.policy_number}` : undefined}
+                          >
+                            <div className="flex flex-col">
+                              <span>{p.numero_proposta || p.policy_number || '-'}</span>
+                              {p.policy_number &&
+                                p.numero_proposta &&
+                                p.policy_number !== p.numero_proposta && (
+                                  <span className="text-[10px] text-slate-400 font-normal">
+                                    Apólice: {p.policy_number}
+                                  </span>
+                                )}
+                            </div>
+                          </td>{' '}
+                          <td className="p-3">{p.expand?.client?.name || '-'}</td>
+                          <td className="p-3">{p.expand?.parceiro?.nome || '-'}</td>
+                          <td className="p-3 text-right font-bold">R$ {fmtMoney(valorLiquido)}</td>
+                          <td className="p-3 text-right font-bold text-blue-600">
+                            R$ {fmtMoney(valorRepasse)}
                           </td>
-                          <td className="p-3 font-semibold text-slate-900">{clientName}</td>
-                          <td className="p-3">{segNome}</td>
-                          <td className="p-3">{prodNome}</td>
-                          <td className="p-3 font-bold text-slate-800">
-                            {prev.competencia || `Parc. ${prev.parcela_numero}`}
-                          </td>
-                          <td className="p-3 text-right font-medium text-slate-900">
-                            R$ {fmtMoney(vPrev)}
-                          </td>
-                          <td className="p-3 text-right font-semibold text-emerald-700">
-                            R$ {fmtMoney(recBrutoDesta)}
-                          </td>
-                          <td className="p-3 text-right font-bold text-amber-700">
-                            R$ {fmtMoney(saldoDesta)}
+                          <td className="p-3 text-right font-medium text-slate-700 whitespace-nowrap">
+                            {pctCalculado != null ? `${fmtPercent(pctCalculado)}%` : '—'}
                           </td>
                           <td className="p-3 text-center">
-                            <Badge
-                              className={
-                                prev.status === 'Recebida' || saldoDesta === 0
-                                  ? 'bg-emerald-600 text-white'
-                                  : prev.status === 'Parcial' || recBrutoDesta > 0
-                                    ? 'bg-blue-600 text-white'
-                                    : prev.status === 'Cancelada'
-                                      ? 'bg-red-500 text-white'
-                                      : 'bg-amber-500 text-white'
-                              }
-                            >
-                              {saldoDesta === 0 && vPrev > 0
-                                ? 'Recebida'
-                                : recBrutoDesta > 0
-                                  ? 'Parcial'
-                                  : prev.status || 'Pendente'}
+                            <Badge className={p.pago_parceiro ? 'bg-emerald-500' : 'bg-amber-500'}>
+                              {p.pago_parceiro ? 'Pago' : 'Pendente'}
                             </Badge>
                           </td>
+                          <td className="p-3 text-xs">
+                            {formatDateDisplay(p.data_pagamento_parceiro)}
+                          </td>
+                          <td className="p-3 text-xs">{p.forma_pagamento_repasse || '-'}</td>
                           <td className="p-3 text-right">
-                            {targetPolicy && (
-                              <Button
-                                size="sm"
-                                className="bg-emerald-600 hover:bg-emerald-700 text-white text-xs h-7 px-2 shadow-xs"
-                                onClick={() =>
-                                  handleOpenRegistrarRecebimento(
-                                    targetPolicy,
-                                    prev.competencia,
-                                    prev.id,
-                                    saldoDesta > 0 ? saldoDesta : Number(prev.valor_previsto),
-                                    prev.endorsement,
-                                  )
-                                }
-                              >
-                                <ArrowDownCircle className="w-3.5 h-3.5 mr-1" />
-                                Receber
-                              </Button>
-                            )}
+                            <div className="flex items-center justify-end gap-1">
+                              {can('policies', 'update') && !p.pago_parceiro && (
+                                <Button
+                                  size="sm"
+                                  variant="ghost"
+                                  className="text-emerald-600"
+                                  title="Pagar Repasse"
+                                  onClick={() => handleQuickPayRepasse(p.id)}
+                                >
+                                  <Check className="w-4 h-4" />
+                                </Button>
+                              )}
+                              {can('policies', 'update') && (
+                                <Button size="sm" variant="ghost" onClick={() => setEditPolicy(p)}>
+                                  <Edit2 className="w-3.5 h-3.5" />
+                                </Button>
+                              )}
+                            </div>
                           </td>
                         </tr>
                       )
@@ -2125,885 +2914,211 @@ export default function Financial() {
                 </tbody>
               </table>
             </div>
-
-            {/* Paginação server-side das previsões */}
             <div className="p-3 border-t flex flex-col sm:flex-row items-center justify-between gap-2 bg-slate-50 text-xs text-slate-600">
               <span>
-                Página {prevPaginatedData.page} de {prevPaginatedData.totalPages} (
-                {prevPaginatedData.totalItems} previsões no total)
+                Exibindo{' '}
+                {metrics.partnerPols.length === 0 ? 0 : (repassePage - 1) * ITEMS_PER_PAGE + 1} a{' '}
+                {Math.min(repassePage * ITEMS_PER_PAGE, metrics.partnerPols.length)} de{' '}
+                {metrics.partnerPols.length} registros
               </span>
               <div className="flex items-center gap-2">
                 <Button
                   variant="outline"
                   size="sm"
                   className="h-8 px-2.5 text-xs"
-                  disabled={prevPage <= 1 || prevLoading}
-                  onClick={() => setPrevPage((p) => Math.max(1, p - 1))}
+                  disabled={repassePage <= 1}
+                  onClick={() => setRepassePage((p) => Math.max(1, p - 1))}
                 >
                   Anterior
                 </Button>
                 <span className="font-semibold px-1">
-                  {prevPage} / {prevPaginatedData.totalPages || 1}
+                  Página {repassePage} de {totalRepassePages}
                 </span>
                 <Button
                   variant="outline"
                   size="sm"
                   className="h-8 px-2.5 text-xs"
-                  disabled={prevPage >= prevPaginatedData.totalPages || prevLoading}
-                  onClick={() => setPrevPage((p) => Math.min(prevPaginatedData.totalPages, p + 1))}
+                  disabled={repassePage >= totalRepassePages}
+                  onClick={() => setRepassePage((p) => Math.min(totalRepassePages, p + 1))}
                 >
                   Próxima
                 </Button>
               </div>
             </div>
-          </div>
-        ) : (
-          <>
-            <div className="overflow-x-auto">
-              <table className="w-full text-left text-sm text-slate-700">
-                <thead className="bg-slate-100 text-slate-600 font-semibold border-b text-xs">
-                  <tr>
-                    <th className="p-3 w-8"></th>
-                    <th className="p-3">Apólice / Cliente</th>
-                    <th className="p-3">Seguradora</th>
-                    <th className="p-3 text-right">Valor Líquido Seguro</th>
-                    <th className="p-3 text-right">Comissão (%)</th>
-                    <th className="p-3 text-right">Comissão Prevista</th>
-                    <th className="p-3 text-right">Já Recebido</th>
-                    <th className="p-3 text-right">Saldo a Receber</th>
-                    <th className="p-3 text-center">Status</th>
-                    <th className="p-3 text-right">Ações</th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-slate-100">
-                  {tablePolicies.length === 0 ? (
-                    <tr>
-                      <td colSpan={10} className="text-center p-6 text-slate-500">
-                        Nenhuma apólice encontrada.
-                      </td>
-                    </tr>
-                  ) : (
-                    paginatedCommPolicies.map((p) => {
-                      const hasActiveEndorsement = policiesWithActiveEndorsementInPeriod.has(p.id)
-                      const policyPrevisoes = allComissoesPrevistasList.filter(
-                        (prev) => prev.policy === p.id && prev.status !== 'Cancelada',
-                      )
-                      const isExpanded = expandedPolicyIds.has(p.id)
+          </Card>
 
-                      // Fallback padrão se não houver previsões cadastradas
-                      const fallbackPrevisto =
-                        p.commission != null
-                          ? Number(p.commission)
-                          : Math.round(
-                              (((p.valor_liquido || p.premium_amount || 0) *
-                                (p.commission_percent || 0)) /
-                                100) *
-                                100,
-                            ) / 100
-                      const fallbackPrevistoLiquido = Math.max(
-                        0,
-                        Math.round((fallbackPrevisto - Number(p.iss || 0)) * 100) / 100,
-                      )
-
-                      // 1. Previsto consolidado da apólice:
-                      let previsto = 0
-                      let saldo = 0
-
-                      if (policyPrevisoes.length > 0) {
-                        for (const prev of policyPrevisoes) {
-                          const vPrev = Number(prev.valor_previsto) || 0
-                          previsto = Math.round((previsto + vPrev) * 100) / 100
-
-                          // 2. Saldo: soma dos saldos reconciliados por previsão
-                          const recRes = reconciliacaoMap.get(prev.id)
-                          const s = recRes
-                            ? recRes.saldo
-                            : Math.max(
-                                0,
-                                Math.round(
-                                  (vPrev - (recRes ? recRes.valorRecebidoBruto : 0)) * 100,
-                                ) / 100,
-                              )
-                          saldo = Math.round((saldo + s) * 100) / 100
-                        }
-                      } else {
-                        previsto = fallbackPrevistoLiquido
-                      }
-
-                      // 3. Já Recebido: conta cada comissao_recebimento UMA única vez
-                      const hasRawGross = receivedGrossByPolicy.has(p.id)
-                      const rawRecBruto = receivedGrossByPolicy.get(p.id) || 0
-                      const recBrutoTotal = hasRawGross
-                        ? rawRecBruto
-                        : p.comissao_recebida
-                          ? previsto
-                          : 0
-
-                      const hasRawNet = receivedNetByPolicy.has(p.id)
-                      const rawRecLiquido = receivedNetByPolicy.get(p.id) || 0
-                      const recLiquidoTotal = hasRawNet
-                        ? rawRecLiquido
-                        : p.comissao_recebida
-                          ? previsto
-                          : 0
-
-                      // Fallback do saldo para quando não há previsões cadastradas
-                      if (policyPrevisoes.length === 0) {
-                        saldo = Math.max(0, Math.round((previsto - recBrutoTotal) * 100) / 100)
-                      }
-
-                      // 4. Status:
-                      const quitada =
-                        saldo <= 0.009 && (recBrutoTotal > 0.009 || Boolean(p.comissao_recebida))
-                      const parcial = !quitada && recBrutoTotal > 0.009
-                      const totalBrutoEsperado = Math.max(
-                        previsto + Number(p.iss || 0),
-                        fallbackPrevisto,
-                      )
-                      const acima =
-                        quitada && previsto > 0 && recBrutoTotal > totalBrutoEsperado + 0.01
-                      const policyRecCount = recebimentos.filter((r) => r.policy === p.id).length
-                      const clientName = p.expand?.client?.name || 'Cliente não identificado'
-                      const docNumber = p.numero_proposta || p.policy_number || '-'
-                      const segNome = p.expand?.seguradora?.nome || p.insurance_company || '-'
-                      const tipoSeguro = p.tipo_de_seguro || p.coverage_type || '-'
-
-                      // Valor líquido cadastrado do seguro e taxa % cadastrada
-                      const valorLiquidoSeguro =
-                        p.valor_liquido != null && Number(p.valor_liquido) > 0
-                          ? Number(p.valor_liquido)
-                          : p.premium_amount != null && Number(p.premium_amount) > 0
-                            ? Number(p.premium_amount)
-                            : 0
-
-                      const taxaCadastrada =
-                        p.commission_percent != null && Number(p.commission_percent) > 0
-                          ? Number(p.commission_percent)
-                          : valorLiquidoSeguro > 0 && previsto > 0
-                            ? Math.round(
-                                ((previsto + Number(p.iss || 0)) / valorLiquidoSeguro) * 100 * 100,
-                              ) / 100
-                            : 0
-
-                      return (
-                        <React.Fragment key={p.id}>
-                          {/* LINHA PRINCIPAL ESSENCIAL */}
-                          <tr
-                            className={`hover:bg-slate-50/80 transition-colors cursor-pointer ${
-                              isExpanded ? 'bg-slate-50/60' : ''
-                            }`}
-                            onClick={() => togglePolicyExpanded(p.id)}
-                          >
-                            <td className="p-3 text-center text-slate-400">
-                              <button
-                                type="button"
-                                className="p-1 hover:text-slate-800 rounded transition-colors"
-                                onClick={(e) => {
-                                  e.stopPropagation()
-                                  togglePolicyExpanded(p.id)
-                                }}
-                                title={isExpanded ? 'Recolher detalhes' : 'Expandir detalhes'}
-                              >
-                                {isExpanded ? (
-                                  <ChevronDown className="w-4 h-4 text-blue-600" />
-                                ) : (
-                                  <ChevronRight className="w-4 h-4" />
-                                )}
-                              </button>
-                            </td>
-                            <td className="p-3">
-                              <div className="flex flex-col">
-                                <span className="font-bold text-slate-900">{clientName}</span>
-                                <div className="flex items-center gap-1.5 flex-wrap text-xs text-slate-500">
-                                  <span>Doc: {docNumber}</span>
-                                  {p.policy_number &&
-                                    p.numero_proposta &&
-                                    p.policy_number !== p.numero_proposta && (
-                                      <span className="text-[10px] text-slate-400">
-                                        (Apólice: {p.policy_number})
-                                      </span>
-                                    )}
-                                  {hasActiveEndorsement && (
-                                    <Badge className="bg-blue-600 hover:bg-blue-600 text-white text-[10px] px-1 py-0 font-medium">
-                                      Endosso
-                                    </Badge>
-                                  )}
-                                </div>
-                              </div>
-                            </td>
-                            <td className="p-3 font-medium text-slate-800">{segNome}</td>
-                            <td className="p-3 text-right font-medium text-slate-900 whitespace-nowrap">
-                              {valorLiquidoSeguro > 0 ? `R$ ${fmtMoney(valorLiquidoSeguro)}` : '—'}
-                            </td>
-                            <td className="p-3 text-right font-medium text-slate-700 whitespace-nowrap">
-                              {taxaCadastrada > 0 ? `${fmtPercent(taxaCadastrada)}%` : '—'}
-                            </td>
-                            <td className="p-3 text-right font-bold text-slate-900 whitespace-nowrap">
-                              R$ {fmtMoney(previsto)}
-                            </td>
-                            <td className="p-3 text-right">
-                              <span className="font-semibold text-emerald-700 block">
-                                R$ {fmtMoney(recBrutoTotal)}
-                              </span>
-                              {recLiquidoTotal > 0 && (
-                                <span
-                                  className="text-[11px] text-blue-600 block"
-                                  title="Receita líquida creditada"
-                                >
-                                  Líq: R$ {fmtMoney(recLiquidoTotal)}
-                                </span>
-                              )}
-                            </td>
-                            <td className="p-3 text-right font-bold text-amber-700">
-                              R$ {fmtMoney(saldo)}
-                            </td>
-                            <td className="p-3 text-center">
-                              {quitada ? (
-                                <Badge className="bg-emerald-600 hover:bg-emerald-600 text-white font-medium">
-                                  {acima ? 'Recebida (Acima)' : 'Recebida'}
-                                </Badge>
-                              ) : parcial ? (
-                                <Badge className="bg-blue-600 hover:bg-blue-600 text-white font-medium">
-                                  Parcial
-                                </Badge>
-                              ) : (
-                                <Badge className="bg-amber-500 hover:bg-amber-500 text-white font-medium">
-                                  Pendente
-                                </Badge>
-                              )}
-                            </td>
-                            <td className="p-3 text-right" onClick={(e) => e.stopPropagation()}>
-                              <div className="flex items-center justify-end gap-1">
-                                {can('policies', 'update') && (
-                                  <Button
-                                    size="sm"
-                                    className={
-                                      quitada
-                                        ? 'bg-slate-100 hover:bg-slate-200 text-slate-700 border text-xs h-8 px-2'
-                                        : 'bg-emerald-600 hover:bg-emerald-700 text-white text-xs h-8 px-2 shadow-xs'
-                                    }
-                                    title="Registrar recebimento de comissão"
-                                    onClick={() => {
-                                      // Se houver previsão de endosso pendente no período, priorizar preenchimento
-                                      if (hasActiveEndorsement) {
-                                        const activeEndorsementPrev =
-                                          allComissoesPrevistasList.find((prev) => {
-                                            if (
-                                              prev.policy !== p.id ||
-                                              !prev.endorsement ||
-                                              prev.status === 'Cancelada'
-                                            )
-                                              return false
-                                            if (
-                                              !isCompetenciaInPeriod(
-                                                period,
-                                                prev.competencia,
-                                                prev.data_prevista,
-                                              )
-                                            )
-                                              return false
-                                            const recRes = reconciliacaoMap.get(prev.id)
-                                            const s = recRes
-                                              ? recRes.saldo
-                                              : Number(prev.valor_previsto) || 0
-                                            return s > 0.009
-                                          })
-                                        if (activeEndorsementPrev) {
-                                          const recRes = reconciliacaoMap.get(
-                                            activeEndorsementPrev.id,
-                                          )
-                                          const s = recRes
-                                            ? recRes.saldo
-                                            : Number(activeEndorsementPrev.valor_previsto) || 0
-                                          handleOpenRegistrarRecebimento(
-                                            p,
-                                            activeEndorsementPrev.competencia,
-                                            activeEndorsementPrev.id,
-                                            s,
-                                            activeEndorsementPrev.endorsement,
-                                          )
-                                          return
-                                        }
-                                      }
-                                      handleOpenRegistrarRecebimento(p)
-                                    }}
-                                  >
-                                    <ArrowDownCircle className="w-3.5 h-3.5 mr-1" />
-                                    Registrar
-                                  </Button>
-                                )}
-                                {policyRecCount > 0 && (
-                                  <Button
-                                    size="sm"
-                                    variant="ghost"
-                                    className="text-slate-600 hover:text-slate-900 h-8 px-2"
-                                    title={`Ver/Editar histórico de recebimentos (${policyRecCount})`}
-                                    onClick={() => setHistoryPolicy(p)}
-                                  >
-                                    <History className="w-3.5 h-3.5 mr-1" />
-                                    <span className="text-xs">{policyRecCount}</span>
-                                  </Button>
-                                )}
-                                {can('policies', 'update') && (
-                                  <Button
-                                    size="sm"
-                                    variant="ghost"
-                                    title="Editar Repasse Parceiro"
-                                    onClick={() => setEditPolicy(p)}
-                                  >
-                                    <Edit2 className="w-3.5 h-3.5" />
-                                  </Button>
-                                )}
-                              </div>
-                            </td>
-                          </tr>
-
-                          {/* LINHA EXPANSÍVEL: DETALHAMENTO COMPLETO (PARCELAS, IMPOSTOS, DATAS, PRÊMIO, REPASSE) */}
-                          {isExpanded && (
-                            <tr className="bg-slate-50/90 border-b border-slate-200">
-                              <td colSpan={10} className="p-4 pl-11">
-                                <div className="space-y-3 text-xs text-slate-700">
-                                  {/* Grid de Detalhes Cadastrais e Financeiros */}
-                                  <div className="grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-6 gap-3 p-3 bg-white rounded-md border border-slate-200/80">
-                                    <div>
-                                      <span className="text-[11px] text-slate-500 block">
-                                        Ramo / Tipo
-                                      </span>
-                                      <strong className="text-slate-800 font-medium">
-                                        {tipoSeguro}
-                                      </strong>
-                                    </div>
-                                    <div>
-                                      <span className="text-[11px] text-slate-500 block">
-                                        Prêmio Líquido
-                                      </span>
-                                      <strong className="text-slate-800 font-medium">
-                                        R$ {fmtMoney(p.valor_liquido || p.premium_amount || 0)}
-                                      </strong>
-                                    </div>
-                                    <div>
-                                      <span className="text-[11px] text-slate-500 block">
-                                        % Comissão
-                                      </span>
-                                      <strong className="text-slate-800 font-medium">
-                                        {p.commission_percent || 0}%
-                                      </strong>
-                                    </div>
-                                    <div>
-                                      <span className="text-[11px] text-slate-500 block">
-                                        ISS / Deduções
-                                      </span>
-                                      <strong className="text-slate-800 font-medium">
-                                        R$ {fmtMoney(Number(p.iss || 0))}
-                                      </strong>
-                                    </div>
-                                    <div>
-                                      <span className="text-[11px] text-slate-500 block">
-                                        Início de Vigência
-                                      </span>
-                                      <strong className="text-slate-800 font-medium">
-                                        {formatDateDisplay(p.start_date) || '-'}
-                                      </strong>
-                                    </div>
-                                    <div>
-                                      <span className="text-[11px] text-slate-500 block">
-                                        Fim de Vigência
-                                      </span>
-                                      <strong className="text-slate-800 font-medium">
-                                        {formatDateDisplay(p.end_date) || '-'}
-                                      </strong>
-                                    </div>
-                                    {p.tipo_de_venda === 'Parceiro' && (
-                                      <>
-                                        <div>
-                                          <span className="text-[11px] text-slate-500 block">
-                                            Parceiro
-                                          </span>
-                                          <strong className="text-blue-700 font-medium">
-                                            {p.expand?.parceiro?.nome || '-'}
-                                          </strong>
-                                        </div>
-                                        <div>
-                                          <span className="text-[11px] text-slate-500 block">
-                                            Repasse (R$)
-                                          </span>
-                                          <strong className="text-blue-700 font-medium">
-                                            R$ {fmtMoney(p.valor_repasse || 0)}
-                                          </strong>
-                                        </div>
-                                      </>
-                                    )}
-                                  </div>
-
-                                  {/* Subtabela de Parcelas / Previsões / Competências Vinculadas */}
-                                  {policyPrevisoes.length > 0 && (
-                                    <div className="border rounded-md overflow-hidden bg-white">
-                                      <div className="bg-slate-100/90 px-3 py-1.5 font-semibold text-slate-700 text-[11px] border-b flex items-center justify-between">
-                                        <span>
-                                          Previsões / Parcelas Cadastradas ({policyPrevisoes.length}
-                                          )
-                                        </span>
-                                        <span className="text-[10px] text-slate-500 font-normal">
-                                          Reconciliação direta por parcela
-                                        </span>
-                                      </div>
-                                      <table className="w-full text-left text-xs text-slate-700">
-                                        <thead className="bg-slate-50 border-b text-[11px] text-slate-500">
-                                          <tr>
-                                            <th className="p-2">Parcela / Origem</th>
-                                            <th className="p-2">Competência</th>
-                                            <th className="p-2">Data Prevista</th>
-                                            <th className="p-2 text-right">Valor Previsto</th>
-                                            <th className="p-2 text-right">Valor Recebido</th>
-                                            <th className="p-2 text-right">Saldo</th>
-                                            <th className="p-2 text-center">Status</th>
-                                            <th className="p-2 text-right">Ação</th>
-                                          </tr>
-                                        </thead>
-                                        <tbody className="divide-y divide-slate-100">
-                                          {policyPrevisoes.map((prev) => {
-                                            const recRes = reconciliacaoMap.get(prev.id)
-                                            const vPrev = Number(prev.valor_previsto) || 0
-                                            const rBruto = recRes ? recRes.valorRecebidoBruto : 0
-                                            const sParc = recRes
-                                              ? recRes.saldo
-                                              : Math.max(
-                                                  0,
-                                                  Math.round((vPrev - rBruto) * 100) / 100,
-                                                )
-                                            const isQuitadaParc = sParc <= 0.009
-
-                                            return (
-                                              <tr key={prev.id} className="hover:bg-slate-50/60">
-                                                <td className="p-2 font-medium">
-                                                  {prev.endorsement ? (
-                                                    <Badge
-                                                      variant="outline"
-                                                      className="text-[10px] px-1 py-0 border-blue-200 bg-blue-50 text-blue-700 mr-1"
-                                                    >
-                                                      Endosso
-                                                    </Badge>
-                                                  ) : (
-                                                    <span className="text-slate-600">
-                                                      Parcela {prev.parcela_numero || 1}
-                                                    </span>
-                                                  )}
-                                                </td>
-                                                <td className="p-2 font-bold text-slate-800">
-                                                  {prev.competencia || '-'}
-                                                </td>
-                                                <td className="p-2 text-slate-600">
-                                                  {formatDateDisplay(prev.data_prevista) || '-'}
-                                                </td>
-                                                <td className="p-2 text-right font-medium">
-                                                  R$ {fmtMoney(vPrev)}
-                                                </td>
-                                                <td className="p-2 text-right font-semibold text-emerald-700">
-                                                  R$ {fmtMoney(rBruto)}
-                                                </td>
-                                                <td className="p-2 text-right font-bold text-amber-700">
-                                                  R$ {fmtMoney(sParc)}
-                                                </td>
-                                                <td className="p-2 text-center">
-                                                  <Badge
-                                                    className={`text-[10px] px-1.5 py-0 ${
-                                                      isQuitadaParc
-                                                        ? 'bg-emerald-600 text-white'
-                                                        : rBruto > 0
-                                                          ? 'bg-blue-600 text-white'
-                                                          : 'bg-amber-500 text-white'
-                                                    }`}
-                                                  >
-                                                    {isQuitadaParc
-                                                      ? 'Recebida'
-                                                      : rBruto > 0
-                                                        ? 'Parcial'
-                                                        : 'Pendente'}
-                                                  </Badge>
-                                                </td>
-                                                <td className="p-2 text-right">
-                                                  {!isQuitadaParc && (
-                                                    <Button
-                                                      size="sm"
-                                                      className="h-6 text-[11px] px-2 bg-emerald-600 hover:bg-emerald-700 text-white"
-                                                      onClick={() =>
-                                                        handleOpenRegistrarRecebimento(
-                                                          p,
-                                                          prev.competencia,
-                                                          prev.id,
-                                                          sParc > 0 ? sParc : vPrev,
-                                                          prev.endorsement,
-                                                        )
-                                                      }
-                                                    >
-                                                      Baixar
-                                                    </Button>
-                                                  )}
-                                                </td>
-                                              </tr>
-                                            )
-                                          })}
-                                        </tbody>
-                                      </table>
-                                    </div>
-                                  )}
-                                </div>
-                              </td>
-                            </tr>
-                          )}
-                        </React.Fragment>
-                      )
-                    })
-                  )}
-                </tbody>
-              </table>
-            </div>
-            <div className="p-3 border-t flex flex-col sm:flex-row items-center justify-between gap-2 bg-slate-50 text-xs text-slate-600">
-              <span>
-                Exibindo {tablePolicies.length === 0 ? 0 : (commPage - 1) * ITEMS_PER_PAGE + 1} a{' '}
-                {Math.min(commPage * ITEMS_PER_PAGE, tablePolicies.length)} de{' '}
-                {tablePolicies.length} registros
-              </span>
-              <div className="flex items-center gap-2">
-                <Button
-                  variant="outline"
-                  size="sm"
-                  className="h-8 px-2.5 text-xs"
-                  disabled={commPage <= 1}
-                  onClick={() => setCommPage((p) => Math.max(1, p - 1))}
-                >
-                  Anterior
-                </Button>
-                <span className="font-semibold px-1">
-                  Página {commPage} de {totalCommPages}
-                </span>
-                <Button
-                  variant="outline"
-                  size="sm"
-                  className="h-8 px-2.5 text-xs"
-                  disabled={commPage >= totalCommPages}
-                  onClick={() => setCommPage((p) => Math.min(totalCommPages, p + 1))}
-                >
-                  Próxima
-                </Button>
-              </div>
-            </div>
-          </>
-        )}
-      </Card>
-
-      <Card className="shadow-sm overflow-hidden border">
-        <CardHeader className="flex flex-row items-center justify-between pb-3">
-          <div>
-            <CardTitle className="text-base font-bold">Repasses de Parceiros</CardTitle>
-            <p className="text-xs text-slate-500 mt-0.5">
-              Acompanhe as comissões devidas aos parceiros e gerencie repasses e fechamentos.
-            </p>
-          </div>
-          <Button
-            variant="outline"
-            size="sm"
-            className="text-xs text-slate-700 hover:text-blue-600 h-8"
-            onClick={() => navigate('/relatorio-comissoes')}
-          >
-            Abrir Relatório & Histórico de Fechamentos
-          </Button>
-        </CardHeader>
-        <div className="overflow-x-auto">
-          <table className="w-full text-left text-sm text-slate-700">
-            <thead className="bg-slate-100 text-slate-600 font-semibold border-b">
-              <tr>
-                <th className="p-3">Proposta</th>
-                <th className="p-3">Cliente</th>
-                <th className="p-3">Parceiro</th>
-                <th className="p-3 text-right">Líquido</th>
-                <th className="p-3 text-right">Repasse (R$)</th>
-                <th className="p-3 text-right">Repasse (%)</th>
-                <th className="p-3 text-center">Pago</th>
-                <th className="p-3">Data Pagto</th>
-                <th className="p-3">Forma</th>
-                <th className="p-3 text-right">Ações</th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-slate-100">
-              {metrics.partnerPols.length === 0 ? (
-                <tr>
-                  <td colSpan={10} className="text-center p-6 text-slate-500">
-                    Nenhuma proposta/apólice de parceiro encontrada.
-                  </td>
-                </tr>
-              ) : (
-                paginatedPartnerPols.map((p) => {
-                  const valorLiquido = Number(p.valor_liquido || p.premium_amount || 0)
-                  const valorRepasse = Number(p.valor_repasse || 0)
-                  const pctGravado =
-                    p.percentual_repasse != null && Number(p.percentual_repasse) > 0
-                      ? Number(p.percentual_repasse)
-                      : null
-                  const pctCalculado =
-                    pctGravado != null
-                      ? pctGravado
-                      : valorLiquido > 0 && valorRepasse > 0
-                        ? Math.round((valorRepasse / valorLiquido) * 100 * 10) / 10
-                        : null
-
-                  return (
-                    <tr key={p.id} className="hover:bg-slate-50/80">
-                      <td
-                        className="p-3 font-bold text-slate-900"
-                        title={p.policy_number ? `Apólice: ${p.policy_number}` : undefined}
-                      >
-                        <div className="flex flex-col">
-                          <span>{p.numero_proposta || p.policy_number || '-'}</span>
-                          {p.policy_number &&
-                            p.numero_proposta &&
-                            p.policy_number !== p.numero_proposta && (
-                              <span className="text-[10px] text-slate-400 font-normal">
-                                Apólice: {p.policy_number}
-                              </span>
-                            )}
-                        </div>
-                      </td>{' '}
-                      <td className="p-3">{p.expand?.client?.name || '-'}</td>
-                      <td className="p-3">{p.expand?.parceiro?.nome || '-'}</td>
-                      <td className="p-3 text-right font-bold">R$ {fmtMoney(valorLiquido)}</td>
-                      <td className="p-3 text-right font-bold text-blue-600">
-                        R$ {fmtMoney(valorRepasse)}
-                      </td>
-                      <td className="p-3 text-right font-medium text-slate-700 whitespace-nowrap">
-                        {pctCalculado != null ? `${fmtPercent(pctCalculado)}%` : '—'}
-                      </td>
-                      <td className="p-3 text-center">
-                        <Badge className={p.pago_parceiro ? 'bg-emerald-500' : 'bg-amber-500'}>
-                          {p.pago_parceiro ? 'Pago' : 'Pendente'}
-                        </Badge>
-                      </td>
-                      <td className="p-3 text-xs">
-                        {formatDateDisplay(p.data_pagamento_parceiro)}
-                      </td>
-                      <td className="p-3 text-xs">{p.forma_pagamento_repasse || '-'}</td>
-                      <td className="p-3 text-right">
-                        <div className="flex items-center justify-end gap-1">
-                          {can('policies', 'update') && !p.pago_parceiro && (
-                            <Button
-                              size="sm"
-                              variant="ghost"
-                              className="text-emerald-600"
-                              title="Pagar Repasse"
-                              onClick={() => handleQuickPayRepasse(p.id)}
-                            >
-                              <Check className="w-4 h-4" />
-                            </Button>
-                          )}
-                          {can('policies', 'update') && (
-                            <Button size="sm" variant="ghost" onClick={() => setEditPolicy(p)}>
-                              <Edit2 className="w-3.5 h-3.5" />
-                            </Button>
-                          )}
-                        </div>
-                      </td>
-                    </tr>
-                  )
-                })
-              )}
-            </tbody>
-          </table>
-        </div>
-        <div className="p-3 border-t flex flex-col sm:flex-row items-center justify-between gap-2 bg-slate-50 text-xs text-slate-600">
-          <span>
-            Exibindo {metrics.partnerPols.length === 0 ? 0 : (repassePage - 1) * ITEMS_PER_PAGE + 1}{' '}
-            a {Math.min(repassePage * ITEMS_PER_PAGE, metrics.partnerPols.length)} de{' '}
-            {metrics.partnerPols.length} registros
-          </span>
-          <div className="flex items-center gap-2">
-            <Button
-              variant="outline"
-              size="sm"
-              className="h-8 px-2.5 text-xs"
-              disabled={repassePage <= 1}
-              onClick={() => setRepassePage((p) => Math.max(1, p - 1))}
-            >
-              Anterior
-            </Button>
-            <span className="font-semibold px-1">
-              Página {repassePage} de {totalRepassePages}
-            </span>
-            <Button
-              variant="outline"
-              size="sm"
-              className="h-8 px-2.5 text-xs"
-              disabled={repassePage >= totalRepassePages}
-              onClick={() => setRepassePage((p) => Math.min(totalRepassePages, p + 1))}
-            >
-              Próxima
-            </Button>
-          </div>
-        </div>
-      </Card>
-
-      {/* Modal Informativo de Débitos Pendentes na Baixa Rápida de Repasse */}
-      <Dialog
-        open={isQuickPayModalOpen}
-        onOpenChange={(open) => {
-          if (!open) {
-            setIsQuickPayModalOpen(false)
-            setQuickPayPolicy(null)
-            setQuickPayDebitos([])
-          }
-        }}
-      >
-        <DialogContent className="sm:max-w-lg">
-          <DialogHeader>
-            <DialogTitle className="flex items-center gap-2 text-amber-700">
-              <AlertCircle className="w-5 h-5 text-amber-600" />
-              <span>Atenção: Débitos / Adiantamentos Pendentes</span>
-            </DialogTitle>
-          </DialogHeader>
-
-          {quickPayPolicy && (
-            <div className="space-y-3 text-xs text-slate-700 py-1">
-              <div className="p-2.5 bg-amber-50 border border-amber-200 rounded text-amber-900 leading-relaxed">
-                Este parceiro possui{' '}
-                <strong>{quickPayDebitos.length} débito(s) / adiantamento(s) pendente(s)</strong>{' '}
-                registrado(s). A baixa deste repasse aplicará a dedução da dívida de forma
-                rastreável e atômica.
-              </div>
-
-              <div>
-                <span className="font-semibold text-slate-800 block mb-1">
-                  Parceiro:{' '}
-                  <span className="font-bold text-blue-700">
-                    {quickPayPolicy.expand?.parceiro?.nome || 'Parceiro'}
-                  </span>
-                </span>
-                <span className="text-slate-500 block">
-                  Proposta / Apólice:{' '}
-                  {quickPayPolicy.numero_proposta || quickPayPolicy.policy_number || '-'} — Cliente:{' '}
-                  {quickPayPolicy.expand?.client?.name || '-'}
-                </span>
-              </div>
-
-              {/* Lista dos Débitos */}
-              <div className="border rounded-md overflow-hidden bg-white">
-                <div className="bg-slate-100 p-2 font-semibold text-slate-700 border-b flex justify-between">
-                  <span>Descrição do Débito / Adiantamento</span>
-                  <span>Valor</span>
-                </div>
-                <div className="max-h-36 overflow-y-auto divide-y divide-slate-100">
-                  {quickPayDebitos.map((deb, idx) => (
-                    <div key={deb.id || idx} className="p-2 flex justify-between items-center">
-                      <div className="truncate pr-2">
-                        <span className="font-medium text-slate-800">{deb.descricao}</span>
-                        {deb.data && (
-                          <span className="text-slate-600 text-[11px] ml-1.5">
-                            ({formatDateDisplay(deb.data)})
-                          </span>
-                        )}
-                      </div>
-                      <span className="font-bold text-red-600 whitespace-nowrap">
-                        - R$ {fmtMoney(deb.valor)}
-                      </span>
-                    </div>
-                  ))}
-                </div>
-              </div>
-
-              {/* Resumo do Cálculo: Comissão - Débitos - Taxa PIX = Líquido */}
-              {(() => {
-                const resCalc = computeQuickPayLiquidacao(
-                  Number(quickPayPolicy.valor_repasse) || 0,
-                  quickPayDebitos,
-                )
-                const {
-                  comissaoRepasse,
-                  debitoAbatidoEfetivo,
-                  taxaPix,
-                  liquidoFinal,
-                  saldoDevedorRemanescente,
-                } = resCalc
-
-                return (
-                  <div className="p-3 bg-slate-50 border rounded space-y-1.5 text-xs">
-                    <div className="flex justify-between">
-                      <span className="text-slate-600">Comissão de Repasse:</span>
-                      <strong className="text-slate-800">R$ {fmtMoney(comissaoRepasse)}</strong>
-                    </div>
-                    <div className="flex justify-between text-red-600">
-                      <span>(-) Débitos a Compensar:</span>
-                      <strong>- R$ {fmtMoney(debitoAbatidoEfetivo)}</strong>
-                    </div>
-                    {taxaPix > 0 && (
-                      <div className="flex justify-between text-red-600">
-                        <span>(-) Taxa PIX (1% s/ líquido após dedução):</span>
-                        <strong>- R$ {fmtMoney(taxaPix)}</strong>
-                      </div>
-                    )}
-                    <div className="flex justify-between font-bold text-sm text-blue-700 border-t pt-1.5">
-                      <span>Valor Líquido a Pagar:</span>
-                      <span>R$ {fmtMoney(liquidoFinal)}</span>
-                    </div>
-
-                    {liquidoFinal === 0 && (
-                      <div className="p-2 bg-blue-50 border border-blue-200 rounded text-blue-800 text-[11px] font-medium mt-1">
-                        {saldoDevedorRemanescente > 0 ? (
-                          <>
-                            <strong>Nada a transferir:</strong> O adiantamento é maior que a
-                            comissão. A comissão de R$ {fmtMoney(comissaoRepasse)} abaterá parte da
-                            dívida. O saldo devedor remanescente de{' '}
-                            <strong>R$ {fmtMoney(saldoDevedorRemanescente)}</strong> permanecerá
-                            pendente.
-                          </>
-                        ) : (
-                          <>
-                            <strong>Nada a transferir:</strong> A comissão quita exatamente o valor
-                            do adiantamento. O débito será marcado como Pago e nenhum valor
-                            adicional precisa ser transferido via PIX.
-                          </>
-                        )}
-                      </div>
-                    )}
-
-                    {saldoDevedorRemanescente > 0 && liquidoFinal > 0 && (
-                      <div className="text-amber-700 text-[11px] font-medium pt-1">
-                        Saldo devedor remanescente do parceiro: R${' '}
-                        {fmtMoney(saldoDevedorRemanescente)}
-                      </div>
-                    )}
-                  </div>
-                )
-              })()}
-
-              <p className="text-[11px] text-slate-500 italic">
-                Ao confirmar, o repasse será baixado e o débito será liquidado/abatido vinculado ao
-                fechamento permanente, de forma idempotente.
-              </p>
-            </div>
-          )}
-
-          <DialogFooter className="pt-2">
-            <Button
-              type="button"
-              variant="outline"
-              onClick={() => {
+          {/* Modal Informativo de Débitos Pendentes na Baixa Rápida de Repasse */}
+          <Dialog
+            open={isQuickPayModalOpen}
+            onOpenChange={(open) => {
+              if (!open) {
                 setIsQuickPayModalOpen(false)
                 setQuickPayPolicy(null)
                 setQuickPayDebitos([])
-              }}
-              disabled={quickPayLoading}
-            >
-              Cancelar
-            </Button>
-            <Button
-              type="button"
-              className="bg-emerald-600 hover:bg-emerald-700 text-white"
-              onClick={handleConfirmQuickPayComDebitos}
-              disabled={quickPayLoading}
-            >
-              {quickPayLoading ? 'Processando...' : 'Confirmar Baixa com Débitos'}
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
+              }
+            }}
+          >
+            <DialogContent className="sm:max-w-lg">
+              <DialogHeader>
+                <DialogTitle className="flex items-center gap-2 text-amber-700">
+                  <AlertCircle className="w-5 h-5 text-amber-600" />
+                  <span>Atenção: Débitos / Adiantamentos Pendentes</span>
+                </DialogTitle>
+              </DialogHeader>
+
+              {quickPayPolicy && (
+                <div className="space-y-3 text-xs text-slate-700 py-1">
+                  <div className="p-2.5 bg-amber-50 border border-amber-200 rounded text-amber-900 leading-relaxed">
+                    Este parceiro possui{' '}
+                    <strong>
+                      {quickPayDebitos.length} débito(s) / adiantamento(s) pendente(s)
+                    </strong>{' '}
+                    registrado(s). A baixa deste repasse aplicará a dedução da dívida de forma
+                    rastreável e atômica.
+                  </div>
+
+                  <div>
+                    <span className="font-semibold text-slate-800 block mb-1">
+                      Parceiro:{' '}
+                      <span className="font-bold text-blue-700">
+                        {quickPayPolicy.expand?.parceiro?.nome || 'Parceiro'}
+                      </span>
+                    </span>
+                    <span className="text-slate-500 block">
+                      Proposta / Apólice:{' '}
+                      {quickPayPolicy.numero_proposta || quickPayPolicy.policy_number || '-'} —
+                      Cliente: {quickPayPolicy.expand?.client?.name || '-'}
+                    </span>
+                  </div>
+
+                  {/* Lista dos Débitos */}
+                  <div className="border rounded-md overflow-hidden bg-white">
+                    <div className="bg-slate-100 p-2 font-semibold text-slate-700 border-b flex justify-between">
+                      <span>Descrição do Débito / Adiantamento</span>
+                      <span>Valor</span>
+                    </div>
+                    <div className="max-h-36 overflow-y-auto divide-y divide-slate-100">
+                      {quickPayDebitos.map((deb, idx) => (
+                        <div key={deb.id || idx} className="p-2 flex justify-between items-center">
+                          <div className="truncate pr-2">
+                            <span className="font-medium text-slate-800">{deb.descricao}</span>
+                            {deb.data && (
+                              <span className="text-slate-600 text-[11px] ml-1.5">
+                                ({formatDateDisplay(deb.data)})
+                              </span>
+                            )}
+                          </div>
+                          <span className="font-bold text-red-600 whitespace-nowrap">
+                            - R$ {fmtMoney(deb.valor)}
+                          </span>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+
+                  {/* Resumo do Cálculo: Comissão - Débitos - Taxa PIX = Líquido */}
+                  {(() => {
+                    const resCalc = computeQuickPayLiquidacao(
+                      Number(quickPayPolicy.valor_repasse) || 0,
+                      quickPayDebitos,
+                    )
+                    const {
+                      comissaoRepasse,
+                      debitoAbatidoEfetivo,
+                      taxaPix,
+                      liquidoFinal,
+                      saldoDevedorRemanescente,
+                    } = resCalc
+
+                    return (
+                      <div className="p-3 bg-slate-50 border rounded space-y-1.5 text-xs">
+                        <div className="flex justify-between">
+                          <span className="text-slate-600">Comissão de Repasse:</span>
+                          <strong className="text-slate-800">R$ {fmtMoney(comissaoRepasse)}</strong>
+                        </div>
+                        <div className="flex justify-between text-red-600">
+                          <span>(-) Débitos a Compensar:</span>
+                          <strong>- R$ {fmtMoney(debitoAbatidoEfetivo)}</strong>
+                        </div>
+                        {taxaPix > 0 && (
+                          <div className="flex justify-between text-red-600">
+                            <span>(-) Taxa PIX (1% s/ líquido após dedução):</span>
+                            <strong>- R$ {fmtMoney(taxaPix)}</strong>
+                          </div>
+                        )}
+                        <div className="flex justify-between font-bold text-sm text-blue-700 border-t pt-1.5">
+                          <span>Valor Líquido a Pagar:</span>
+                          <span>R$ {fmtMoney(liquidoFinal)}</span>
+                        </div>
+
+                        {liquidoFinal === 0 && (
+                          <div className="p-2 bg-blue-50 border border-blue-200 rounded text-blue-800 text-[11px] font-medium mt-1">
+                            {saldoDevedorRemanescente > 0 ? (
+                              <>
+                                <strong>Nada a transferir:</strong> O adiantamento é maior que a
+                                comissão. A comissão de R$ {fmtMoney(comissaoRepasse)} abaterá parte
+                                da dívida. O saldo devedor remanescente de{' '}
+                                <strong>R$ {fmtMoney(saldoDevedorRemanescente)}</strong> permanecerá
+                                pendente.
+                              </>
+                            ) : (
+                              <>
+                                <strong>Nada a transferir:</strong> A comissão quita exatamente o
+                                valor do adiantamento. O débito será marcado como Pago e nenhum
+                                valor adicional precisa ser transferido via PIX.
+                              </>
+                            )}
+                          </div>
+                        )}
+
+                        {saldoDevedorRemanescente > 0 && liquidoFinal > 0 && (
+                          <div className="text-amber-700 text-[11px] font-medium pt-1">
+                            Saldo devedor remanescente do parceiro: R${' '}
+                            {fmtMoney(saldoDevedorRemanescente)}
+                          </div>
+                        )}
+                      </div>
+                    )
+                  })()}
+
+                  <p className="text-[11px] text-slate-500 italic">
+                    Ao confirmar, o repasse será baixado e o débito será liquidado/abatido vinculado
+                    ao fechamento permanente, de forma idempotente.
+                  </p>
+                </div>
+              )}
+
+              <DialogFooter className="pt-2">
+                <Button
+                  type="button"
+                  variant="outline"
+                  onClick={() => {
+                    setIsQuickPayModalOpen(false)
+                    setQuickPayPolicy(null)
+                    setQuickPayDebitos([])
+                  }}
+                  disabled={quickPayLoading}
+                >
+                  Cancelar
+                </Button>
+                <Button
+                  type="button"
+                  className="bg-emerald-600 hover:bg-emerald-700 text-white"
+                  onClick={handleConfirmQuickPayComDebitos}
+                  disabled={quickPayLoading}
+                >
+                  {quickPayLoading ? 'Processando...' : 'Confirmar Baixa com Débitos'}
+                </Button>
+              </DialogFooter>
+            </DialogContent>
+          </Dialog>
+        </div>
+      </AbaContainer>
+
+      {/* ABA 4: EXTRATO */}
+      <AbaContainer active={activeTab === 'extrato'}>
+        <ExtratoTabContent onAbrirImportador={() => setIsImportarExtratoOpen(true)} />
+      </AbaContainer>
 
       <CommissionEditDialog
         open={!!editPolicy}

@@ -1,32 +1,69 @@
+import React from 'react'
 import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs'
+import { Badge } from '@/components/ui/badge'
 
-export type AbaFinanceiro = 'visao' | 'receber' | 'repasses' | 'extrato'
+export type AbaFinanceiro = 'visao-geral' | 'a-receber' | 'repasses' | 'extrato'
 
-const ROTULOS: { valor: AbaFinanceiro; texto: string }[] = [
-  { valor: 'visao', texto: 'Visão Geral' },
-  { valor: 'receber', texto: 'A Receber' },
-  { valor: 'repasses', texto: 'Repasses' },
-  { valor: 'extrato', texto: 'Extrato' },
-]
+export function normalizarAba(raw?: string | null): AbaFinanceiro {
+  if (!raw) return 'visao-geral'
+  const r = String(raw).toLowerCase().trim()
+  if (r === 'a-receber' || r === 'areceber' || r === 'receber') return 'a-receber'
+  if (r === 'repasses' || r === 'repasse') return 'repasses'
+  if (r === 'extrato' || r === 'extratos') return 'extrato'
+  return 'visao-geral'
+}
 
-/**
- * Navegação em abas do Financeiro (Visão Geral / A Receber / Repasses / Extrato).
- * Conteúdo das abas fica no Financial.tsx (seções sempre montadas, só escondidas por CSS),
- * para preservar realtime, modais e cálculos exatamente como estavam.
- */
+export interface FinanceiroTabsProps {
+  aba?: AbaFinanceiro
+  activeTab?: AbaFinanceiro
+  onTrocar?: (aba: AbaFinanceiro) => void
+  onChange?: (aba: AbaFinanceiro) => void
+  badges?: {
+    aReceber?: number
+    repasses?: number
+    extrato?: number
+  }
+}
+
 export function FinanceiroTabs({
   aba,
+  activeTab,
   onTrocar,
-}: {
-  aba: AbaFinanceiro
-  onTrocar: (a: AbaFinanceiro) => void
-}) {
+  onChange,
+  badges,
+}: FinanceiroTabsProps) {
+  const currentTab = aba || activeTab || 'visao-geral'
+  const handleTabChange = (val: string) => {
+    const tabNormalizada = normalizarAba(val)
+    if (onChange) onChange(tabNormalizada)
+    if (onTrocar) onTrocar(tabNormalizada)
+  }
+
+  const abas: { valor: AbaFinanceiro; texto: string; badge?: number }[] = [
+    { valor: 'visao-geral', texto: 'Visão Geral' },
+    { valor: 'a-receber', texto: 'A Receber', badge: badges?.aReceber },
+    { valor: 'repasses', texto: 'Repasses', badge: badges?.repasses },
+    { valor: 'extrato', texto: 'Extrato', badge: badges?.extrato },
+  ]
+
   return (
-    <Tabs value={aba} onValueChange={(v) => onTrocar(v as AbaFinanceiro)}>
-      <TabsList className="h-9 bg-slate-100">
-        {ROTULOS.map((t) => (
-          <TabsTrigger key={t.valor} value={t.valor} className="text-xs px-3">
-            {t.texto}
+    <Tabs value={currentTab} onValueChange={handleTabChange} className="w-full">
+      <TabsList className="grid w-full grid-cols-2 sm:grid-cols-4 h-auto p-1 bg-slate-100 rounded-lg">
+        {abas.map((t) => (
+          <TabsTrigger
+            key={t.valor}
+            value={t.valor}
+            className="text-xs sm:text-sm font-medium px-3 sm:px-4 py-2 data-[state=active]:bg-white data-[state=active]:text-slate-900 data-[state=active]:shadow-xs flex items-center justify-center gap-1.5"
+          >
+            <span>{t.texto}</span>
+            {typeof t.badge === 'number' && t.badge > 0 && (
+              <Badge
+                variant="secondary"
+                className="text-[10px] px-1.5 py-0 h-4 bg-slate-200 text-slate-700"
+              >
+                {t.badge}
+              </Badge>
+            )}
           </TabsTrigger>
         ))}
       </TabsList>
@@ -41,11 +78,20 @@ export function FinanceiroTabs({
 export function AbaContainer({
   ativa,
   valor,
+  active,
   children,
 }: {
-  ativa: AbaFinanceiro
-  valor: AbaFinanceiro
+  ativa?: AbaFinanceiro
+  valor?: AbaFinanceiro
+  active?: boolean
   children: React.ReactNode
 }) {
-  return <div className={ativa === valor ? 'space-y-4' : 'hidden'}>{children}</div>
+  const isAtiva =
+    typeof active === 'boolean'
+      ? active
+      : ativa && valor
+        ? normalizarAba(ativa) === normalizarAba(valor)
+        : false
+
+  return <div className={isAtiva ? 'space-y-6' : 'hidden'}>{children}</div>
 }
