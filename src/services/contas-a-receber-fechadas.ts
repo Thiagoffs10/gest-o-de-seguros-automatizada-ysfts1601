@@ -71,11 +71,78 @@ interface ContasAReceberInput {
   hoje?: Date
 }
 
+const round2 = (v: number) => Math.round(v * 100) / 100
+
+/**
+ * Aloca os recebimentos de uma apólice (descontando estornos) sobre as previsões
+ * por FIFO: ordena por competencia/parcela_numero/data_prevista e consome os
+ * saldos nessa ordem. NÃO depende de `competencia`/`comissao_prevista` do
+ * recebimento — nas baixas manuais esses campos costumam ficar vazios.
+ * Retorna um Map<idPrevisão, saldoPendente>.
+ */
+const calcularSaldosFIFO = (
+  prevs: ComissaoPrevista[],
+  recebimentosDaApolice: ComissaoRecebimento[],
+): Map<string, number> => {
+  const saldos = new Map<string, number>()
+  if (prevs.length === 0) return saldos
+
+  // Saldo inicial = valor previsto de cada previsão ativa
+  for (const p of prevs) {
+    const v = p.status === 'Cancelada' ? 0 : Number(p.valor_previsto) || 0
+    saldos.set(p.id, round2(v))
+  }
+
+  // Total recebido da apólice, em valor LÍQUIDO (o valor_previsto das previsões é a
+  // "Comissão Líquida Prevista", então a baixa compara líquido com líquido).
+  // Estornos devolvem o valor ao saldo: o hook grava o estorno com valor NEGATIVO, mas
+  // normalizamos pela flag is_estorno (−|valor|) para tolerar qualquer convenção —
+  // estorno nunca conta como recebimento.
+  const totalRecebido = round2(
+    recebimentosDaApolice.reduce((s, r) => {
+      const bruto = Number(r.valor_bruto) || 0
+      const liquido = r.valor_liquido != null ? Number(r.valor_liquido) : bruto
+      const magnitude = Number.isFinite(liquido) && liquido !== 0 ? liquido : bruto
+      return s + (r.is_estorno ? -magnitude : magnitude)
+    }, 0),
+  )
+
+  // FIFO: previsões mais antigas primeiro (competência, depois parcela, depois data_prevista)
+  const ordenadas = [...prevs].sort((a, b) => {
+    const cA = competenciaToNum(a.competencia)
+    const cB = competenciaToNum(b.competencia)
+    const nA = cA ?? (Number(a.parcela_numero) || 0)
+    const nB = cB ?? (Number(b.parcela_numero) || 0)
+    if (nA !== nB) return nA - nB
+    const pA = Number(a.parcela_numero) || 0
+    const pB = Number(b.parcela_numero) || 0
+    if (pA !== pB) return pA - pB
+    return (a.data_prevista || '').localeCompare(b.data_prevista || '')
+  })
+
+  let restante = totalRecebido > 0 ? totalRecebido : 0
+  for (const p of ordenadas) {
+    if (restante <= 0.009) break
+    const saldo = saldos.get(p.id) || 0
+    if (saldo <= 0) continue
+    const consumido = Math.min(saldo, restante)
+    saldos.set(p.id, round2(saldo - consumido))
+    restante = round2(restante - consumido)
+  }
+
+  return saldos
+}
+
 /**
  * Monta a lista de "Contas a receber de competências fechadas":
  * saldos pendentes de comissões cuja COMPETÊNCIA de previsão já foi FECHADA
  * (existe registro em conciliacoes para o mês/ano da competência).
  * O mês corrente (não fechado) NÃO entra — segue nas pendências normais do Financeiro.
+ *
+ * SALDO = valor_previsto − TUDO que já foi baixado da MESMA apólice
+ * (recebimentos de comissao_recebimentos, com estornos devolvendo valor ao saldo),
+ * alocado por FIFO entre as previsões da apólice — independente do vínculo
+ * `comissao_prevista`/`competencia` gravado no recebimento, que fica vazio nas baixas manuais.
  */
 export const montarContasAReceberFechadas = ({
   policies,
@@ -88,23 +155,19 @@ export const montarContasAReceberFechadas = ({
 
   const policyById = new Map(policies.map((p) => [p.id, p]))
 
-  // Bruto recebido por previsão (vínculo direto) e por apólice+competência (fallback)
-  const recBrutoByPrevista = new Map<string, number>()
-  const recBrutoByPolComp = new Map<string, number>()
+  // Agrupa previsões por apólice e calcula saldos FIFO uma vez por apólice
+  const prevsByPolicy = new Map<string, ComissaoPrevista[]>()
+  for (const p of comissoesPrevistas) {
+    const arr = prevsByPolicy.get(p.policy)
+    if (arr) arr.push(p)
+    else prevsByPolicy.set(p.policy, [p])
+  }
+
+  const recsByPolicy = new Map<string, ComissaoRecebimento[]>()
   for (const r of recebimentos) {
-    if (r.is_estorno) continue
-    const bruto = Number(r.valor_bruto) || 0
-    if (r.comissao_prevista) {
-      recBrutoByPrevista.set(
-        r.comissao_prevista,
-        (recBrutoByPrevista.get(r.comissao_prevista) || 0) + bruto,
-      )
-    }
-    const compNum = competenciaToNum(r.competencia || undefined)
-    if (compNum != null) {
-      const key = `${r.policy}|${compNum}`
-      recBrutoByPolComp.set(key, (recBrutoByPolComp.get(key) || 0) + bruto)
-    }
+    const arr = recsByPolicy.get(r.policy)
+    if (arr) arr.push(r)
+    else recsByPolicy.set(r.policy, [r])
   }
 
   const items: ContaAReceberFechada[] = []
@@ -133,22 +196,24 @@ export const montarContasAReceberFechadas = ({
     })
   }
 
-  // 1) Previsões explícitas (parcelamento / endosso): saldo por parcela
-  for (const prev of comissoesPrevistas) {
-    if (prev.status === 'Cancelada' || prev.status === 'Recebida') continue
-    const compNum = competenciaToNum(prev.competencia)
-    if (compNum == null || !fechadasSet.has(compNum)) continue
-
-    const pol = policyById.get(prev.policy)
+  // 1) Previsões explícitas (parcelamento / endosso): saldo FIFO por parcela
+  for (const [policyId, prevsApolice] of prevsByPolicy) {
+    const pol = policyById.get(policyId)
     if (!pol || pol.status === 'Cancelada') continue
 
-    const recBruto =
-      recBrutoByPrevista.get(prev.id) ?? recBrutoByPolComp.get(`${prev.policy}|${compNum}`) ?? 0
-    const vPrev = Number(prev.valor_previsto) || 0
-    const saldo = Math.max(0, Math.round((vPrev - recBruto) * 100) / 100)
-    if (saldo <= 0.009) continue
+    const saldos = calcularSaldosFIFO(prevsApolice, recsByPolicy.get(policyId) || [])
 
-    pushItem(pol, prev, saldo)
+    for (const prev of prevsApolice) {
+      if (prev.status === 'Cancelada' || prev.status === 'Recebida') continue
+      const compNum = competenciaToNum(prev.competencia)
+      if (compNum == null || !fechadasSet.has(compNum)) continue
+
+      const saldo = saldos.get(prev.id) || 0
+      // Item quitado ou recebido acima do previsto não entra na lista
+      if (saldo <= 0.01) continue
+
+      pushItem(pol, prev, saldo)
+    }
   }
 
   // 2) Apólices sem previsão cadastrada: competência estimada pelo vencimento/início da vigência
@@ -168,11 +233,18 @@ export const montarContasAReceberFechadas = ({
           ) / 100
     if (previstoBruto <= 0) continue
 
-    const recBruto = recebimentos
-      .filter((r) => r.policy === pol.id && !r.is_estorno)
-      .reduce((s, r) => s + (Number(r.valor_bruto) || 0), 0)
-    const saldo = Math.max(0, Math.round((previstoBruto - recBruto) * 100) / 100)
-    if (saldo <= 0.009) continue
+    // Mesma métrica do ramo com previsão: líquido recebido, estornos devolvem saldo
+    const recLiquido = recebimentos
+      .filter((r) => r.policy === pol.id)
+      .reduce((s, r) => {
+        const bruto = Number(r.valor_bruto) || 0
+        const liq = r.valor_liquido != null ? Number(r.valor_liquido) : bruto
+        const magnitude = Number.isFinite(liq) && liq !== 0 ? liq : bruto
+        return s + (r.is_estorno ? -magnitude : magnitude)
+      }, 0)
+    const saldo = Math.max(0, round2(previstoBruto - recLiquido))
+    // Item quitado ou recebido acima do previsto não entra na lista
+    if (saldo <= 0.01) continue
 
     const ref = pol.data_recebimento_comissao || pol.start_date
     const compNum = dateToCompNum(ref)
