@@ -1,4 +1,13 @@
-import { AlertCircle, CheckCircle2, ChevronRight, Loader2 } from 'lucide-react'
+import { useState } from 'react'
+import {
+  AlertCircle,
+  CheckCircle2,
+  ChevronDown,
+  ChevronRight,
+  ChevronUp,
+  Clock,
+  Loader2,
+} from 'lucide-react'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
@@ -7,6 +16,11 @@ import { ContaAReceberFechada } from '@/services/contas-a-receber-fechadas'
 const fmt = (v: number) =>
   v.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })
 
+const formatIsoDate = (d?: string) => {
+  if (!d) return '-'
+  return d.split('T')[0].split(' ')[0].split('-').reverse().join('/')
+}
+
 interface Props {
   contas: ContaAReceberFechada[]
   loading?: boolean
@@ -14,13 +28,23 @@ interface Props {
   onConfirmar: (conta: ContaAReceberFechada) => void | Promise<void>
 }
 
+const LIMITE_INICIAL = 10
+
 /**
  * Card "Contas a receber de competências fechadas" (Financeiro):
  * comissões pendentes de competências já fechadas na Conciliação Mensal.
- * A baixa usa o MESMO fluxo "Confirmar recebimento" (comissao_recebimentos) — nada muda no fluxo.
+ *
+ * Requisitos do usuário:
+ * 1. Vem recolhida com no máximo 10 itens e botão/seta "Ver mais / Ver menos" para expandir/recolher.
+ * 2. Total do card continua sempre visível no cabeçalho.
+ * 3. Apólices com baixa parcial recente mostram dias desde a última baixa e data da baixa.
  */
 export function ContasAReceberFechadasCard({ contas, loading, confirmingId, onConfirmar }: Props) {
+  const [expandido, setExpandido] = useState(false)
   const total = Math.round(contas.reduce((s, c) => s + c.valor, 0) * 100) / 100
+
+  const itensExibidos = expandido ? contas : contas.slice(0, LIMITE_INICIAL)
+  const temMais = contas.length > LIMITE_INICIAL
 
   return (
     <Card className="border-slate-200 shadow-sm">
@@ -52,59 +76,118 @@ export function ContasAReceberFechadasCard({ contas, loading, confirmingId, onCo
             Nenhuma pendência de competências fechadas.
           </div>
         ) : (
-          <div className="divide-y divide-slate-100 rounded-md border border-slate-100">
-            {contas.map((c) => (
-              <div
-                key={`${c.policyId}-${c.comissaoPrevistaId ?? 'avulsa'}`}
-                className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 px-3 py-2.5 hover:bg-amber-50/40 transition-colors"
-              >
-                <div className="min-w-0">
-                  <div className="flex items-center gap-2 flex-wrap">
-                    <span className="text-sm font-semibold text-slate-800 truncate">
-                      {c.policyNumber}
-                    </span>
-                    <span className="text-sm text-slate-600 truncate">{c.segurado}</span>
-                    <Badge
-                      variant="outline"
-                      className="text-[11px] text-slate-500 border-slate-300"
-                    >
-                      {c.seguradora}
-                    </Badge>
-                    <Badge
-                      variant="outline"
-                      className="text-[11px] border-blue-200 bg-blue-50 text-blue-700"
-                    >
-                      Competência {c.competencia}
-                    </Badge>
-                  </div>
-                  <div className="flex items-center gap-1.5 text-xs text-amber-700 mt-0.5">
-                    <AlertCircle className="w-3 h-3" />
-                    {c.diasVencidos > 0 ? `Vencida há ${c.diasVencidos} dia(s)` : 'Vence hoje'}
-                    <span className="text-slate-400">•</span>
-                    <span className="text-slate-500">
-                      {c.vencimento ? c.vencimento.split('-').reverse().join('/') : '-'}
-                    </span>
-                  </div>
-                </div>
-                <div className="flex items-center gap-3 shrink-0">
-                  <span className="text-sm font-bold text-slate-900">R$ {fmt(c.valor)}</span>
-                  <Button
-                    size="sm"
-                    className="h-8 text-xs bg-emerald-600 hover:bg-emerald-700 text-white"
-                    disabled={confirmingId === `${c.policyId}-${c.comissaoPrevistaId ?? 'avulsa'}`}
-                    onClick={() => onConfirmar(c)}
+          <div className="space-y-2">
+            <div className="divide-y divide-slate-100 rounded-md border border-slate-100">
+              {itensExibidos.map((c) => {
+                const comBaixaRecente =
+                  c.origemDias === 'ultimo_recebimento' && Boolean(c.ultimoRecebimento)
+
+                return (
+                  <div
+                    key={`${c.policyId}-${c.comissaoPrevistaId ?? 'avulsa'}`}
+                    className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 px-3 py-2.5 hover:bg-amber-50/40 transition-colors"
                   >
-                    {confirmingId === `${c.policyId}-${c.comissaoPrevistaId ?? 'avulsa'}` ? (
-                      <Loader2 className="w-3.5 h-3.5 animate-spin mr-1" />
-                    ) : (
-                      <CheckCircle2 className="w-3.5 h-3.5 mr-1" />
-                    )}
-                    Confirmar recebimento
-                    <ChevronRight className="w-3.5 h-3.5 ml-0.5 opacity-70" />
-                  </Button>
-                </div>
+                    <div className="min-w-0">
+                      <div className="flex items-center gap-2 flex-wrap">
+                        <span className="text-sm font-semibold text-slate-800 truncate">
+                          {c.policyNumber}
+                        </span>
+                        <span className="text-sm text-slate-600 truncate">{c.segurado}</span>
+                        <Badge
+                          variant="outline"
+                          className="text-[11px] text-slate-500 border-slate-300"
+                        >
+                          {c.seguradora}
+                        </Badge>
+                        <Badge
+                          variant="outline"
+                          className="text-[11px] border-blue-200 bg-blue-50 text-blue-700"
+                        >
+                          Competência {c.competencia}
+                        </Badge>
+                      </div>
+                      <div className="flex items-center gap-1.5 text-xs text-amber-700 mt-0.5 flex-wrap">
+                        {comBaixaRecente ? (
+                          <>
+                            <Clock className="w-3 h-3 text-blue-600 shrink-0" />
+                            <span className="text-blue-700 font-medium">
+                              {c.diasVencidos > 0
+                                ? `Sem baixa há ${c.diasVencidos} dia(s)`
+                                : 'Baixa recente hoje'}
+                            </span>
+                            <span className="text-slate-400">•</span>
+                            <span className="text-slate-600">
+                              última baixa em {formatIsoDate(c.ultimoRecebimento)}
+                            </span>
+                            <span className="text-slate-400">•</span>
+                            <span className="text-slate-400 text-[11px]">
+                              venc. original {formatIsoDate(c.vencimento)}
+                            </span>
+                          </>
+                        ) : (
+                          <>
+                            <AlertCircle className="w-3 h-3 shrink-0" />
+                            <span>
+                              {c.diasVencidos > 0
+                                ? `Vencida há ${c.diasVencidos} dia(s)`
+                                : 'Vence hoje'}
+                            </span>
+                            <span className="text-slate-400">•</span>
+                            <span className="text-slate-500">{formatIsoDate(c.vencimento)}</span>
+                          </>
+                        )}
+                      </div>
+                    </div>
+                    <div className="flex items-center gap-3 shrink-0">
+                      <span className="text-sm font-bold text-slate-900">R$ {fmt(c.valor)}</span>
+                      <Button
+                        size="sm"
+                        className="h-8 text-xs bg-emerald-600 hover:bg-emerald-700 text-white"
+                        disabled={
+                          confirmingId === `${c.policyId}-${c.comissaoPrevistaId ?? 'avulsa'}`
+                        }
+                        onClick={() => onConfirmar(c)}
+                      >
+                        {confirmingId === `${c.policyId}-${c.comissaoPrevistaId ?? 'avulsa'}` ? (
+                          <Loader2 className="w-3.5 h-3.5 animate-spin mr-1" />
+                        ) : (
+                          <CheckCircle2 className="w-3.5 h-3.5 mr-1" />
+                        )}
+                        Confirmar recebimento
+                        <ChevronRight className="w-3.5 h-3.5 ml-0.5 opacity-70" />
+                      </Button>
+                    </div>
+                  </div>
+                )
+              })}
+            </div>
+
+            {/* Botão de Expandir / Recolher quando há mais de 10 itens */}
+            {temMais && (
+              <div className="flex items-center justify-between pt-1 px-1">
+                <span className="text-xs text-slate-500">
+                  Mostrando {itensExibidos.length} de {contas.length} pendências
+                </span>
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  className="h-8 text-xs text-amber-800 hover:text-amber-900 hover:bg-amber-50 font-medium flex items-center gap-1"
+                  onClick={() => setExpandido((prev) => !prev)}
+                >
+                  {expandido ? (
+                    <>
+                      <span>Ver menos</span>
+                      <ChevronUp className="w-3.5 h-3.5" />
+                    </>
+                  ) : (
+                    <>
+                      <span>Ver mais ({contas.length - LIMITE_INICIAL} restantes)</span>
+                      <ChevronDown className="w-3.5 h-3.5" />
+                    </>
+                  )}
+                </Button>
               </div>
-            ))}
+            )}
           </div>
         )}
       </CardContent>

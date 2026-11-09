@@ -53,11 +53,15 @@ export interface ContaAReceberFechada {
   diasVencidos: number
   /** data prevista de vencimento (yyyy-mm-dd) */
   vencimento: string
+  /** data da última baixa real da apólice (yyyy-mm-dd), quando houver baixa parcial */
+  ultimoRecebimento?: string
+  /** indica se os dias são contados a partir da última baixa ou do vencimento original */
+  origemDias?: 'vencimento' | 'ultimo_recebimento'
 }
 
-const diffDias = (vencimento: string, hoje: Date): number => {
-  if (!vencimento) return 0
-  const d = new Date(`${vencimento}T12:00:00`)
+const diffDias = (dataIso: string, hoje: Date): number => {
+  if (!dataIso) return 0
+  const d = new Date(`${dataIso}T12:00:00`)
   if (isNaN(d.getTime())) return 0
   return Math.max(0, Math.floor((hoje.getTime() - d.getTime()) / 86400000))
 }
@@ -170,6 +174,20 @@ export const montarContasAReceberFechadas = ({
     else recsByPolicy.set(r.policy, [r])
   }
 
+  // Mapa do recebimento MAIS RECENTE da apólice (apenas baixas reais, vBruto > 0; estornos não renovam prazo)
+  // Regra idêntica à de computePendenciasComissao60
+  const lastReceiptByPolicy = new Map<string, string>()
+  for (const r of recebimentos) {
+    const vBruto = Number(r.valor_bruto) || 0
+    if (r.policy && vBruto > 0 && r.data_recebimento) {
+      const dPart = r.data_recebimento.split('T')[0].split(' ')[0]
+      const curr = lastReceiptByPolicy.get(r.policy)
+      if (dPart && (!curr || dPart > curr)) {
+        lastReceiptByPolicy.set(r.policy, dPart)
+      }
+    }
+  }
+
   const items: ContaAReceberFechada[] = []
 
   const pushItem = (
@@ -183,6 +201,13 @@ export const montarContasAReceberFechadas = ({
       mm != null
         ? `${String(mm % 100).padStart(2, '0')}/${Math.floor(mm / 100)}`
         : vencimento.slice(0, 7).split('-').reverse().join('/')
+
+    const ultimoRec = lastReceiptByPolicy.get(pol.id)
+    const refData = ultimoRec || vencimento
+    const origemDias: 'vencimento' | 'ultimo_recebimento' = ultimoRec
+      ? 'ultimo_recebimento'
+      : 'vencimento'
+
     items.push({
       policyId: pol.id,
       comissaoPrevistaId: prevista.id,
@@ -191,8 +216,10 @@ export const montarContasAReceberFechadas = ({
       seguradora: pol.expand?.seguradora?.nome || pol.insurance_company || '-',
       valor: saldo,
       competencia: compLabel,
-      diasVencidos: diffDias(vencimento, hoje),
+      diasVencidos: diffDias(refData, hoje),
       vencimento,
+      ultimoRecebimento: ultimoRec,
+      origemDias,
     })
   }
 
@@ -251,6 +278,12 @@ export const montarContasAReceberFechadas = ({
     if (compNum == null || !fechadasSet.has(compNum)) continue
 
     const vencimento = (pol.start_date || '').split('T')[0].split(' ')[0]
+    const ultimoRec = lastReceiptByPolicy.get(pol.id)
+    const refData = ultimoRec || vencimento
+    const origemDias: 'vencimento' | 'ultimo_recebimento' = ultimoRec
+      ? 'ultimo_recebimento'
+      : 'vencimento'
+
     items.push({
       policyId: pol.id,
       policyNumber: pol.policy_number || pol.numero_proposta || '-',
@@ -258,8 +291,10 @@ export const montarContasAReceberFechadas = ({
       seguradora: pol.expand?.seguradora?.nome || pol.insurance_company || '-',
       valor: saldo,
       competencia: compNumToLabel(compNum),
-      diasVencidos: diffDias(vencimento, hoje),
+      diasVencidos: diffDias(refData, hoje),
       vencimento,
+      ultimoRecebimento: ultimoRec,
+      origemDias,
     })
   }
 

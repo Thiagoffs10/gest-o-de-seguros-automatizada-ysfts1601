@@ -117,6 +117,7 @@ import {
   AbaFinanceiro,
 } from '@/components/financial/FinanceiroTabs'
 import { FinanceiroOverviewCards } from '@/components/financial/FinanceiroOverviewCards'
+import { FinancialPeriodSelector } from '@/components/financial/FinancialPeriodSelector'
 import { ExtratoTabContent } from '@/components/financial/ExtratoTabContent'
 import { FileSpreadsheet, ChevronDown, ChevronRight, SlidersHorizontal, Plus } from 'lucide-react'
 import {
@@ -1614,6 +1615,15 @@ export default function Financial() {
       {/* ABA 1: VISÃO GERAL */}
       <AbaContainer active={activeTab === 'visao-geral'}>
         <div className="space-y-6">
+          {/* Seletor de Período da Visão Geral */}
+          <FinancialPeriodSelector
+            filters={filters}
+            onFilterChange={setFilters}
+            period={period}
+            titulo="Período da Visão Geral"
+            subtitulo="Filtre os cards de resumo, produção, recebimentos e projeções pelo período de competência"
+          />
+
           <FinanceiroOverviewCards
             saldoAReceberMes={metrics.saldoTotalAReceber}
             countAReceberMes={metrics.pendingPoliciesList?.length || 0}
@@ -2809,6 +2819,15 @@ export default function Financial() {
       {/* ABA 3: REPASSES */}
       <AbaContainer active={activeTab === 'repasses'}>
         <div className="space-y-6">
+          {/* Seletor de Período da Aba Repasses */}
+          <FinancialPeriodSelector
+            filters={filters}
+            onFilterChange={setFilters}
+            period={period}
+            titulo="Período dos Repasses"
+            subtitulo="Filtre as propostas e apólices de parceiros pendentes ou pagas pelo período selecionado"
+          />
+
           <Card className="shadow-sm overflow-hidden border">
             <CardHeader className="flex flex-row items-center justify-between pb-3">
               <div>
