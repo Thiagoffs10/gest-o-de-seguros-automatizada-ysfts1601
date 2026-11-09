@@ -198,6 +198,8 @@ export default function Financial() {
   // Contas a receber de competências fechadas (Conciliação Mensal)
   const [contasFechadas, setContasFechadas] = useState<ContaAReceberFechada[]>([])
   const [confirmingContaId, setConfirmingContaId] = useState<string | null>(null)
+  // Estado de minimização da lista de contas fechadas na aba A Receber (padrão: minimizada = true)
+  const [contasFechadasMinimizada, setContasFechadasMinimizada] = useState<boolean>(true)
 
   // Estados para trava e modal informativo de débitos pendentes na baixa rápida de repasse
   const [quickPayPolicy, setQuickPayPolicy] = useState<Policy | null>(null)
@@ -1635,6 +1637,7 @@ export default function Financial() {
             countContasFechadas={contasFechadas.length}
             onNavigateContasFechadas={() => {
               handleMudarAba('a-receber')
+              setContasFechadasMinimizada(false)
               setCommFilter('pending')
             }}
             countAlertas60={pendencias60.countApolices}
@@ -1755,6 +1758,8 @@ export default function Financial() {
             contas={contasFechadas}
             confirmingId={confirmingContaId}
             onConfirmar={handleConfirmarContaFechada}
+            minimizado={contasFechadasMinimizada}
+            onToggleMinimizado={setContasFechadasMinimizada}
           />
 
           {/* BARRA DE FILTROS: PRINCIPAIS EM DESTAQUE E MENOS USADOS EM 'MAIS FILTROS' */}
