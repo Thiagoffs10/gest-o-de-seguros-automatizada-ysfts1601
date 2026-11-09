@@ -46,6 +46,7 @@ import {
 } from '@/components/ui/select'
 import { PolicyFormDialog } from '@/components/PolicyFormDialog'
 import { DeletePolicyDialog } from '@/components/DeletePolicyDialog'
+import { BackButton } from '@/components/BackButton'
 import { CancelPolicyDialog } from '@/components/CancelPolicyDialog'
 import { GlobalFilters } from '@/components/GlobalFilters'
 import { buildFilterString } from '@/lib/constants'
@@ -375,6 +376,12 @@ export default function Policies() {
     <div className="space-y-6">
       <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
         <div>
+          <BackButton
+            fallbackPath="/dashboard"
+            fallbackLabel="Dashboard"
+            onlyIfHasOrigin
+            className="mb-1"
+          />
           <h1 className="text-2xl font-bold text-slate-900">Gestão de Apólices</h1>
           <p className="text-slate-500 text-sm">Registro de apólices e coberturas ativas.</p>
         </div>

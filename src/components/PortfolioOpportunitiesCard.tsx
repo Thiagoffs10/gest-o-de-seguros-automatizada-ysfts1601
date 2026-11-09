@@ -59,7 +59,9 @@ export function PortfolioOpportunitiesCard({ clients, policies, tiposSeguro = []
 
   const handleGoToClient = (clientId: string) => {
     setSelectedGroup(null)
-    navigate(`/clientes/${clientId}`)
+    navigate(`/clientes/${clientId}`, {
+      state: { from: '/dashboard', label: 'Dashboard' },
+    })
   }
 
   const handleSendEmail = (opp: CrossSellOpportunity) => {
@@ -79,6 +81,9 @@ export function PortfolioOpportunitiesCard({ clients, policies, tiposSeguro = []
       `/comunicacao?clientId=${encodeURIComponent(opp.clientId)}&canal=Email&assunto=${encodeURIComponent(
         subject,
       )}&corpo=${encodeURIComponent(body)}`,
+      {
+        state: { from: '/dashboard', label: 'Dashboard' },
+      },
     )
   }
 

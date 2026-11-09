@@ -28,7 +28,11 @@ export function ClientCard({
         <div className="flex justify-between items-start mb-3">
           <div
             className="min-w-0 flex-1 cursor-pointer"
-            onClick={() => navigate(`/clientes/${client.id}`)}
+            onClick={() =>
+              navigate(`/clientes/${client.id}`, {
+                state: { from: '/clientes', label: 'Carteira de Clientes' },
+              })
+            }
           >
             <h3 className="font-bold text-slate-900 truncate hover:text-blue-600 transition-colors">
               {client.name}
@@ -81,7 +85,11 @@ export function ClientCard({
           variant="outline"
           size="sm"
           className="text-xs text-slate-700 h-7 px-2"
-          onClick={() => navigate(`/clientes/${client.id}`)}
+          onClick={() =>
+            navigate(`/clientes/${client.id}`, {
+              state: { from: '/clientes', label: 'Carteira de Clientes' },
+            })
+          }
         >
           <Eye className="w-3.5 h-3.5 mr-1 text-slate-500" /> Ficha 360º
         </Button>
@@ -92,7 +100,9 @@ export function ClientCard({
             className="text-blue-600 h-7 px-2"
             title="Enviar e-mail para este cliente"
             onClick={() =>
-              navigate(`/comunicacao?clientId=${encodeURIComponent(client.id)}&canal=Email`)
+              navigate(`/comunicacao?clientId=${encodeURIComponent(client.id)}&canal=Email`, {
+                state: { from: '/clientes', label: 'Carteira de Clientes' },
+              })
             }
           >
             <Send className="w-3.5 h-3.5" />

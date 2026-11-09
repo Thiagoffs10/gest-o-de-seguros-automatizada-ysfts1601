@@ -66,7 +66,11 @@ export function PendenciasPanel({ policies }: Props) {
         {items.map((item) => (
           <button
             key={item.label}
-            onClick={() => navigate(item.path)}
+            onClick={() =>
+              navigate(item.path, {
+                state: { from: '/dashboard', label: 'Dashboard' },
+              })
+            }
             className={`flex items-center justify-between p-3 rounded-lg border transition-all hover:shadow-md ${item.color}`}
           >
             <div className="text-left">

@@ -275,50 +275,86 @@ export default function Dashboard() {
       </div>
 
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-        <Card className="shadow-sm">
+        <Card
+          onClick={() =>
+            navigate('/clientes', {
+              state: { from: '/dashboard', label: 'Dashboard' },
+            })
+          }
+          className="shadow-sm cursor-pointer hover:border-blue-400 hover:shadow-md transition-all group"
+        >
           <CardHeader className="flex flex-row items-center justify-between pb-2">
-            <CardTitle className="text-sm font-medium text-slate-600">Total de Clientes</CardTitle>
+            <CardTitle className="text-sm font-medium text-slate-600 group-hover:text-blue-600 transition-colors">
+              Total de Clientes
+            </CardTitle>
             <Users className="w-5 h-5 text-blue-600" />
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold text-slate-900">{clients.length}</div>
-            <p className="text-xs text-slate-500 mt-1">Segurados cadastrados</p>
-          </CardContent>
-        </Card>
-        <Card className="shadow-sm">
-          <CardHeader className="flex flex-row items-center justify-between pb-2">
-            <CardTitle className="text-sm font-medium text-slate-600">Apólices Ativas</CardTitle>
-            <FileCheck className="w-5 h-5 text-emerald-600" />
-          </CardHeader>
-          <CardContent>
-            <div className="text-2xl font-bold text-slate-900">{activePolicies.length}</div>
-            <p className="text-xs text-slate-500 mt-1">Vigência em andamento</p>
+            <div className="text-2xl font-bold text-slate-900 group-hover:text-blue-600 transition-colors">
+              {clients.length}
+            </div>
+            <p className="text-xs text-slate-500 mt-1">Segurados cadastrados · Ver clientes →</p>
           </CardContent>
         </Card>
         <Card
-          className={`shadow-sm ${pendingRenewals.length > 0 ? 'border-amber-300 bg-amber-50/30' : ''}`}
+          onClick={() =>
+            navigate('/apolices', {
+              state: { from: '/dashboard', label: 'Dashboard' },
+            })
+          }
+          className="shadow-sm cursor-pointer hover:border-emerald-400 hover:shadow-md transition-all group"
         >
           <CardHeader className="flex flex-row items-center justify-between pb-2">
-            <CardTitle className="text-sm font-medium text-slate-600">
+            <CardTitle className="text-sm font-medium text-slate-600 group-hover:text-emerald-600 transition-colors">
+              Apólices Ativas
+            </CardTitle>
+            <FileCheck className="w-5 h-5 text-emerald-600" />
+          </CardHeader>
+          <CardContent>
+            <div className="text-2xl font-bold text-slate-900 group-hover:text-emerald-600 transition-colors">
+              {activePolicies.length}
+            </div>
+            <p className="text-xs text-slate-500 mt-1">Vigência em andamento · Ver apólices →</p>
+          </CardContent>
+        </Card>
+        <Card
+          onClick={() =>
+            navigate('/apolices?status=Renova%C3%A7%C3%A3o+Pendente', {
+              state: { from: '/dashboard', label: 'Dashboard' },
+            })
+          }
+          className={`shadow-sm cursor-pointer hover:border-amber-400 hover:shadow-md transition-all group ${pendingRenewals.length > 0 ? 'border-amber-300 bg-amber-50/30' : ''}`}
+        >
+          <CardHeader className="flex flex-row items-center justify-between pb-2">
+            <CardTitle className="text-sm font-medium text-slate-600 group-hover:text-amber-700 transition-colors">
               Renovações Pendentes
             </CardTitle>
             <Clock className="w-5 h-5 text-amber-600" />
           </CardHeader>
           <CardContent>
             <div className="text-2xl font-bold text-amber-700">{pendingRenewals.length}</div>
-            <p className="text-xs text-amber-600 mt-1">Próximos 30 dias</p>
+            <p className="text-xs text-amber-600 mt-1">Próximos 30 dias · Ver pendências →</p>
           </CardContent>
         </Card>
         <Card
-          className={`shadow-sm ${pendingCommissions > 0 ? 'border-amber-300 bg-amber-50/30' : ''}`}
+          onClick={() =>
+            navigate('/financeiro?aba=a-receber', {
+              state: { from: '/dashboard', label: 'Dashboard' },
+            })
+          }
+          className={`shadow-sm cursor-pointer hover:border-amber-400 hover:shadow-md transition-all group ${pendingCommissions > 0 ? 'border-amber-300 bg-amber-50/30' : ''}`}
         >
           <CardHeader className="flex flex-row items-center justify-between pb-2">
-            <CardTitle className="text-sm font-medium text-slate-600">Saldo a Receber</CardTitle>
+            <CardTitle className="text-sm font-medium text-slate-600 group-hover:text-amber-700 transition-colors">
+              Saldo a Receber
+            </CardTitle>
             <DollarSign className="w-5 h-5 text-amber-600" />
           </CardHeader>
           <CardContent>
             <div className="text-2xl font-bold text-amber-700">{maskValue(pendingCommissions)}</div>
-            <p className="text-xs text-amber-600 mt-1">Comissão prevista − total bruto recebido</p>
+            <p className="text-xs text-amber-600 mt-1">
+              Comissão prevista − recebido · Abrir a receber →
+            </p>
           </CardContent>
         </Card>
       </div>

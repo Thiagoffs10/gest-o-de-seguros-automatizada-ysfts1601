@@ -78,6 +78,9 @@ export function ClientOpportunitiesCard({
       `/comunicacao?clientId=${encodeURIComponent(client.id)}&canal=Email&assunto=${encodeURIComponent(
         subject,
       )}&corpo=${encodeURIComponent(body)}`,
+      {
+        state: { from: `/clientes/${client.id}`, label: client.name || 'Cliente' },
+      },
     )
   }
 

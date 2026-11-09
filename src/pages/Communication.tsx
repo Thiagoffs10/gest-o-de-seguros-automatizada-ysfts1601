@@ -20,6 +20,7 @@ import {
   Communication as CommType,
 } from '@/types'
 import { Button } from '@/components/ui/button'
+import { BackButton } from '@/components/BackButton'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { Badge } from '@/components/ui/badge'
 import { IndividualTab } from '@/components/comunicacao/IndividualTab'
@@ -163,8 +164,14 @@ export default function Communication() {
     <div className="space-y-6">
       <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
         <div>
-          <div className="flex items-center gap-3">
-            <h1 className="text-2xl font-bold text-slate-900">Central de Comunicação</h1>
+          <BackButton
+            fallbackPath="/dashboard"
+            fallbackLabel="Dashboard"
+            onlyIfHasOrigin
+            className="mb-1"
+          />
+          <div className="flex items-center gap-2">
+            <h1 className="text-2xl font-bold text-slate-900">Central de Comunicação</h1>{' '}
             {pendingApprovalCount > 0 && (
               <Badge
                 variant="outline"

@@ -23,6 +23,7 @@ import { evaluateClientCrossSell } from '@/services/cross-sell'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { ClientCard } from '@/components/ClientCard'
+import { BackButton } from '@/components/BackButton'
 import { ClientFormDialog } from '@/components/ClientFormDialog'
 import { DeleteClientDialog } from '@/components/DeleteClientDialog'
 import { ImportarPropostaPdfModal } from '@/components/ImportarPropostaPdfModal'
@@ -289,6 +290,12 @@ export default function Clients() {
     <div className="space-y-6">
       <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
         <div>
+          <BackButton
+            fallbackPath="/dashboard"
+            fallbackLabel="Dashboard"
+            onlyIfHasOrigin
+            className="mb-1"
+          />
           <h1 className="text-2xl font-bold text-slate-900">Carteira de Clientes</h1>
           <p className="text-slate-500 text-sm">
             Gerencie os segurados e visualize suas apólices ativas.

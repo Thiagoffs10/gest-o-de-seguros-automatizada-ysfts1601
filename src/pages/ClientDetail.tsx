@@ -37,6 +37,7 @@ import {
   TipoSeguro,
 } from '@/types'
 import { formatDateDisplay, todayLocalDate, toLocalDate, formatDateTimeDisplay } from '@/lib/utils'
+import { BackButton } from '@/components/BackButton'
 import { ClientOpportunitiesCard } from '@/components/ClientOpportunitiesCard'
 import { normalizeProduct } from '@/services/cross-sell'
 import { Button } from '@/components/ui/button'
@@ -213,14 +214,11 @@ export default function ClientDetail() {
       {/* Topo / Header da Ficha 360º */}
       <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4 bg-white p-5 rounded-xl border border-slate-200 shadow-sm">
         <div>
-          <Button
-            variant="ghost"
-            size="sm"
-            onClick={() => navigate('/clientes')}
-            className="mb-2 text-slate-500 hover:text-slate-800 -ml-2 h-7 px-2"
-          >
-            ← Voltar para Carteira
-          </Button>
+          <BackButton
+            fallbackPath="/clientes"
+            fallbackLabel="Carteira de Clientes"
+            className="mb-2"
+          />
           <div className="flex flex-wrap items-center gap-2">
             <h1 className="text-2xl font-bold text-slate-900">{client.name}</h1>
             <span className="inline-flex items-center gap-1 text-xs font-semibold px-2 py-0.5 rounded-full bg-slate-100 text-slate-700">

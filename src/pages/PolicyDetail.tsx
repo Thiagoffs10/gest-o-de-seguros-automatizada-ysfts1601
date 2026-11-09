@@ -49,6 +49,7 @@ import {
   computeEndorsementFinancialStatus,
   getVeiculoVigente,
 } from '@/services/endorsements'
+import { BackButton } from '@/components/BackButton'
 import { EndorsementFormDialog } from '@/components/EndorsementFormDialog'
 import { Car, FileSignature, ArrowRight, ShieldCheck } from 'lucide-react'
 import { Button } from '@/components/ui/button'
@@ -479,14 +480,7 @@ export default function PolicyDetail() {
     <div className="space-y-6">
       <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
         <div>
-          <Button
-            variant="outline"
-            size="sm"
-            onClick={() => navigate('/apolices')}
-            className="mb-2"
-          >
-            ← Voltar para Apólices
-          </Button>
+          <BackButton fallbackPath="/apolices" fallbackLabel="Apólices" className="mb-2" />
           <h1 className="text-2xl font-bold text-slate-900">
             {policy.policy_number
               ? `Apólice ${policy.policy_number}`
