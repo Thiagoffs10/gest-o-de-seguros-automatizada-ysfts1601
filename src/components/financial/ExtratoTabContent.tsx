@@ -14,10 +14,7 @@ import {
   FileCheck2,
 } from 'lucide-react'
 import { formatCurrencyDisplay } from '@/lib/utils'
-import {
-  parseExtratoSeguradora,
-  detectarFormatoExtrato,
-} from '@/services/importacao/extrato-parsers'
+import { parseExtratoSeguradora } from '@/services/importacao/extrato-parsers'
 import {
   reconciliarExtratoComBanco,
   executarBaixaEmLote,
@@ -51,16 +48,14 @@ export const ExtratoTabContent: React.FC<ExtratoTabContentProps> = ({ onAbrirImp
 
       if (ext === 'csv') {
         const text = await file.text()
-        const parsed = parseCsvText(text)
-        linhasRaw = parsed.rows
+        linhasRaw = parseCsvText(text)
       } else {
         const buffer = await file.arrayBuffer()
-        const parsed = parseXlsxBuffer(buffer)
+        const parsed = await parseXlsxBuffer(buffer)
         linhasRaw = parsed.rows
       }
 
-      const formato = detectarFormatoExtrato(linhasRaw)
-      const parseResult = parseExtratoSeguradora(linhasRaw, formato)
+      const parseResult = parseExtratoSeguradora(linhasRaw, file.name)
       const resultadoLote = await reconciliarExtratoComBanco(parseResult, file.name)
 
       setReconciliacao(resultadoLote)
@@ -287,7 +282,7 @@ export const ExtratoTabContent: React.FC<ExtratoTabContentProps> = ({ onAbrirImp
                           {item.linha.numeroProposta || item.linha.numeroApolice || '-'}
                         </td>
                         <td className="p-2.5 max-w-[200px] truncate">
-                          {item.linha.nomeSegurado ||
+                          {item.linha.seguradoNome ||
                             item.policyCorrespondente?.expand?.client?.name ||
                             '-'}
                         </td>

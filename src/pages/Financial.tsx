@@ -118,7 +118,7 @@ import {
 } from '@/components/financial/FinanceiroTabs'
 import { FinanceiroOverviewCards } from '@/components/financial/FinanceiroOverviewCards'
 import { ExtratoTabContent } from '@/components/financial/ExtratoTabContent'
-import { FileSpreadsheet, ChevronDown, ChevronRight, SlidersHorizontal } from 'lucide-react'
+import { FileSpreadsheet, ChevronDown, ChevronRight, SlidersHorizontal, Plus } from 'lucide-react'
 import {
   Select,
   SelectContent,
@@ -1616,22 +1616,34 @@ export default function Financial() {
         <div className="space-y-6">
           <FinanceiroOverviewCards
             saldoAReceberMes={metrics.saldoTotalAReceber}
-            qtdAReceberMes={metrics.pendingPoliciesList?.length || 0}
-            saldoFechadas={contasFechadas.reduce((acc, c) => acc + (c.valor || 0), 0)}
-            qtdFechadas={contasFechadas.length}
-            saldo60d={pendencias60.reduce((acc, p) => acc + (p.saldoPendente || 0), 0)}
-            qtd60d={pendencias60.length}
-            saldoRepasses={metrics.pendingRepasses}
-            qtdRepasses={metrics.partnerPols?.filter((p) => !p.pago_parceiro).length || 0}
-            periodLabel={period.label}
-            onCardClick={(tab, filter) => {
-              handleMudarAba(tab)
-              if (filter?.status) {
-                setStatusFilter(filter.status)
-              }
-              if (filter?.comm) {
-                setCommFilter(filter.comm)
-              }
+            countAReceberMes={metrics.pendingPoliciesList?.length || 0}
+            onNavigateAReceberMes={() => {
+              handleMudarAba('a-receber')
+              setCommFilter('pending')
+            }}
+            saldoContasFechadas={contasFechadas.reduce((acc, c) => acc + (c.valor || 0), 0)}
+            countContasFechadas={contasFechadas.length}
+            onNavigateContasFechadas={() => {
+              handleMudarAba('a-receber')
+              setCommFilter('pending')
+            }}
+            countAlertas60={pendencias60.countApolices}
+            saldoAlertas60={pendencias60.totalValorPendente}
+            onNavigateAlertas60={() => {
+              handleMudarAba('a-receber')
+              setCommFilter('pending')
+            }}
+            saldoRepassesPendentes={metrics.pendingRepasses}
+            countRepassesPendentes={
+              metrics.partnerPols?.filter((p) => !p.pago_parceiro).length || 0
+            }
+            onNavigateRepasses={() => {
+              handleMudarAba('repasses')
+            }}
+            comissaoRecebidaMes={metrics.receivedCommissions}
+            onNavigateRecebidos={() => {
+              handleMudarAba('a-receber')
+              setCommFilter('received')
             }}
           />
 
