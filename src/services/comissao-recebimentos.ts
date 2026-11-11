@@ -1,6 +1,7 @@
 import pb from '@/lib/pocketbase/client'
 import { ComissaoRecebimento, Policy } from '@/types'
 import { formatDateForInput, extractDateOnly } from '@/lib/utils'
+import { withOrgFilter } from '@/lib/tenant'
 
 export interface ComissaoPrevistaSimples {
   id: string
