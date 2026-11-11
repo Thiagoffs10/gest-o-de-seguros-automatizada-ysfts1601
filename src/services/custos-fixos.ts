@@ -1,10 +1,11 @@
 import pb from '@/lib/pocketbase/client'
 import { CustoFixo } from '@/types'
 import { normalizeCustoFixoPayload } from '@/lib/normalize-text'
+import { withOrgFilter } from '@/lib/tenant'
 
 export const getCustosFixos = async (filterString?: string) => {
   return pb.collection('custos_fixos').getFullList<CustoFixo>({
-    filter: filterString || '',
+    filter: withOrgFilter(filterString || ''),
     sort: '-data',
   })
 }

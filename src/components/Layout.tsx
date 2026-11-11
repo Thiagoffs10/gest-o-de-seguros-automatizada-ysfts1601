@@ -12,7 +12,6 @@ import {
   Menu,
   X,
   Handshake,
-  Building2,
   UserCog,
   LayoutGrid,
   Mail,
@@ -27,7 +26,17 @@ import { useAuth } from '@/hooks/use-auth'
 import { useRealtime } from '@/hooks/use-realtime'
 import { usePermissions } from '@/hooks/use-permissions'
 import { canAccessMassSend } from '@/lib/permissions'
-import { hasOrganization } from '@/lib/tenant'
+import { hasOrganization, getOrgId } from '@/lib/tenant'
+import { useOrgFilter, OrgFilterProvider } from '@/hooks/use-org-filter'
+import { getOrganizations, Organization } from '@/services/organizations'
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select'
+import { Building2 } from 'lucide-react'
 import { getReminders, updateReminder } from '@/services/reminders'
 import { getCampaignQueue } from '@/services/campaigns'
 import { Reminder } from '@/types'
@@ -39,13 +48,48 @@ import { Badge } from '@/components/ui/badge'
 import { FloatingActions } from '@/components/FloatingActions'
 
 export default function Layout() {
-  const { user, signOut } = useAuth()
+  const { user, isAuthenticated } = useAuth()
+  // Filtro de organização do admin (multi-tenant). Para usuário de organização,
+  // o contexto é fixo na própria org; para admin sem organization, é selecionável.
+  const ownOrgId =
+    isAuthenticated && user?.organization
+      ? typeof user.organization === 'string'
+        ? user.organization
+        : user.organization?.id || ''
+      : ''
+  return (
+    <OrgFilterProvider ownOrgId={ownOrgId} isAuthenticated={isAuthenticated}>
+      <LayoutInner />
+    </OrgFilterProvider>
+  )
+}
+
+function LayoutInner() {
+  const { user, signOut, isAuthenticated } = useAuth()
   const { can } = usePermissions()
   const location = useLocation()
   const navigate = useNavigate()
   const [isMobileOpen, setIsMobileOpen] = useState(false)
   const [reminders, setReminders] = useState<Reminder[]>([])
   const [pendingCommsApproval, setPendingCommsApproval] = useState(0)
+  const [orgs, setOrgs] = useState<Organization[]>([])
+
+  // Filtro de organização do admin (multi-tenant). Para usuário de organização,
+  // o contexto é fixo na própria org e o seletor nem aparece.
+  const ownOrgId = hasOrganization() ? getOrgId() : ''
+  const { value: selectedOrg, setFilter: setOrgFilter, isFixedToOwnOrg } = useOrgFilter()
+
+  // Lista de organizações ativas — só para admin sem organization (seletor).
+  const showOrgSelector = isAuthenticated && !isFixedToOwnOrg
+  useEffect(() => {
+    if (!showOrgSelector) return
+    getOrganizations()
+      .then((list) => setOrgs(list.filter((o) => o.ativa !== false)))
+      .catch(() => setOrgs([]))
+  }, [showOrgSelector])
+
+  // Remonta a tela atual quando o filtro muda, forçando refetch com o novo filtro.
+  const outletKey = showOrgSelector ? selectedOrg : 'own'
 
   const fetchPendingReminders = async () => {
     try {
@@ -214,6 +258,27 @@ export default function Layout() {
           </div>
 
           <div className="flex items-center gap-4">
+            {showOrgSelector && (
+              <div className="flex items-center gap-2">
+                <Building2 className="w-4 h-4 text-slate-400 hidden sm:block" />
+                <Select
+                  value={selectedOrg || 'all'}
+                  onValueChange={(v) => setOrgFilter(v || 'all')}
+                >
+                  <SelectTrigger className="w-[190px] h-9 text-xs bg-white">
+                    <SelectValue placeholder="Todas as organizações" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="all">Tudo (CRED10MIX + parceiros)</SelectItem>
+                    {orgs.map((o) => (
+                      <SelectItem key={o.id} value={o.id}>
+                        {o.nome}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+            )}
             <Popover>
               <PopoverTrigger asChild>
                 <Button variant="outline" size="icon" className="relative">
@@ -358,7 +423,7 @@ export default function Layout() {
         )}
 
         <main className="flex-1 p-6 overflow-y-auto">
-          <Outlet />
+          <Outlet key={outletKey} />
         </main>
 
         <footer className="py-4 text-center text-xs text-slate-500 border-t bg-white">
