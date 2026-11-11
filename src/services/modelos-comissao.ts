@@ -10,13 +10,14 @@ import {
 import { calcularPrevisoesComissao, PrevisaoItemCalculada } from '@/services/comissao-engine'
 import { formatDateForInput } from '@/lib/utils'
 import { normalizeModeloComissaoPayload } from '@/lib/normalize-text'
+import { withOrgFilter } from '@/lib/tenant'
 
 export const getModelosComissao = async (
   filter?: string,
   sort = '-created',
 ): Promise<ModeloComissao[]> => {
   return pb.collection('modelos_comissao').getFullList<ModeloComissao>({
-    filter,
+    filter: withOrgFilter(filter),
     sort,
     expand: 'seguradora',
   })
@@ -225,7 +226,7 @@ export const getComissoesPrevistasPaginated = async (
     const res = await pb
       .collection('comissoes_previstas')
       .getList<ComissaoPrevista>(page, perPage, {
-        filter: filterStr || undefined,
+        filter: withOrgFilter(filterStr) || undefined,
         sort: 'data_prevista,parcela_numero',
         expand: 'policy,policy.client,policy.seguradora,policy.produto,modelo_comissao,endorsement',
       })
@@ -250,6 +251,7 @@ export const getComissoesPrevistasPaginated = async (
 
 export const getAllComissoesPrevistas = async (): Promise<ComissaoPrevista[]> => {
   return pb.collection('comissoes_previstas').getFullList<ComissaoPrevista>({
+    filter: withOrgFilter(),
     sort: 'data_prevista,parcela_numero',
     expand: 'policy.client,policy.seguradora,endorsement',
   })

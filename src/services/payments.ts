@@ -1,9 +1,10 @@
 import pb from '@/lib/pocketbase/client'
 import { Payment } from '@/types'
+import { withOrgFilter } from '@/lib/tenant'
 
 export const getPayments = async (filterString?: string) => {
   return pb.collection('payments').getFullList<Payment>({
-    filter: filterString || '',
+    filter: withOrgFilter(filterString || ''),
     expand: 'policy,policy.client',
     sort: 'due_date',
   })

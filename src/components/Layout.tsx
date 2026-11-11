@@ -27,6 +27,7 @@ import { useAuth } from '@/hooks/use-auth'
 import { useRealtime } from '@/hooks/use-realtime'
 import { usePermissions } from '@/hooks/use-permissions'
 import { canAccessMassSend } from '@/lib/permissions'
+import { hasOrganization } from '@/lib/tenant'
 import { getReminders, updateReminder } from '@/services/reminders'
 import { getCampaignQueue } from '@/services/campaigns'
 import { Reminder } from '@/types'
@@ -112,6 +113,9 @@ export default function Layout() {
       badge: pendingCommsApproval,
     },
     ...(isAdmin ? [{ title: 'Usuários', path: '/usuarios', icon: UserCog }] : []),
+    ...(isAdmin && !hasOrganization()
+      ? [{ title: 'Organizações', path: '/organizacoes', icon: Building2 }]
+      : []),
     ...(isAdmin ? [{ title: 'Backup', path: '/backup', icon: Database }] : []),
     { title: 'Configurações', path: '/configuracoes', icon: Settings },
   ]

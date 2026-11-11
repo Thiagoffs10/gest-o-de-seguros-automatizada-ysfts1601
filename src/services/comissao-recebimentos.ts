@@ -222,7 +222,7 @@ export const getComissaoRecebimentos = async (
   expand = 'policy,policy.client,policy.seguradora,policy.parceiro,endorsement',
 ): Promise<ComissaoRecebimento[]> => {
   return pb.collection('comissao_recebimentos').getFullList<ComissaoRecebimento>({
-    filter,
+    filter: withOrgFilter(filter),
     sort,
     expand,
   })

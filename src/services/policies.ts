@@ -5,6 +5,7 @@ import { getVeiculoVigente } from '@/services/endorsements'
 import { formatDateForInput, todayLocalDate, toLocalDate } from '@/lib/utils'
 import { extractDatePart } from '@/lib/date-filter'
 import { normalizePolicyPayload } from '@/lib/normalize-text'
+import { withOrgFilter } from '@/lib/tenant'
 
 /**
  * Prepara payload para CRIAÇÃO de uma nova apólice.
@@ -304,6 +305,7 @@ export const getPolicies = async (
     const qName = `client.name ~ "${sanitizedName}"`
     filter = filter ? `${filter} && (${qName})` : qName
   }
+  filter = withOrgFilter(filter)
   const rawList = await pb.collection('policies').getFullList<Policy>({
     expand: 'client,seguradora,parceiro,modelo_comissao,previous_policy,previous_policy.seguradora',
     filter,

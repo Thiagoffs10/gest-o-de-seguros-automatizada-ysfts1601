@@ -31,6 +31,7 @@ import Settings from '@/pages/Settings'
 import Backup from '@/pages/Backup'
 import ChangePassword from '@/pages/ChangePassword'
 import UsersPage from '@/pages/Users'
+import Organizations from '@/pages/Organizations'
 import NotFound from '@/pages/NotFound'
 
 const App = () => (
@@ -68,6 +69,7 @@ const App = () => (
                 <Route path="/pipeline" element={<Pipeline />} />
                 <Route path="/alterar-senha" element={<ChangePassword />} />
                 <Route path="/usuarios" element={<UsersPage />} />
+                <Route path="/organizacoes" element={<Organizations />} />
                 <Route path="/configuracoes" element={<Settings />} />
                 <Route path="/backup" element={<Backup />} />
               </Route>
