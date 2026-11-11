@@ -1,6 +1,7 @@
 import pb from '@/lib/pocketbase/client'
 import { Client } from '@/types'
 import { normalizeClientPayload } from '@/lib/normalize-text'
+import { withOrgFilter } from '@/lib/tenant'
 
 export const getClients = async (
   searchQuery?: string,
@@ -22,6 +23,7 @@ export const getClients = async (
     const qName = `name ~ "${sanitizedName}"`
     filter = filter ? `${filter} && (${qName})` : qName
   }
+  filter = withOrgFilter(filter)
   return pb.collection('clients').getFullList<Client>({
     filter,
     sort: '-created',
@@ -49,7 +51,7 @@ export const findClientByDocument = async (document: string): Promise<Client | n
   const digits = document.replace(/\D/g, '')
   if (digits.length !== 11 && digits.length !== 14) return null
 
-  const clients = await pb.collection('clients').getFullList<Client>()
+  const clients = await pb.collection('clients').getFullList<Client>({ filter: withOrgFilter() })
   return (
     clients.find((c) => {
       const cpfDigits = (c.cpf || '').replace(/\D/g, '')

@@ -18,6 +18,26 @@ routerAdd(
     var userRole = body.role || 'Operador'
     if (validRoles.indexOf(userRole) < 0) return e.badRequestError('Role invalido.')
 
+    // Multi-tenant: a organização do novo usuário herda de quem o cria.
+    // Admin (sem org) pode criar usuários de qualquer organização (piloto do parceiro).
+    var creatorOrg = auth.getString('organization') || ''
+    var targetOrg = creatorOrg
+    if (!creatorOrg && body.organization) {
+      // valida que a organização existe e está ativa
+      try {
+        var orgRec = $app.findRecordById('organizations', String(body.organization))
+        if (!orgRec.getBool('ativa')) {
+          return e.badRequestError('Organização informada não está ativa.')
+        }
+        targetOrg = orgRec.id
+      } catch (_) {
+        return e.badRequestError('Organização informada não encontrada.')
+      }
+    }
+    if (userRole === 'Admin' && targetOrg) {
+      return e.badRequestError('Usuário de organização parceira não pode ter papel Admin.')
+    }
+
     var collection = $app.findCollectionByNameOrId('users')
     var record = new Record(collection)
 
@@ -26,6 +46,9 @@ routerAdd(
     record.setPassword(body.password)
     record.setVerified(true)
     record.set('role', userRole)
+    if (targetOrg) {
+      record.set('organization', targetOrg)
+    }
 
     try {
       $app.save(record)

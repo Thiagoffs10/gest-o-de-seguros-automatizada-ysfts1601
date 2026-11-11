@@ -11,12 +11,24 @@ routerAdd(
     var id = e.request.pathValue('id')
     var body = e.requestInfo().body || {}
 
-    var record
+    // Multi-tenant: usuário com organização só edita usuários da própria organização;
+    // admin (sem organização) edita qualquer um. Papel Admin só vale para usuários sem org.
+    var actorOrg = auth.getString('organization') || ''
+    var targetUser
     try {
-      record = $app.findRecordById('users', id)
+      targetUser = $app.findRecordById('users', id)
     } catch (_) {
       return e.notFoundError('user not found')
     }
+    var targetOrg = targetUser.getString('organization') || ''
+    if (actorOrg && targetOrg !== actorOrg) {
+      return e.forbiddenError('Usuário pertence a outra organização.')
+    }
+    if (body.role === 'Admin' && (targetOrg || actorOrg)) {
+      return e.badRequestError('Usuário de organização parceira não pode ter papel Admin.')
+    }
+
+    var record = targetUser
 
     if (body.name !== undefined && body.name !== null) {
       if (!body.name.trim()) return e.badRequestError('Nome nao pode ser vazio.')

@@ -17,6 +17,7 @@ import {
   SelectValue,
 } from '@/components/ui/select'
 import { createUser, updateUser } from '@/services/users'
+import { getOrganizations } from '@/services/organizations'
 import { User } from '@/types'
 import { useToast } from '@/hooks/use-toast'
 import { getErrorMessage } from '@/lib/pocketbase/errors'
@@ -29,7 +30,6 @@ interface Props {
 }
 
 const ROLE_OPTIONS = [
-  { value: 'Administrador', label: 'Administrador' },
   { value: 'Gerente', label: 'Gerente' },
   { value: 'Operador', label: 'Operador' },
   { value: 'Visualizador', label: 'Visualizador' },
@@ -38,38 +38,44 @@ const ROLE_OPTIONS = [
 export function UserFormDialog({ open, onOpenChange, onSuccess, editingUser }: Props) {
   const { toast } = useToast()
   const [loading, setLoading] = useState(false)
+  const [organizations, setOrganizations] = useState<{ id: string; nome: string }[]>([])
   const [form, setForm] = useState({
     name: '',
     email: '',
     password: '',
     passwordConfirm: '',
     role: 'Operador' as string,
+    organization: 'none' as string,
   })
   const [errors, setErrors] = useState<Record<string, string>>({})
 
   const isEdit = !!editingUser
 
   useEffect(() => {
-    if (open) {
-      if (editingUser) {
-        setForm({
-          name: editingUser.name || '',
-          email: editingUser.email || '',
-          password: '',
-          passwordConfirm: '',
-          role: editingUser.role || 'Operador',
-        })
-      } else {
-        setForm({
-          name: '',
-          email: '',
-          password: '',
-          passwordConfirm: '',
-          role: 'Operador',
-        })
-      }
-      setErrors({})
+    if (!open) return
+    getOrganizations()
+      .then(setOrganizations)
+      .catch(() => setOrganizations([]))
+    if (editingUser) {
+      setForm({
+        name: editingUser.name || '',
+        email: editingUser.email || '',
+        password: '',
+        passwordConfirm: '',
+        role: editingUser.role || 'Operador',
+        organization: (editingUser as any).organization || 'none',
+      })
+    } else {
+      setForm({
+        name: '',
+        email: '',
+        password: '',
+        passwordConfirm: '',
+        role: 'Operador',
+        organization: 'none',
+      })
     }
+    setErrors({})
   }, [open, editingUser])
 
   const set = (key: string, val: string) => {
@@ -108,6 +114,9 @@ export function UserFormDialog({ open, onOpenChange, onSuccess, editingUser }: P
           name: form.name.trim(),
           role: form.role,
         }
+        if (form.organization !== 'none') {
+          updateData.organization = form.organization
+        }
         if (form.password) {
           updateData.password = form.password
           updateData.passwordConfirm = form.passwordConfirm
@@ -121,7 +130,8 @@ export function UserFormDialog({ open, onOpenChange, onSuccess, editingUser }: P
           password: form.password,
           passwordConfirm: form.passwordConfirm,
           role: form.role as any,
-        })
+          organization: form.organization === 'none' ? undefined : form.organization,
+        } as any)
         toast({ title: 'Usuário criado com sucesso!' })
       }
       onSuccess()
@@ -216,6 +226,26 @@ export function UserFormDialog({ open, onOpenChange, onSuccess, editingUser }: P
                 ))}
               </SelectContent>
             </Select>
+          </div>
+
+          <div>
+            <Label className="text-xs font-semibold">Organização</Label>
+            <Select value={form.organization} onValueChange={(val) => set('organization', val)}>
+              <SelectTrigger>
+                <SelectValue placeholder="Selecione (opcional)" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="none">Sem organização (acesso total — admin)</SelectItem>
+                {organizations.map((o) => (
+                  <SelectItem key={o.id} value={o.id}>
+                    {o.nome}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+            <p className="text-xs text-slate-500 mt-1">
+              Usuário com organização vê apenas os dados dela.
+            </p>
           </div>
 
           <DialogFooter>
