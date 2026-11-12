@@ -3,6 +3,12 @@
 // Usuário COM organization = só vê/altera dados da própria organização, no servidor.
 // Nota: callbacks do JSVM rodam em pool separado — a lista de coleções e a lógica
 // ficam INLINE em cada callback (nenhuma variável de topo referenciada dentro deles).
+//
+// Cadastros compartilhados (seguradoras, parceiros, produtos): as regras de API
+// (migração 1770000020) permitem ao parceiro LER também os registros LEGADOS
+// (sem organization) — são catálogos comuns, usáveis por todos. O hook abaixo
+// garante que o PARCEIRO só ALTERE/EXCLUA registros da própria org (a API já
+// impede via regra) e que o admin veja tudo sem filtro server-side.
 
 function buildTenantHooks() {
   var TENANT_COLLECTIONS =

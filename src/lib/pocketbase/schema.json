@@ -1,5 +1,5 @@
 {
-  "generatedAt": "2026-11-11T19:10:06.092Z",
+  "generatedAt": "2026-11-12T13:47:43.872Z",
   "collections": [
     {
       "name": "users",
@@ -814,11 +814,11 @@
       "name": "seguradoras",
       "type": "base",
       "apiRules": {
-        "list": "@request.auth.id != ''",
-        "view": "@request.auth.id != ''",
-        "create": "@request.auth.role = 'Admin' || @request.auth.role = 'Administrador'",
-        "update": "@request.auth.role = 'Admin' || @request.auth.role = 'Administrador'",
-        "delete": "@request.auth.role = 'Admin' || @request.auth.role = 'Administrador'"
+        "list": "@request.auth.id != '' && (@request.auth.organization = '' || organization = @request.auth.organization)",
+        "view": "@request.auth.id != '' && (@request.auth.organization = '' || organization = @request.auth.organization)",
+        "create": "@request.auth.id != '' && (@request.auth.organization = '' || organization = @request.auth.organization)",
+        "update": "@request.auth.role = 'Admin' || @request.auth.role = 'Administrador' || (@request.auth.organization != '' && organization = @request.auth.organization)",
+        "delete": "@request.auth.role = 'Admin' || @request.auth.role = 'Administrador' || (@request.auth.organization != '' && organization = @request.auth.organization)"
       },
       "fields": [
         {
@@ -855,17 +855,20 @@
           "collectionRef": "organizations"
         }
       ],
-      "indexes": ["CREATE UNIQUE INDEX idx_seguradoras_nome ON seguradoras (nome)"]
+      "indexes": [
+        "CREATE UNIQUE INDEX idx_seguradoras_nome ON seguradoras (nome)",
+        "CREATE UNIQUE INDEX `idx_seguradoras_org_nome` ON `seguradoras` (organization,nome)"
+      ]
     },
     {
       "name": "parceiros",
       "type": "base",
       "apiRules": {
-        "list": "@request.auth.id != ''",
-        "view": "@request.auth.id != ''",
-        "create": "@request.auth.role = 'Admin' || @request.auth.role = 'Administrador'",
-        "update": "@request.auth.role = 'Admin' || @request.auth.role = 'Administrador'",
-        "delete": "@request.auth.role = 'Admin' || @request.auth.role = 'Administrador'"
+        "list": "@request.auth.id != '' && (@request.auth.organization = '' || organization = @request.auth.organization)",
+        "view": "@request.auth.id != '' && (@request.auth.organization = '' || organization = @request.auth.organization)",
+        "create": "@request.auth.id != '' && (@request.auth.organization = '' || organization = @request.auth.organization)",
+        "update": "@request.auth.role = 'Admin' || @request.auth.role = 'Administrador' || (@request.auth.organization != '' && organization = @request.auth.organization)",
+        "delete": "@request.auth.role = 'Admin' || @request.auth.role = 'Administrador' || (@request.auth.organization != '' && organization = @request.auth.organization)"
       },
       "fields": [
         {
@@ -1937,11 +1940,11 @@
       "name": "produtos",
       "type": "base",
       "apiRules": {
-        "list": "@request.auth.id != ''",
-        "view": "@request.auth.id != ''",
-        "create": "@request.auth.id != ''",
-        "update": "@request.auth.id != ''",
-        "delete": "@request.auth.id != ''"
+        "list": "@request.auth.id != '' && (@request.auth.organization = '' || organization = @request.auth.organization)",
+        "view": "@request.auth.id != '' && (@request.auth.organization = '' || organization = @request.auth.organization)",
+        "create": "@request.auth.id != '' && (@request.auth.organization = '' || organization = @request.auth.organization)",
+        "update": "@request.auth.role = 'Admin' || @request.auth.role = 'Administrador' || (@request.auth.organization != '' && organization = @request.auth.organization)",
+        "delete": "@request.auth.role = 'Admin' || @request.auth.role = 'Administrador' || (@request.auth.organization != '' && organization = @request.auth.organization)"
       },
       "fields": [
         {

@@ -1,10 +1,11 @@
 import pb from '@/lib/pocketbase/client'
 import { Produto } from '@/types'
 import { normalizeProdutoPayload } from '@/lib/normalize-text'
+import { withOrgFilter } from '@/lib/tenant'
 
 export const getProdutos = async (filter?: string, sort = 'nome'): Promise<Produto[]> => {
   return pb.collection('produtos').getFullList<Produto>({
-    filter,
+    filter: withOrgFilter(filter),
     sort,
     expand: 'seguradora,ramo',
   })
@@ -22,7 +23,7 @@ export const getActiveProdutos = async (
     filters.push(`ramo = "${ramoId}"`)
   }
   return pb.collection('produtos').getFullList<Produto>({
-    filter: filters.join(' && '),
+    filter: withOrgFilter(filters.join(' && ')),
     sort: 'nome',
     expand: 'seguradora,ramo',
   })

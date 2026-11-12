@@ -1,9 +1,13 @@
 import pb from '@/lib/pocketbase/client'
 import { Seguradora } from '@/types'
 import { normalizeSeguradoraPayload } from '@/lib/normalize-text'
+import { withOrgFilter } from '@/lib/tenant'
 
 export const getSeguradoras = async () => {
-  return pb.collection('seguradoras').getFullList<Seguradora>({ sort: 'nome' })
+  return pb.collection('seguradoras').getFullList<Seguradora>({
+    filter: withOrgFilter(),
+    sort: 'nome',
+  })
 }
 
 export const createSeguradora = async (data: Partial<Seguradora>) => {

@@ -1,9 +1,13 @@
 import pb from '@/lib/pocketbase/client'
 import { Parceiro } from '@/types'
 import { normalizeParceiroPayload } from '@/lib/normalize-text'
+import { withOrgFilter } from '@/lib/tenant'
 
 export const getParceiros = async () => {
-  return pb.collection('parceiros').getFullList<Parceiro>({ sort: 'nome' })
+  return pb.collection('parceiros').getFullList<Parceiro>({
+    filter: withOrgFilter(),
+    sort: 'nome',
+  })
 }
 
 export const createParceiro = async (data: Partial<Parceiro>) => {
