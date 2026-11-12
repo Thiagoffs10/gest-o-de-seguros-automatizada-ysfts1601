@@ -107,13 +107,14 @@ export function GlobalFilters({
         <div>
           <Label className="text-xs">Seguradora</Label>
           <Select
-            value={filters.seguradoraId || ''}
-            onValueChange={(v) => update('seguradoraId', v)}
+            value={filters.seguradoraId || 'ALL'}
+            onValueChange={(v) => update('seguradoraId', v === 'ALL' ? '' : v)}
           >
             <SelectTrigger className="w-[160px]">
               <SelectValue placeholder="Seguradora" />
             </SelectTrigger>
             <SelectContent>
+              <SelectItem value="ALL">Todas</SelectItem>
               {seguradoras.map((s) => (
                 <SelectItem key={s.id} value={s.id}>
                   {s.nome}

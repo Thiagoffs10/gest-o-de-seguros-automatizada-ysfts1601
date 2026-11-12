@@ -1,5 +1,5 @@
 {
-  "generatedAt": "2026-11-12T13:56:46.027Z",
+  "generatedAt": "2026-11-12T18:08:28.170Z",
   "collections": [
     {
       "name": "users",
@@ -2117,11 +2117,25 @@
           "required": false,
           "system": false,
           "collectionRef": "organizations"
+        },
+        {
+          "name": "ano_fabricacao",
+          "type": "number",
+          "required": false,
+          "system": false
+        },
+        {
+          "name": "ano_modelo",
+          "type": "number",
+          "required": false,
+          "system": false
         }
       ],
       "indexes": [
         "CREATE INDEX idx_endorsements_policy ON endorsements (policy)",
-        "CREATE INDEX idx_endorsements_data ON endorsements (data_endosso)"
+        "CREATE INDEX idx_endorsements_data ON endorsements (data_endosso)",
+        "CREATE INDEX `idx_endorsements_placa` ON `endorsements` (placa)",
+        "CREATE INDEX `idx_endorsements_organization` ON `endorsements` (organization)"
       ]
     },
     {

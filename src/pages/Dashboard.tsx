@@ -18,6 +18,7 @@ import { getPayments } from '@/services/payments'
 import { getCustosFixos } from '@/services/custos-fixos'
 import { getTiposSeguro } from '@/services/tipos-seguro'
 import { getComissaoRecebimentos } from '@/services/comissao-recebimentos'
+import { getSeguradoras } from '@/services/seguradoras'
 import {
   Client,
   Policy,
@@ -25,6 +26,7 @@ import {
   CustoFixo,
   FilterState,
   TipoSeguro,
+  Seguradora,
   ComissaoRecebimento,
 } from '@/types'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
@@ -92,6 +94,7 @@ export default function Dashboard() {
   const [custosFixos, setCustosFixos] = useState<CustoFixo[]>([])
   const [tiposSeguro, setTiposSeguro] = useState<TipoSeguro[]>([])
   const [recebimentos, setRecebimentos] = useState<ComissaoRecebimento[]>([])
+  const [seguradoras, setSeguradoras] = useState<Seguradora[]>([])
   const [filters, setFilters] = useState<FilterState>({
     year: String(new Date().getFullYear()),
     month: String(new Date().getMonth() + 1),
@@ -108,13 +111,14 @@ export default function Dashboard() {
       setLoading(true)
     }
     try {
-      const [cls, pols, pays, custos, tps, recs] = await Promise.all([
+      const [cls, pols, pays, custos, tps, recs, segs] = await Promise.all([
         getClients(),
         getPolicies(),
         getPayments(),
         getCustosFixos(),
         getTiposSeguro().catch(() => []),
         getComissaoRecebimentos().catch(() => []),
+        getSeguradoras().catch(() => []),
       ])
       setClients(cls)
       setPolicies(pols)
@@ -122,6 +126,7 @@ export default function Dashboard() {
       setCustosFixos(custos)
       setTiposSeguro(tps)
       setRecebimentos(recs)
+      setSeguradoras(segs)
     } catch {
       /* intentionally ignored */
     } finally {
@@ -144,9 +149,16 @@ export default function Dashboard() {
 
   const period = useMemo(() => computePeriodFromFilters(filters), [filters])
 
+  // Produção do período: apólices iniciadas no período, opcionalmente restritas a uma seguradora.
+  // O filtro de organização já chega aplicado pelos serviços (getOrgId/withOrgFilter).
   const periodPolicies = useMemo(
-    () => policies.filter((p) => isDateInPeriod(period, p.start_date)),
-    [policies, period],
+    () =>
+      policies.filter(
+        (p) =>
+          isDateInPeriod(period, p.start_date) &&
+          (!filters.seguradoraId || p.seguradora === filters.seguradoraId),
+      ),
+    [policies, period, filters.seguradoraId],
   )
 
   const activePolicies = useMemo(() => policies.filter((p) => p.status === 'Ativa'), [policies])
@@ -226,6 +238,22 @@ export default function Dashboard() {
       .map(([name, count]) => ({ name, count }))
   }, [periodPolicies])
 
+  // Produção do período: reflete seguradora e período escolhidos nos filtros.
+  const producaoSeguradoraLabel = useMemo(() => {
+    if (!filters.seguradoraId) return 'Todas as seguradoras'
+    return seguradoras.find((s) => s.id === filters.seguradoraId)?.nome || 'Seguradora selecionada'
+  }, [filters.seguradoraId, seguradoras])
+
+  const producaoPremio = useMemo(
+    () => periodPolicies.reduce((s, p) => s + (p.premium_amount ?? 0), 0),
+    [periodPolicies],
+  )
+
+  const producaoComissao = useMemo(
+    () => periodPolicies.reduce((s, p) => s + (p.commission ?? 0), 0),
+    [periodPolicies],
+  )
+
   if (loading)
     return <div className="text-slate-500 py-8 text-center">Carregando informações...</div>
 
@@ -259,7 +287,12 @@ export default function Dashboard() {
       </div>
 
       <div className="flex flex-wrap items-center justify-between gap-2">
-        <GlobalFilters filters={filters} onFilterChange={setFilters} />
+        <GlobalFilters
+          filters={filters}
+          onFilterChange={setFilters}
+          showSeguradoraFilter
+          seguradoras={seguradoras}
+        />
         <Button
           variant="outline"
           size="sm"
@@ -267,6 +300,7 @@ export default function Dashboard() {
             setFilters({
               year: String(new Date().getFullYear()),
               month: 'ALL',
+              seguradoraId: '',
             })
           }
         >
@@ -365,6 +399,44 @@ export default function Dashboard() {
       <PendenciasPanel policies={policies} />
 
       <DevTrackingPanel policies={policies} period={period} totalReceitas={metrics.totalReceitas} />
+
+      {/* Produção do período — reflete seguradora e período escolhidos nos filtros */}
+      <Card className="shadow-sm">
+        <CardHeader className="flex flex-row items-center justify-between">
+          <CardTitle className="text-base font-bold text-slate-800 flex items-center gap-2">
+            <TrendingUp className="w-5 h-5 text-blue-600" />
+            Produção do Período
+          </CardTitle>
+          <div className="flex items-center gap-2">
+            <span className="text-xs font-medium text-blue-700 bg-blue-50 px-2.5 py-1 rounded border border-blue-100">
+              {producaoSeguradoraLabel}
+            </span>
+            <span className="text-xs text-slate-500">{period.label}</span>
+          </div>
+        </CardHeader>
+        <CardContent>
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+            <div className="bg-blue-50 rounded-lg p-3 border border-blue-100">
+              <p className="text-xs text-blue-600 font-medium">Apólices Emitidas</p>
+              <p className="text-xl font-bold text-blue-700">{periodPolicies.length}</p>
+            </div>
+            <div className="bg-emerald-50 rounded-lg p-3 border border-emerald-100">
+              <p className="text-xs text-emerald-600 font-medium">Prêmio Total</p>
+              <p className="text-xl font-bold text-emerald-700">{maskValue(producaoPremio)}</p>
+            </div>
+            <div className="bg-violet-50 rounded-lg p-3 border border-violet-100">
+              <p className="text-xs text-violet-600 font-medium">Comissão Prevista</p>
+              <p className="text-xl font-bold text-violet-700">{maskValue(producaoComissao)}</p>
+            </div>
+          </div>
+          {producaoSeguradoraLabel !== 'Todas as seguradoras' && (
+            <p className="text-xs text-slate-500 mt-3">
+              Mostrando somente a produção de{' '}
+              <span className="font-medium">{producaoSeguradoraLabel}</span>.
+            </p>
+          )}
+        </CardContent>
+      </Card>
 
       <Card className="shadow-sm p-5">
         <div className="flex items-center justify-between mb-4">
