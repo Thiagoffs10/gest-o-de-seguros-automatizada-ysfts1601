@@ -349,6 +349,50 @@ export async function deleteEndorsement(id: string): Promise<boolean> {
 }
 
 /**
+ * Anexa o veículo VIGENTE (o do endosso mais recente, quando houver) às apólices de uma listagem,
+ * em memória — o registro na base permanece intacto. Usado por listagens, buscas e exportações
+ * para que a placa/modelo exibidos sejam sempre o veículo atual endossado; o veículo original
+ * continua disponível no histórico dentro dos detalhes da apólice.
+ */
+export async function anexarVeiculoVigente<T extends Policy>(policies: T[]): Promise<T[]> {
+  if (!policies.length) return policies
+  try {
+    const ids = policies.map((p) => p.id)
+    const chunkSize = 60
+    const porPolicy = new Map<string, Endorsement[]>()
+    for (let i = 0; i < ids.length; i += chunkSize) {
+      const chunk = ids.slice(i, i + chunkSize)
+      const ends = await pb.collection('endorsements').getFullList<Endorsement>({
+        filter: chunk.map((id) => `policy = "${id}"`).join(' || '),
+        sort: '-data_endosso,-created',
+      })
+      for (const e of ends) {
+        const list = porPolicy.get(e.policy) || []
+        list.push(e)
+        porPolicy.set(e.policy, list)
+      }
+    }
+    if (porPolicy.size === 0) return policies
+    return policies.map((p) => {
+      const ends = porPolicy.get(p.id)
+      if (!ends || ends.length === 0) return p
+      const vig = getVeiculoVigente(p, ends)
+      return {
+        ...p,
+        placa: vig.placa,
+        chassi: vig.chassi,
+        modelo_veiculo: vig.modelo_veiculo,
+        ano_fabricacao: vig.ano_fabricacao,
+        ano_modelo: vig.ano_modelo,
+      }
+    })
+  } catch {
+    // Em caso de falha ao carregar endossos, lista segue com os dados originais da apólice
+    return policies
+  }
+}
+
+/**
  * Retorna os dados vigentes do veículo (veículo original se nenhum endosso, ou o mais recente)
  */
 export function getVeiculoVigente(

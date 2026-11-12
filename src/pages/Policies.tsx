@@ -201,7 +201,8 @@ export default function Policies() {
       }
       if (debouncedPlacaSearch.trim()) {
         const sanitizedPlaca = debouncedPlacaSearch.trim().replace(/"/g, '')
-        const q = `placa ~ "${sanitizedPlaca}"`
+        // Busca a placa VIGENTE: a original da apólice OU a de qualquer endosso dela
+        const q = `(placa ~ "${sanitizedPlaca}" || endorsements_via_policy.placa ~ "${sanitizedPlaca}")`
         filter = filter ? `${filter} && (${q})` : q
       }
       const data = await getPolicies(filter)

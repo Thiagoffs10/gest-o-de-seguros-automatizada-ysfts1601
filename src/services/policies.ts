@@ -1,6 +1,6 @@
 import pb from '@/lib/pocketbase/client'
 import { Policy, ComissaoPrevista, Endorsement } from '@/types'
-import { getVeiculoVigente } from '@/services/endorsements'
+import { getVeiculoVigente, anexarVeiculoVigente } from '@/services/endorsements'
 
 import { formatDateForInput, todayLocalDate, toLocalDate } from '@/lib/utils'
 import { extractDatePart } from '@/lib/date-filter'
@@ -313,7 +313,9 @@ export const getPolicies = async (
   })
 
   const syncedList = await syncExpiredPolicies(rawList)
-  return sortPoliciesPrioritized(syncedList)
+  // Listagem/busca/exportação exibem o veículo VIGENTE (do endosso mais recente, quando houver).
+  // Apenas em memória: o registro da apólice mantém o veículo original como histórico.
+  return sortPoliciesPrioritized(await anexarVeiculoVigente(syncedList))
 }
 export const getPolicy = async (id: string) => {
   return pb.collection('policies').getOne<Policy>(id, {
