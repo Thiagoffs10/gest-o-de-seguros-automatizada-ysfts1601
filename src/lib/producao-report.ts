@@ -2,7 +2,6 @@ import { Policy, Seguradora } from '@/types'
 import { DatePeriod, formatBRDate } from '@/lib/date-filter'
 import { exportFinancialListingPDF, SummaryCardItem } from '@/lib/financial-pdf'
 import { downloadMultiSheetXlsx, ExcelSheet } from '@/lib/excel-export'
-import { anexarVeiculoVigente } from '@/services/endorsements'
 import { formatCurrency } from '@/lib/utils'
 
 export type ProducaoReportKind = 'sintetico' | 'analitico'
@@ -10,8 +9,10 @@ export type ProducaoReportKind = 'sintetico' | 'analitico'
 export interface ProducaoSeguradoraResumo {
   nome: string
   quantidade: number
-  premio: number
-  comissao: number
+  premioBruto: number
+  premioLiquido: number
+  comissaoBruta: number
+  comissaoLiquida: number
 }
 
 export interface ProducaoReportData {
@@ -40,19 +41,61 @@ function resolveClienteNome(policy: Policy): string {
   return policy.expand?.client?.name || 'Cliente Indefinido'
 }
 
-function resolveVeiculo(policy: Policy): string {
-  const partes: string[] = []
-  if (policy.modelo_veiculo) partes.push(policy.modelo_veiculo)
-  if (policy.placa) partes.push(`Placa ${policy.placa}`)
-  if (policy.ano_fabricacao || policy.ano_modelo) {
-    const ano = policy.ano_fabricacao || policy.ano_modelo
-    const anoLabel =
-      policy.ano_fabricacao && policy.ano_modelo
-        ? `${policy.ano_fabricacao}/${policy.ano_modelo}`
-        : String(ano)
-    partes.push(anoLabel)
+function resolveRamo(policy: Policy): string {
+  const ramo = (policy.tipo_de_seguro || policy.coverage_type || '').trim()
+  if (!ramo) return '—'
+  // Primeira letra maiúscula; se vier todo em maiúsculas, normaliza o resto
+  if (ramo === ramo.toUpperCase()) {
+    return ramo.charAt(0).toUpperCase() + ramo.slice(1).toLowerCase()
   }
-  return partes.length > 0 ? partes.join(' · ') : '—'
+  return ramo.charAt(0).toUpperCase() + ramo.slice(1)
+}
+
+/**
+ * Prêmio bruto da apólice. O `valor_bruto` é o prêmio total comercializado;
+ * `premium_amount` é o LÍQUIDO (mesmo valor de `valor_liquido` do cadastro).
+ * Sem bruto gravado, usa o próprio líquido.
+ */
+function resolvePremioBruto(policy: Policy): number {
+  if (policy.valor_bruto != null && Number(policy.valor_bruto) > 0)
+    return Number(policy.valor_bruto)
+  return Number(policy.premium_amount ?? 0)
+}
+
+function resolvePremioLiquido(policy: Policy): number {
+  return Number(policy.premium_amount ?? 0)
+}
+
+function resolveComissaoBruta(policy: Policy): number {
+  return Number(policy.commission ?? 0)
+}
+
+/**
+ * Comissão líquida = Comissão bruta − ISS. O `iss` gravado na apólice já é
+ * commission × imposto_percentual da seguradora (calculado no cadastro).
+ * Sem ISS gravado, tenta derivar do percentual da seguradora; sem percentual,
+ * líquida = bruta.
+ */
+function resolveComissaoLiquida(policy: Policy, seguradoras: Seguradora[]): number {
+  const bruta = resolveComissaoBruta(policy)
+  let iss: number | null = policy.iss != null ? Number(policy.iss) : null
+  if (iss == null) {
+    const seg = findSeguradora(policy, seguradoras)
+    const percentual = seg?.imposto_percentual != null ? Number(seg.imposto_percentual) : null
+    if (percentual != null && percentual > 0) {
+      iss = Math.round(((bruta * percentual) / 100) * 100) / 100
+    } else {
+      iss = 0
+    }
+  }
+  return Math.max(0, Math.round((bruta - (iss || 0)) * 100) / 100)
+}
+
+function findSeguradora(policy: Policy, seguradoras: Seguradora[]): Seguradora | undefined {
+  if (policy.expand?.seguradora) return policy.expand.seguradora
+  const ref = (policy.seguradora || '').trim()
+  if (!ref || seguradoras.length === 0) return undefined
+  return seguradoras.find((s) => s.id === ref || s.nome === ref)
 }
 
 function sortBySeguradoraENumero(policies: Policy[]): Policy[] {
@@ -75,6 +118,20 @@ export function computeProducaoTotals(policies: Policy[]) {
   }
 }
 
+/** Totais com bruto/líquido — usados no rodapé do analítico. */
+export function computeProducaoTotalsBrutoLiquido(policies: Policy[], seguradoras: Seguradora[]) {
+  const round = (v: number) => Math.round(v * 100) / 100
+  return {
+    quantidade: policies.length,
+    premioBruto: round(policies.reduce((s, p) => s + resolvePremioBruto(p), 0)),
+    premioLiquido: round(policies.reduce((s, p) => s + resolvePremioLiquido(p), 0)),
+    comissaoBruta: round(policies.reduce((s, p) => s + resolveComissaoBruta(p), 0)),
+    comissaoLiquida: round(
+      policies.reduce((s, p) => s + resolveComissaoLiquida(p, seguradoras), 0),
+    ),
+  }
+}
+
 export function computeProducaoPorSeguradora(
   policies: Policy[],
   seguradoras: Seguradora[],
@@ -90,10 +147,12 @@ export function computeProducaoPorSeguradora(
     .map(([nome, list]) => ({
       nome,
       quantidade: list.length,
-      premio: list.reduce((s, p) => s + (p.premium_amount ?? 0), 0),
-      comissao: list.reduce((s, p) => s + (p.commission ?? 0), 0),
+      premioBruto: list.reduce((s, p) => s + resolvePremioBruto(p), 0),
+      premioLiquido: list.reduce((s, p) => s + resolvePremioLiquido(p), 0),
+      comissaoBruta: list.reduce((s, p) => s + resolveComissaoBruta(p), 0),
+      comissaoLiquida: list.reduce((s, p) => s + resolveComissaoLiquida(p, seguradoras), 0),
     }))
-    .sort((a, b) => b.premio - a.premio)
+    .sort((a, b) => b.premioLiquido - a.premioLiquido)
 }
 
 function buildHeaderInfo(
@@ -119,6 +178,7 @@ function buildHeaderInfo(
 export async function exportProducaoSinteticoPDF(data: ProducaoReportData): Promise<void> {
   const { title, subtitle, periodLabel } = buildHeaderInfo(data, 'sintetico')
   const totals = computeProducaoTotals(data.policies)
+  const totalsBL = computeProducaoTotalsBrutoLiquido(data.policies, data.seguradoras)
   const porSeguradora = computeProducaoPorSeguradora(data.policies, data.seguradoras)
 
   const summaryCards: SummaryCardItem[] = [
@@ -134,8 +194,10 @@ export async function exportProducaoSinteticoPDF(data: ProducaoReportData): Prom
   const rows = porSeguradora.map((r) => ({
     seguradora: r.nome,
     quantidade: String(r.quantidade),
-    premio: brl(r.premio),
-    comissao: brl(r.comissao),
+    premio_bruto: brl(r.premioBruto),
+    premio_liquido: brl(r.premioLiquido),
+    comissao_bruta: brl(r.comissaoBruta),
+    comissao_liquida: brl(r.comissaoLiquida),
   }))
 
   const totalRow =
@@ -143,8 +205,10 @@ export async function exportProducaoSinteticoPDF(data: ProducaoReportData): Prom
       ? {
           seguradora: 'Total',
           quantidade: String(totals.quantidade),
-          premio: brl(totals.premio),
-          comissao: brl(totals.comissao),
+          premio_bruto: brl(totalsBL.premioBruto),
+          premio_liquido: brl(totalsBL.premioLiquido),
+          comissao_bruta: brl(totalsBL.comissaoBruta),
+          comissao_liquida: brl(totalsBL.comissaoLiquida),
         }
       : undefined
 
@@ -156,14 +220,17 @@ export async function exportProducaoSinteticoPDF(data: ProducaoReportData): Prom
     columns: [
       { header: 'Seguradora', dataKey: 'seguradora', align: 'left' },
       { header: 'Apólices', dataKey: 'quantidade', align: 'center' },
-      { header: 'Prêmio Total', dataKey: 'premio', align: 'right' },
-      { header: 'Comissão Prevista', dataKey: 'comissao', align: 'right' },
+      { header: 'Prêmio Bruto', dataKey: 'premio_bruto', align: 'right' },
+      { header: 'Prêmio Líquido', dataKey: 'premio_liquido', align: 'right' },
+      { header: 'Comissão Bruta', dataKey: 'comissao_bruta', align: 'right' },
+      { header: 'Comissão Líquida', dataKey: 'comissao_liquida', align: 'right' },
     ],
     rows,
     totalRow,
     orientation: 'portrait',
     infoNotes: [
       'Relatório sintético: apenas totais consolidados do período, sem detalhamento por apólice.',
+      'Prêmio líquido = premium_amount (valor líquido do cadastro); comissão líquida = comissão bruta − ISS da seguradora.',
     ],
     filename: `relatorio-producao-sintetico-${periodLabel.replace(/\s/g, '-')}.pdf`,
   })
@@ -171,36 +238,42 @@ export async function exportProducaoSinteticoPDF(data: ProducaoReportData): Prom
 
 export async function exportProducaoAnaliticoPDF(data: ProducaoReportData): Promise<void> {
   const { title, subtitle, periodLabel } = buildHeaderInfo(data, 'analitico')
-  const totals = computeProducaoTotals(data.policies)
+  const totals = computeProducaoTotalsBrutoLiquido(data.policies, data.seguradoras)
 
   const columns = [
     { header: 'Cliente', dataKey: 'cliente', align: 'left' as const },
     { header: 'Seguradora', dataKey: 'seguradora', align: 'left' as const },
     { header: 'Apólice / Proposta', dataKey: 'apolice', align: 'left' as const },
-    { header: 'Veículo Vigente', dataKey: 'veiculo', align: 'left' as const },
+    { header: 'Ramo do Seguro', dataKey: 'ramo', align: 'left' as const },
     { header: 'Início', dataKey: 'inicio', align: 'center' as const },
-    { header: 'Prêmio', dataKey: 'premio', align: 'right' as const },
-    { header: 'Comissão', dataKey: 'comissao', align: 'right' as const },
+    { header: 'Prêmio Bruto', dataKey: 'premio_bruto', align: 'right' as const },
+    { header: 'Prêmio Líquido', dataKey: 'premio_liquido', align: 'right' as const },
+    { header: 'Comissão Bruta', dataKey: 'comissao_bruta', align: 'right' as const },
+    { header: 'Comissão Líquida', dataKey: 'comissao_liquida', align: 'right' as const },
   ]
 
   const rows = sortBySeguradoraENumero(data.policies).map((p) => ({
     cliente: resolveClienteNome(p),
     seguradora: resolveSeguradoraNome(p, data.seguradoras),
     apolice: [p.policy_number, p.numero_proposta].filter(Boolean).join(' / ') || '—',
-    veiculo: resolveVeiculo(p),
+    ramo: resolveRamo(p),
     inicio: formatBRDate(p.start_date),
-    premio: brl(p.premium_amount ?? 0),
-    comissao: brl(p.commission ?? 0),
+    premio_bruto: brl(resolvePremioBruto(p)),
+    premio_liquido: brl(resolvePremioLiquido(p)),
+    comissao_bruta: brl(resolveComissaoBruta(p)),
+    comissao_liquida: brl(resolveComissaoLiquida(p, data.seguradoras)),
   }))
 
   const totalRow = {
     cliente: 'Total',
     seguradora: '',
     apolice: `${totals.quantidade} apólice(s)`,
-    veiculo: '',
+    ramo: '',
     inicio: '',
-    premio: brl(totals.premio),
-    comissao: brl(totals.comissao),
+    premio_bruto: brl(totals.premioBruto),
+    premio_liquido: brl(totals.premioLiquido),
+    comissao_bruta: brl(totals.comissaoBruta),
+    comissao_liquida: brl(totals.comissaoLiquida),
   }
 
   await exportFinancialListingPDF({
@@ -211,13 +284,16 @@ export async function exportProducaoAnaliticoPDF(data: ProducaoReportData): Prom
     rows,
     totalRow,
     orientation: 'landscape',
-    infoNotes: ['Veículo vigente considera o endosso mais recente, quando houver.'],
+    infoNotes: [
+      'Comissão líquida = comissão bruta − ISS (percentual de imposto da seguradora).',
+      'Prêmio bruto = prêmio total comercializado; sem bruto gravado, exibe o prêmio líquido.',
+    ],
     filename: `relatorio-producao-analitico-${periodLabel.replace(/\s/g, '-')}.pdf`,
   })
 }
 
 export async function exportProducaoSinteticoExcel(data: ProducaoReportData): Promise<void> {
-  const totals = computeProducaoTotals(data.policies)
+  const totalsBL = computeProducaoTotalsBrutoLiquido(data.policies, data.seguradoras)
   const porSeguradora = computeProducaoPorSeguradora(data.policies, data.seguradoras)
 
   const sheets: ExcelSheet[] = [
@@ -226,12 +302,28 @@ export async function exportProducaoSinteticoExcel(data: ProducaoReportData): Pr
       columns: [
         { header: 'Seguradora', type: 'text' },
         { header: 'Apólices', type: 'number' },
-        { header: 'Prêmio Total', type: 'currency' },
-        { header: 'Comissão Prevista', type: 'currency' },
+        { header: 'Prêmio Bruto', type: 'currency' },
+        { header: 'Prêmio Líquido', type: 'currency' },
+        { header: 'Comissão Bruta', type: 'currency' },
+        { header: 'Comissão Líquida', type: 'currency' },
       ],
       rows: [
-        ...porSeguradora.map((r) => [r.nome, r.quantidade, r.premio, r.comissao]),
-        ['Total', totals.quantidade, totals.premio, totals.comissao],
+        ...porSeguradora.map((r) => [
+          r.nome,
+          r.quantidade,
+          r.premioBruto,
+          r.premioLiquido,
+          r.comissaoBruta,
+          r.comissaoLiquida,
+        ]),
+        [
+          'Total',
+          totalsBL.quantidade,
+          totalsBL.premioBruto,
+          totalsBL.premioLiquido,
+          totalsBL.comissaoBruta,
+          totalsBL.comissaoLiquida,
+        ],
       ],
     },
   ]
@@ -243,7 +335,7 @@ export async function exportProducaoSinteticoExcel(data: ProducaoReportData): Pr
 }
 
 export async function exportProducaoAnaliticoExcel(data: ProducaoReportData): Promise<void> {
-  const totals = computeProducaoTotals(data.policies)
+  const totals = computeProducaoTotalsBrutoLiquido(data.policies, data.seguradoras)
 
   const sheets: ExcelSheet[] = [
     {
@@ -253,11 +345,12 @@ export async function exportProducaoAnaliticoExcel(data: ProducaoReportData): Pr
         { header: 'Seguradora', type: 'text' },
         { header: 'Apólice', type: 'text' },
         { header: 'Proposta', type: 'text' },
-        { header: 'Veículo Vigente', type: 'text' },
-        { header: 'Placa', type: 'text' },
+        { header: 'Ramo do Seguro', type: 'text' },
         { header: 'Início', type: 'text' },
-        { header: 'Prêmio', type: 'currency' },
-        { header: 'Comissão', type: 'currency' },
+        { header: 'Prêmio Bruto', type: 'currency' },
+        { header: 'Prêmio Líquido', type: 'currency' },
+        { header: 'Comissão Bruta', type: 'currency' },
+        { header: 'Comissão Líquida', type: 'currency' },
       ],
       rows: [
         ...sortBySeguradoraENumero(data.policies).map((p) => [
@@ -265,11 +358,12 @@ export async function exportProducaoAnaliticoExcel(data: ProducaoReportData): Pr
           resolveSeguradoraNome(p, data.seguradoras),
           p.policy_number || '—',
           p.numero_proposta || '—',
-          resolveVeiculo(p),
-          p.placa || '—',
+          resolveRamo(p),
           formatBRDate(p.start_date),
-          p.premium_amount ?? 0,
-          p.commission ?? 0,
+          resolvePremioBruto(p),
+          resolvePremioLiquido(p),
+          resolveComissaoBruta(p),
+          resolveComissaoLiquida(p, data.seguradoras),
         ]),
         [
           'Total',
@@ -278,9 +372,10 @@ export async function exportProducaoAnaliticoExcel(data: ProducaoReportData): Pr
           '',
           '',
           '',
-          '',
-          totals.premio,
-          totals.comissao,
+          totals.premioBruto,
+          totals.premioLiquido,
+          totals.comissaoBruta,
+          totals.comissaoLiquida,
         ],
       ],
     },
@@ -293,14 +388,10 @@ export async function exportProducaoAnaliticoExcel(data: ProducaoReportData): Pr
 }
 
 /**
- * Enriquece as apólices do período com o veículo vigente (endosso mais recente),
- * antes de gerar qualquer relatório. Em memória — nada é gravado na base.
+ * Enriquecimento pré-relatório. A coluna "Veículo Vigente" foi substituída por
+ * "Ramo do Seguro" (campo da própria apólice), então não há mais busca de
+ * endossos: devolve as apólices como já vieram filtradas do Dashboard.
  */
 export async function prepararPoliciesParaRelatorio(policies: Policy[]): Promise<Policy[]> {
-  if (policies.length === 0) return policies
-  try {
-    return await anexarVeiculoVigente(policies)
-  } catch {
-    return policies
-  }
+  return policies
 }
