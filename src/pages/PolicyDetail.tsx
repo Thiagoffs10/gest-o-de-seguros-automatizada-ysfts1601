@@ -92,7 +92,11 @@ export default function PolicyDetail() {
   const { id } = useParams<{ id: string }>()
   const navigate = useNavigate()
   const { toast } = useToast()
-  const { can } = usePermissions()
+  const { can, role } = usePermissions()
+  // Edição de endosso segue a regra UPDATE da coleção endorsements no banco
+  // (Admin/Administrador/Gerente/Operador) — não a permissão de policies.
+  const podeEditarEndosso =
+    role === 'Admin' || role === 'Administrador' || role === 'Gerente' || role === 'Operador'
 
   const [policy, setPolicy] = useState<Policy | null>(null)
   const [payments, setPayments] = useState<Payment[]>([])
@@ -878,20 +882,6 @@ export default function PolicyDetail() {
                                 <Button
                                   variant="ghost"
                                   size="sm"
-                                  className="text-rose-600 hover:text-rose-700 hover:bg-rose-50 h-7 px-2"
-                                  onClick={() => {
-                                    setEstornandoRecebimento(rec)
-                                    setIsEstornoOpen(true)
-                                  }}
-                                  title="Registrar estorno"
-                                >
-                                  <RotateCcw className="w-3.5 h-3.5 mr-1" /> Estornar
-                                </Button>
-                              )}
-                              {can('policies', 'update') && !rec.is_estorno && (
-                                <Button
-                                  variant="ghost"
-                                  size="sm"
                                   className="text-blue-600 hover:text-blue-800 hover:bg-blue-50 h-7 px-2"
                                   onClick={() => {
                                     setEditingRecebimento(rec)
@@ -1356,7 +1346,7 @@ export default function PolicyDetail() {
                         </td>
                         <td className="p-2.5 text-right" onClick={(e) => e.stopPropagation()}>
                           <div className="flex items-center justify-end gap-1">
-                            {can('policies', 'update') && (
+                            {podeEditarEndosso && (
                               <Button
                                 variant="ghost"
                                 size="sm"

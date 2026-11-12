@@ -41,6 +41,8 @@ export interface CreateEndorsementPayload {
   placa?: string
   chassi?: string
   modelo_veiculo?: string
+  ano_fabricacao?: number
+  ano_modelo?: number
   valor_bruto?: number
   valor_liquido?: number
   comissao_percent?: number
@@ -54,6 +56,8 @@ export interface UpdateEndorsementPayload {
   placa?: string
   chassi?: string
   modelo_veiculo?: string
+  ano_fabricacao?: number
+  ano_modelo?: number
   valor_bruto?: number
   valor_liquido?: number
   comissao_percent?: number
@@ -155,6 +159,12 @@ export async function createEndorsement(data: CreateEndorsementPayload): Promise
     placa: data.placa ? data.placa.trim().toUpperCase() : '',
     chassi: data.chassi ? data.chassi.trim().toUpperCase() : '',
     modelo_veiculo: data.modelo_veiculo ? data.modelo_veiculo.trim() : '',
+    ano_fabricacao:
+      data.ano_fabricacao != null && !isNaN(Number(data.ano_fabricacao))
+        ? Number(data.ano_fabricacao)
+        : null,
+    ano_modelo:
+      data.ano_modelo != null && !isNaN(Number(data.ano_modelo)) ? Number(data.ano_modelo) : null,
     valor_bruto: vBruto,
     valor_liquido: vLiquido,
     comissao_percent: commPercent,
@@ -255,6 +265,14 @@ export async function updateEndorsement(
   if (data.placa !== undefined) payload.placa = data.placa.trim().toUpperCase()
   if (data.chassi !== undefined) payload.chassi = data.chassi.trim().toUpperCase()
   if (data.modelo_veiculo !== undefined) payload.modelo_veiculo = data.modelo_veiculo.trim()
+  if (data.ano_fabricacao !== undefined)
+    payload.ano_fabricacao =
+      data.ano_fabricacao === null || isNaN(Number(data.ano_fabricacao))
+        ? null
+        : Number(data.ano_fabricacao)
+  if (data.ano_modelo !== undefined)
+    payload.ano_modelo =
+      data.ano_modelo === null || isNaN(Number(data.ano_modelo)) ? null : Number(data.ano_modelo)
   if (data.observacao !== undefined) payload.observacao = data.observacao.trim()
 
   if (data.valor_bruto !== undefined) {

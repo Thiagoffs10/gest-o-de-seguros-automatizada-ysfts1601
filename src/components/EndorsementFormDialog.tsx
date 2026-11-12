@@ -58,6 +58,8 @@ export function EndorsementFormDialog({
   const [placa, setPlaca] = useState('')
   const [chassi, setChassi] = useState('')
   const [modeloVeiculo, setModeloVeiculo] = useState('')
+  const [anoFabricacao, setAnoFabricacao] = useState<number | ''>('')
+  const [anoModelo, setAnoModelo] = useState<number | ''>('')
   const [valorBruto, setValorBruto] = useState<number | ''>('')
   const [valorLiquido, setValorLiquido] = useState<number | ''>('')
   const [taxaComissao, setTaxaComissao] = useState<number | ''>('')
@@ -76,6 +78,10 @@ export function EndorsementFormDialog({
         setPlaca(endorsementToEdit.placa || '')
         setChassi(endorsementToEdit.chassi || '')
         setModeloVeiculo(endorsementToEdit.modelo_veiculo || '')
+        setAnoFabricacao(
+          endorsementToEdit.ano_fabricacao != null ? endorsementToEdit.ano_fabricacao : '',
+        )
+        setAnoModelo(endorsementToEdit.ano_modelo != null ? endorsementToEdit.ano_modelo : '')
         setValorBruto(endorsementToEdit.valor_bruto != null ? endorsementToEdit.valor_bruto : '')
         setValorLiquido(
           endorsementToEdit.valor_liquido != null ? endorsementToEdit.valor_liquido : '',
@@ -93,6 +99,8 @@ export function EndorsementFormDialog({
         setPlaca('')
         setChassi('')
         setModeloVeiculo('')
+        setAnoFabricacao('')
+        setAnoModelo('')
         setValorBruto('')
         setValorLiquido('')
         setTaxaComissao(defaultTaxa)
@@ -186,6 +194,8 @@ export function EndorsementFormDialog({
           placa,
           chassi,
           modelo_veiculo: modeloVeiculo,
+          ano_fabricacao: anoFabricacao === '' ? undefined : Number(anoFabricacao),
+          ano_modelo: anoModelo === '' ? undefined : Number(anoModelo),
           valor_bruto: vBruto,
           valor_liquido: vLiq,
           comissao_percent: taxaEfetiva,
@@ -201,6 +211,8 @@ export function EndorsementFormDialog({
           placa,
           chassi,
           modelo_veiculo: modeloVeiculo,
+          ano_fabricacao: anoFabricacao === '' ? undefined : Number(anoFabricacao),
+          ano_modelo: anoModelo === '' ? undefined : Number(anoModelo),
           valor_bruto: vBruto,
           valor_liquido: vLiq,
           comissao_percent: taxaEfetiva,
@@ -364,6 +376,34 @@ export function EndorsementFormDialog({
                   className="mt-1 uppercase"
                   value={modeloVeiculo}
                   onChange={(e) => setModeloVeiculo(toUpperPT(e.target.value))}
+                />
+              </div>
+            </div>
+
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+              <div>
+                <Label className="text-xs">Ano de Fabricação</Label>
+                <Input
+                  type="number"
+                  placeholder="Ex: 2019"
+                  className="mt-1"
+                  value={anoFabricacao}
+                  onChange={(e) =>
+                    setAnoFabricacao(e.target.value === '' ? '' : Number(e.target.value))
+                  }
+                />
+              </div>
+
+              <div>
+                <Label className="text-xs">Ano Modelo</Label>
+                <Input
+                  type="number"
+                  placeholder="Ex: 2020"
+                  className="mt-1"
+                  value={anoModelo}
+                  onChange={(e) =>
+                    setAnoModelo(e.target.value === '' ? '' : Number(e.target.value))
+                  }
                 />
               </div>
             </div>
