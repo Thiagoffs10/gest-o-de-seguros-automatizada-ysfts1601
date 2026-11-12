@@ -42,6 +42,16 @@ import { usePermissions } from '@/hooks/use-permissions'
 import { formatCurrency } from '@/lib/utils'
 import { computePeriodFromFilters, isDateInPeriod } from '@/lib/date-filter'
 import { calculateFinancialMetrics, computePendingCommissions } from '@/lib/financial-calcs'
+import { useToast } from '@/hooks/use-toast'
+import {
+  ProducaoReportKind,
+  prepararPoliciesParaRelatorio,
+  exportProducaoSinteticoPDF,
+  exportProducaoSinteticoExcel,
+  exportProducaoAnaliticoPDF,
+  exportProducaoAnaliticoExcel,
+} from '@/lib/producao-report'
+import { ProducaoReportsMenu } from '@/components/producao/ProducaoReportsMenu'
 import {
   BarChart,
   Bar,
@@ -254,6 +264,41 @@ export default function Dashboard() {
     [periodPolicies],
   )
 
+  // Geração de relatórios da produção do período (sintético/analítico).
+  // Usa as MESMAS policies já filtradas que alimentam o card (periodPolicies,
+  // que já respeitam organização + seguradora + período) — sem refazer queries.
+  const [gerandoRelatorio, setGerandoRelatorio] = useState<ProducaoReportKind | null>(null)
+  const { toast } = useToast()
+
+  const gerarRelatorioProducao = async (kind: ProducaoReportKind, format: 'pdf' | 'xlsx') => {
+    if (periodPolicies.length === 0) return
+    setGerandoRelatorio(kind)
+    try {
+      const policiesParaRelatorio = await prepararPoliciesParaRelatorio(periodPolicies)
+      const reportData = {
+        policies: policiesParaRelatorio,
+        period,
+        seguradoraNome: producaoSeguradoraLabel,
+        seguradoras,
+      }
+      if (kind === 'sintetico') {
+        if (format === 'pdf') await exportProducaoSinteticoPDF(reportData)
+        else await exportProducaoSinteticoExcel(reportData)
+      } else {
+        if (format === 'pdf') await exportProducaoAnaliticoPDF(reportData)
+        else await exportProducaoAnaliticoExcel(reportData)
+      }
+    } catch {
+      toast({
+        title: 'Erro ao gerar relatório',
+        description: 'Não foi possível gerar o relatório da produção. Tente novamente.',
+        variant: 'destructive',
+      })
+    } finally {
+      setGerandoRelatorio(null)
+    }
+  }
+
   if (loading)
     return <div className="text-slate-500 py-8 text-center">Carregando informações...</div>
 
@@ -412,6 +457,11 @@ export default function Dashboard() {
               {producaoSeguradoraLabel}
             </span>
             <span className="text-xs text-slate-500">{period.label}</span>
+            <ProducaoReportsMenu
+              disabled={periodPolicies.length === 0}
+              busyKind={gerandoRelatorio}
+              onGenerate={gerarRelatorioProducao}
+            />
           </div>
         </CardHeader>
         <CardContent>
