@@ -6,7 +6,7 @@ import {
   ComissaoRecebimento,
   EndorsementFinancialStatus,
 } from '@/types'
-import { formatDateForInput } from '@/lib/utils'
+import { formatDateForInput, todayLocalDate } from '@/lib/utils'
 import { addMonthsToDateWithClamp } from '@/services/comissao-engine'
 import {
   createComissaoRecebimento,
@@ -310,6 +310,35 @@ export async function updateEndorsement(
           valor_previsto: commVal,
           observacao: `Endosso (${payload.tipo || current.tipo || 'Alteração'}) — ${novoCommPercent}% sobre líq. R$ ${vLiq.toFixed(2)}`,
         })
+      }
+    }
+
+    // Endosso que PASSOU a ter comissão na edição mas não possui previsão vinculada
+    // (criado antes da funcionalidade ou com valores zerados): cria a previsão agora
+    // para que a pendência apareça no Financeiro (aba A Receber) para baixa.
+    if (prevs.length === 0 && commVal > 0) {
+      const dataEndossoFormatada =
+        formatDateForInput(payload.data_endosso || current.data_endosso) || todayLocalDate()
+      const { comp: compEndosso } = addMonthsToDateWithClamp(dataEndossoFormatada, 0)
+      const stableKey = `prev_end_${id}_1_${compEndosso.replace('/', '_')}`
+      try {
+        await pb.collection('comissoes_previstas').create<ComissaoPrevista>({
+          policy: current.policy,
+          competencia: compEndosso,
+          data_prevista: dataEndossoFormatada,
+          valor_previsto: commVal,
+          parcela_numero: 1,
+          origem_modelo: `Endosso: ${payload.tipo || current.tipo || 'Alteração'}`,
+          status: 'Pendente',
+          observacao: `Endosso (${payload.tipo || current.tipo || 'Alteração'}) — ${novoCommPercent}% sobre líq. R$ ${vLiq.toFixed(2)}`,
+          chave_estavel: stableKey,
+          endorsement: id,
+        })
+      } catch (err) {
+        console.warn(
+          'Possível colisão ou aviso ao criar comissão prevista de endosso (edição):',
+          err,
+        )
       }
     }
   }
