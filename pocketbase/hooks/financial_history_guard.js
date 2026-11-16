@@ -270,9 +270,19 @@ onRecordCreate((e) => {
     var parc = e.record.getInt('parcela_numero') || 1
     var cleanComp = comp.replace(/\//g, '_')
 
-    // ITEM 5: O SERVIDOR deve gerar/validar a chave canônica (prev_{policyId}_{parcela}_{competencia})
-    // e sobrescrever qualquer valor enviado pelo cliente
-    var chaveCanonica = 'prev_' + pol + '_' + parc + '_' + cleanComp
+    // ITEM 5: O SERVIDOR deve gerar/validar a chave canônica e sobrescrever qualquer
+    // valor enviado pelo cliente. Para previsões de ENDOSSO a chave canônica é própria
+    // (prev_end_<endossoId>_<parcela>_<competencia>), alinhada com 0053/0064/0065,
+    // com o cron reconcilia_previsoes_endossos e com criarPrevisaoEndosso. Antes ela era
+    // sobrescrita pela chave da apólice base e colidia com a previsão base da mesma
+    // apólice/parcela/competência, impedindo a criação da linha do endosso.
+    var endId = e.record.getString('endorsement')
+    var chaveCanonica
+    if (endId) {
+      chaveCanonica = 'prev_end_' + endId + '_' + parc + '_' + cleanComp
+    } else {
+      chaveCanonica = 'prev_' + pol + '_' + parc + '_' + cleanComp
+    }
     e.record.set('chave_estavel', chaveCanonica)
   }
 
@@ -468,12 +478,24 @@ onRecordUpdate((e) => {
       if (oldPol && newPol && oldPol !== newPol) {
         throw new BadRequestError('Não é permitido alterar a apólice de uma comissão prevista.')
       }
-      // Sempre manter a chave canônica correta
+      // Sempre manter a chave canônica correta. Previsões de ENDOSSO usam a chave
+      // própria prev_end_<endossoId>_<parcela>_<competencia> (alinhada com 0053/0064/0065,
+      // com o cron reconcilia_previsoes_endossos e com criarPrevisaoEndosso) — se a
+      // apólice/competência mudarem sobre uma previsão de endosso, manter a chave
+      // existente para não reescrever a identidade canônica do endosso.
       var polClean = newPol || oldPol
       var comp = e.record.getString('competencia') || prevSnap.getString('competencia') || '01_2026'
       var parc = e.record.getInt('parcela_numero') || prevSnap.getInt('parcela_numero') || 1
       var cleanComp = comp.replace(/\//g, '_')
-      e.record.set('chave_estavel', 'prev_' + polClean + '_' + parc + '_' + cleanComp)
+      var endoId = e.record.getString('endorsement') || prevSnap.getString('endorsement')
+      if (endoId) {
+        var chaveAtual = prevSnap.getString('chave_estavel')
+        if (!chaveAtual) {
+          e.record.set('chave_estavel', 'prev_end_' + endoId + '_' + parc + '_' + cleanComp)
+        }
+      } else {
+        e.record.set('chave_estavel', 'prev_' + polClean + '_' + parc + '_' + cleanComp)
+      }
     }
   }
 
