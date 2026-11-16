@@ -11,8 +11,11 @@ import { addMonthsToDateWithClamp } from '@/services/comissao-engine'
 import {
   createComissaoRecebimento,
   recalcularStatusApolice,
+  garantirPrevisaoParaApoliceSeAusente,
 } from '@/services/comissao-recebimentos'
 import { normalizeEndorsementPayload } from '@/lib/normalize-text'
+import { getOrgId } from '@/lib/tenant'
+import { syncExpiredPolicies } from '@/services/policies'
 
 export const getAllEndorsements = async (): Promise<Endorsement[]> => {
   return pb.collection('endorsements').getFullList<Endorsement>({
@@ -125,7 +128,10 @@ export function computeEndorsementFinancialStatus(
  * 3. Se valor_liquido == 0: histórico operacional, NÃO cria previsão
  * 4. Se valor_liquido < 0: lança ajuste/estorno proporcional em comissao_recebimentos (NUNCA recebimento negativo)
  */
-export async function createEndorsement(data: CreateEndorsementPayload): Promise<Endorsement> {
+export async function createEndorsement(
+  data: CreateEndorsementPayload,
+  options?: { skipBackfillBase?: boolean },
+): Promise<Endorsement> {
   if (!data.policy) {
     throw new Error('A apólice de origem é obrigatória para o endosso.')
   }
@@ -188,6 +194,7 @@ export async function createEndorsement(data: CreateEndorsementPayload): Promise
     try {
       await pb.collection('comissoes_previstas').create<ComissaoPrevista>({
         policy: policy.id,
+        organization: (policy as any).organization || '',
         competencia: comp,
         data_prevista: dataFormatada,
         valor_previsto: commValor,
@@ -228,6 +235,16 @@ export async function createEndorsement(data: CreateEndorsementPayload): Promise
     }
   }
   // 3. ENDOSSO ZERO: Registro operacional no histórico, nenhuma previsão criada
+
+  // Fábrica de previsões ausentes (também cobre endossos criados por outros caminhos);
+  // silenciosa e idempotente — não duplica previsões já existentes (chave_estavel única).
+  if (!options?.skipBackfillBase) {
+    try {
+      await garantirPrevisaoParaApoliceSeAusente(policy.id)
+    } catch (err) {
+      console.warn('Aviso ao reconciliar previsões base da apólice após endosso:', err)
+    }
+  }
 
   return endorsement
 }
@@ -321,9 +338,18 @@ export async function updateEndorsement(
         formatDateForInput(payload.data_endosso || current.data_endosso) || todayLocalDate()
       const { comp: compEndosso } = addMonthsToDateWithClamp(dataEndossoFormatada, 0)
       const stableKey = `prev_end_${id}_1_${compEndosso.replace('/', '_')}`
+      let orgId = (current as any).organization || ''
+      if (!orgId) {
+        try {
+          orgId = getOrgId() || ''
+        } catch {
+          orgId = ''
+        }
+      }
       try {
         await pb.collection('comissoes_previstas').create<ComissaoPrevista>({
           policy: current.policy,
+          organization: orgId,
           competencia: compEndosso,
           data_prevista: dataEndossoFormatada,
           valor_previsto: commVal,
