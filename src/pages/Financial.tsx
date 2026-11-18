@@ -116,7 +116,7 @@ import {
   normalizarAba,
   AbaFinanceiro,
 } from '@/components/financial/FinanceiroTabs'
-import { FinanceiroOverviewCards } from '@/components/financial/FinanceiroOverviewCards'
+import { VisaoGeralSimplificada } from '@/components/financial/VisaoGeralSimplificada'
 import { FinancialPeriodSelector } from '@/components/financial/FinancialPeriodSelector'
 import { ExtratoTabContent } from '@/components/financial/ExtratoTabContent'
 import { BackButton } from '@/components/BackButton'
@@ -260,6 +260,21 @@ export default function Financial() {
     currentParams.set('aba', norm)
     navigate({ search: currentParams.toString() }, { replace: true })
   }
+
+  // Drill-down da Visão Geral: leva à aba A Receber já focada na competência escolhida.
+  // Importante: NÃO mexe nos filtros de status/comissão — voltar à Visão Geral restaura os
+  // cards exatamente como estavam (o período seletor nunca é tocado por esses filtros).
+  const handleIrParaAReceberPorCompetencia = useCallback(
+    (competenciaRaw: string | null) => {
+      if (competenciaRaw) {
+        setRecebimentoModalType('saldo_total')
+        setSelectedProjecaoComp(competenciaRaw)
+      } else {
+        handleMudarAba('a-receber')
+      }
+    },
+    [handleMudarAba],
+  )
 
   const ITEMS_PER_PAGE = 10
 
@@ -1642,55 +1657,21 @@ export default function Financial() {
             subtitulo="Filtre os cards de resumo, produção, recebimentos e projeções pelo período de competência"
           />
 
-          <FinanceiroOverviewCards
-            saldoAReceberMes={metrics.saldoTotalAReceber}
-            countAReceberMes={metrics.pendingPoliciesList?.length || 0}
-            onNavigateAReceberMes={() => {
-              handleMudarAba('a-receber')
-              setCommFilter('pending')
-            }}
-            saldoContasFechadas={contasFechadas.reduce((acc, c) => acc + (c.valor || 0), 0)}
-            countContasFechadas={contasFechadas.length}
-            onNavigateContasFechadas={() => {
-              handleMudarAba('a-receber')
-              setContasFechadasMinimizada(false)
-              setCommFilter('pending')
-            }}
-            countAlertas60={pendencias60.countApolices}
-            saldoAlertas60={pendencias60.totalValorPendente}
-            onNavigateAlertas60={() => {
-              handleMudarAba('a-receber')
-              setCommFilter('pending')
-            }}
-            saldoRepassesPendentes={metrics.pendingRepasses}
-            countRepassesPendentes={
-              metrics.partnerPols?.filter((p) => !p.pago_parceiro).length || 0
-            }
-            onNavigateRepasses={() => {
-              handleMudarAba('repasses')
-            }}
-            comissaoRecebidaMes={metrics.receivedCommissions}
-            onNavigateRecebidos={() => {
-              handleMudarAba('a-receber')
-              setCommFilter('received')
-            }}
-          />
-
-          {/* PAINEL CENTRAL DE ALERTAS DE INCONSISTÊNCIA E DUPLICIDADE + PENDÊNCIAS 60+ DIAS */}
-          <AlertasCentral
-            modulo="FINANCEIRO"
-            onVerApolice={(polId) => navigate(`/policies/${polId}`)}
-            pendencias60={pendencias60}
-            onRegistrarRecebimento={(policy, comp, prevId, saldo) =>
-              handleOpenRegistrarRecebimento(policy, comp, prevId, saldo)
-            }
-            onDispensarAlerta60={async (policyIds) => {
-              await dispensarAlertaComissao60Batch(
-                policyIds,
-                'Dispensado do alerta de comissões sem baixa há mais de 60 dias (legado/histórico)',
-              )
-              await loadData()
-            }}
+          <VisaoGeralSimplificada
+            periodLabel={period.label}
+            premioBruto={metrics.premioBrutoVendido}
+            premioLiquido={metrics.premioLiquidoVendido}
+            comissaoBruta={metrics.comissaoBrutaPrevista}
+            comissaoLiquida={metrics.comissaoLiquidaPrevista}
+            recebidoNoMes={metrics.receivedCommissions}
+            recebidoSistema={metrics.systemReceivedCommissions}
+            recebidoLegado={metrics.legacyReceivedCommissions}
+            competencias={metrics.sortedCompCards}
+            saldoSemPrevisao={metrics.saldoSemPrevisao}
+            countSemPrevisao={metrics.countSemPrevisao}
+            onDetalheProducao={(tipo) => setProducaoModalType(tipo)}
+            onDetalheRecebido={() => setRecebimentoModalType('recebida')}
+            onIrParaAReceber={handleIrParaAReceberPorCompetencia}
           />
 
           {/* 5 BLOCOS OPERACIONAIS COM CARDS DETALHADOS */}
