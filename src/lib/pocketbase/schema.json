@@ -1,5 +1,5 @@
 {
-  "generatedAt": "2026-11-18T19:02:41.744Z",
+  "generatedAt": "2026-11-18T19:34:15.814Z",
   "collections": [
     {
       "name": "users",
@@ -3394,6 +3394,141 @@
         "CREATE INDEX idx_email_seq_logs_client ON email_sequence_logs (client)",
         "CREATE INDEX idx_email_seq_logs_seq ON email_sequence_logs (sequence)",
         "CREATE INDEX idx_email_seq_logs_data ON email_sequence_logs (data_envio)"
+      ]
+    },
+    {
+      "name": "birthday_emails_config",
+      "type": "base",
+      "apiRules": {
+        "list": "@request.auth.id != ''",
+        "view": "@request.auth.id != ''",
+        "create": "@request.auth.role = 'Admin' || @request.auth.role = 'Administrador' || @request.auth.role = 'Gerente'",
+        "update": "@request.auth.role = 'Admin' || @request.auth.role = 'Administrador' || @request.auth.role = 'Gerente'",
+        "delete": null
+      },
+      "fields": [
+        {
+          "name": "assunto",
+          "type": "text",
+          "required": true,
+          "system": false
+        },
+        {
+          "name": "corpo",
+          "type": "text",
+          "required": true,
+          "system": false
+        },
+        {
+          "name": "ativo",
+          "type": "bool",
+          "required": false,
+          "system": false
+        },
+        {
+          "name": "organization",
+          "type": "relation",
+          "required": false,
+          "system": false,
+          "collectionRef": "organizations"
+        },
+        {
+          "name": "created",
+          "type": "autodate",
+          "required": false,
+          "system": false,
+          "autodateTriggers": ["onCreate"]
+        },
+        {
+          "name": "updated",
+          "type": "autodate",
+          "required": false,
+          "system": false,
+          "autodateTriggers": ["onCreate", "onUpdate"]
+        }
+      ],
+      "indexes": []
+    },
+    {
+      "name": "birthday_email_logs",
+      "type": "base",
+      "apiRules": {
+        "list": "@request.auth.id != ''",
+        "view": "@request.auth.id != ''",
+        "create": null,
+        "update": null,
+        "delete": null
+      },
+      "fields": [
+        {
+          "name": "client",
+          "type": "relation",
+          "required": true,
+          "system": false,
+          "collectionRef": "clients"
+        },
+        {
+          "name": "ano",
+          "type": "number",
+          "required": true,
+          "system": false
+        },
+        {
+          "name": "assunto",
+          "type": "text",
+          "required": false,
+          "system": false
+        },
+        {
+          "name": "recipient_email",
+          "type": "email",
+          "required": true,
+          "system": false
+        },
+        {
+          "name": "data_envio",
+          "type": "date",
+          "required": true,
+          "system": false
+        },
+        {
+          "name": "status_envio",
+          "type": "select",
+          "required": true,
+          "system": false,
+          "selectValues": ["ENVIADO", "FALHOU"]
+        },
+        {
+          "name": "erro_log",
+          "type": "text",
+          "required": false,
+          "system": false
+        },
+        {
+          "name": "organization",
+          "type": "relation",
+          "required": false,
+          "system": false,
+          "collectionRef": "organizations"
+        },
+        {
+          "name": "created",
+          "type": "autodate",
+          "required": false,
+          "system": false,
+          "autodateTriggers": ["onCreate"]
+        },
+        {
+          "name": "updated",
+          "type": "autodate",
+          "required": false,
+          "system": false,
+          "autodateTriggers": ["onCreate", "onUpdate"]
+        }
+      ],
+      "indexes": [
+        "CREATE INDEX idx_bday_logs_client_ano ON birthday_email_logs (client, ano)",
+        "CREATE INDEX idx_bday_logs_data ON birthday_email_logs (data_envio)"
       ]
     }
   ]
