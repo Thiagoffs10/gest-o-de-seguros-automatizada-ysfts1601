@@ -182,9 +182,9 @@ export function VisaoGeralFinanceira({
                   type="button"
                   className="font-semibold text-slate-700 hover:text-blue-700"
                   onClick={() => onSelectCompetencia(c.competenciaRaw)}
-                  title={`Ver a receber de ${c.competenciaLabel}`}
+                  title={`Ver a receber de ${c.competencia}`}
                 >
-                  {c.competenciaLabel}
+                  {c.competencia}
                 </button>
                 <div className="flex items-center gap-1">
                   <span className="font-bold text-amber-700">{fmtBRL(c.saldoPrevisto)}</span>
