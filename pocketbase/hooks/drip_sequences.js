@@ -277,6 +277,7 @@ cronAdd('drip_sequences_daily', '10 9 * * *', () => {
 
             var logsCol = $app.findCollectionByNameOrId('email_sequence_logs')
             var logRec = new Record(logsCol)
+            logRec.set('organization', seq.getString('organization'))
             logRec.set('client', clientId)
             logRec.set('sequence', seqId)
             logRec.set('passo_ordem', passo.ordem)
@@ -623,6 +624,7 @@ routerAdd(
 
               var logsCol = $app.findCollectionByNameOrId('email_sequence_logs')
               var logRec = new Record(logsCol)
+              logRec.set('organization', seq.getString('organization'))
               logRec.set('client', clientId)
               logRec.set('sequence', seqId)
               logRec.set('passo_ordem', passo.ordem)

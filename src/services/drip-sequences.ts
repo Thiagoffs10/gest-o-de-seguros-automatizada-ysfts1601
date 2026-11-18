@@ -1,4 +1,5 @@
 import pb from '@/lib/pocketbase/client'
+import { withOrgFilter } from '@/lib/tenant'
 
 // ============ TIPOS ============
 
@@ -67,7 +68,9 @@ export async function updateDripSequence(
 
 export async function getDripLogs(filter?: string): Promise<DripSendLog[]> {
   return pb.collection('email_sequence_logs').getFullList<DripSendLog>({
-    filter: filter || '',
+    // withOrgFilter aplica o isolamento por organização do usuário autenticado
+    // (parceiro vê só os logs da própria org; admin vê tudo, ou a org selecionada).
+    filter: withOrgFilter(filter || ''),
     expand: 'client,sequence',
     sort: '-data_envio,-created',
   })

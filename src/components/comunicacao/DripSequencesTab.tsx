@@ -8,7 +8,9 @@ import {
   Megaphone,
   History,
   Users,
+  Search,
 } from 'lucide-react'
+import { DripClientHistoryDialog } from '@/components/comunicacao/DripClientHistoryDialog'
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
@@ -53,6 +55,7 @@ export function DripSequencesTab({ sequences, logs, onRefresh }: DripTabProps) {
   const [saving, setSaving] = useState(false)
   const [running, setRunning] = useState(false)
   const [historySeq, setHistorySeq] = useState<DripSequence | null>(null)
+  const [clientHistoryOpen, setClientHistoryOpen] = useState(false)
 
   const enviadosMes = logs.filter(
     (l) =>
@@ -164,14 +167,19 @@ export function DripSequencesTab({ sequences, logs, onRefresh }: DripTabProps) {
                 automaticamente.
               </CardDescription>
             </div>
-            <Button onClick={handleRunNow} disabled={running} className="shrink-0">
-              {running ? (
-                <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-              ) : (
-                <Play className="h-4 w-4 mr-2" />
-              )}
-              {running ? 'Enviando...' : 'Disparar agora'}
-            </Button>
+            <div className="flex items-center gap-2 shrink-0">
+              <Button variant="outline" onClick={() => setClientHistoryOpen(true)}>
+                <Search className="h-4 w-4 mr-2" /> Histórico por cliente
+              </Button>
+              <Button onClick={handleRunNow} disabled={running}>
+                {running ? (
+                  <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                ) : (
+                  <Play className="h-4 w-4 mr-2" />
+                )}
+                {running ? 'Enviando...' : 'Disparar agora'}
+              </Button>
+            </div>
           </div>
           <div className="flex items-center gap-2 pt-2">
             <Badge variant="outline" className="bg-blue-50 text-blue-700 border-blue-200">
@@ -423,6 +431,13 @@ export function DripSequencesTab({ sequences, logs, onRefresh }: DripTabProps) {
           </Table>
         </DialogContent>
       </Dialog>
+
+      {/* Histórico por cliente (todos os e-mails do drip, todas as sequências) */}
+      <DripClientHistoryDialog
+        open={clientHistoryOpen}
+        onOpenChange={setClientHistoryOpen}
+        sequences={sequences}
+      />
     </div>
   )
 }
