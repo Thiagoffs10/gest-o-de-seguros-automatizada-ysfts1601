@@ -26,6 +26,8 @@ import { Badge } from '@/components/ui/badge'
 import { IndividualTab } from '@/components/comunicacao/IndividualTab'
 import { CampanhasTab } from '@/components/comunicacao/CampanhasTab'
 import { AutomacaoCampanhasTab } from '@/components/comunicacao/AutomacaoCampanhasTab'
+import { DripSequencesTab } from '@/components/comunicacao/DripSequencesTab'
+import { DripSequence, DripSendLog, getDripSequences, getDripLogs } from '@/services/drip-sequences'
 import { CommsHistory } from '@/components/comunicacao/CommsHistory'
 import { EmailTemplatesManager } from '@/components/comunicacao/EmailTemplatesManager'
 import { useRealtime } from '@/hooks/use-realtime'
@@ -66,21 +68,26 @@ export default function Communication() {
   const [campaignQueue, setCampaignQueue] = useState<CampaignQueueItem[]>([])
   const [campaignLogs, setCampaignLogs] = useState<CampaignSendLog[]>([])
   const [isApprovingAllDirect, setIsApprovingAllDirect] = useState(false)
+  const [dripSequences, setDripSequences] = useState<DripSequence[]>([])
+  const [dripLogs, setDripLogs] = useState<DripSendLog[]>([])
 
   const loadData = useCallback(async () => {
     try {
-      const [cls, pols, segs, parcs, tipos, cms, tpls, camps, queue, cLogs] = await Promise.all([
-        getClients(),
-        getPolicies(),
-        getSeguradoras().catch(() => []),
-        getParceiros().catch(() => []),
-        getTiposSeguro().catch(() => []),
-        getCommunications().catch(() => []),
-        getEmailTemplates().catch(() => []),
-        getCampaignAutomations().catch(() => []),
-        getCampaignQueue().catch(() => []),
-        getCampaignSendLogs().catch(() => []),
-      ])
+      const [cls, pols, segs, parcs, tipos, cms, tpls, camps, queue, cLogs, dripSeqs, dripLgs] =
+        await Promise.all([
+          getClients(),
+          getPolicies(),
+          getSeguradoras().catch(() => []),
+          getParceiros().catch(() => []),
+          getTiposSeguro().catch(() => []),
+          getCommunications().catch(() => []),
+          getEmailTemplates().catch(() => []),
+          getCampaignAutomations().catch(() => []),
+          getCampaignQueue().catch(() => []),
+          getCampaignSendLogs().catch(() => []),
+          getDripSequences().catch(() => []),
+          getDripLogs().catch(() => []),
+        ])
       setClients(cls)
       setPolicies(pols)
       setSeguradoras(segs)
@@ -91,6 +98,8 @@ export default function Communication() {
       setCampaigns(camps)
       setCampaignQueue(queue)
       setCampaignLogs(cLogs)
+      setDripSequences(dripSeqs)
+      setDripLogs(dripLgs)
     } catch {
       /* intentionally ignored */
     }
@@ -106,6 +115,8 @@ export default function Communication() {
   useRealtime('campaign_automations', () => scheduleRealtimeReload())
   useRealtime('campaign_queue', () => scheduleRealtimeReload())
   useRealtime('campaign_send_logs', () => scheduleRealtimeReload())
+  useRealtime('email_sequences', () => scheduleRealtimeReload())
+  useRealtime('email_sequence_logs', () => scheduleRealtimeReload())
 
   const pendingApprovalCount = campaignQueue.filter(
     (q) => q.status === 'AGUARDANDO_APROVACAO',
@@ -259,7 +270,7 @@ export default function Communication() {
       )}
 
       <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
-        <TabsList className="grid w-full max-w-2xl grid-cols-4">
+        <TabsList className="grid w-full max-w-3xl grid-cols-5">
           <TabsTrigger value="automacao" className="flex items-center gap-1.5">
             <span>Automação & Fila</span>
             {pendingApprovalCount > 0 && (
@@ -268,6 +279,7 @@ export default function Communication() {
               </Badge>
             )}
           </TabsTrigger>
+          <TabsTrigger value="drip">Sequências (Drip)</TabsTrigger>
           <TabsTrigger value="campanhas">Disparo em Massa</TabsTrigger>
           <TabsTrigger value="individual">Comunicação Individual</TabsTrigger>
           <TabsTrigger value="templates">Modelos de E-mail</TabsTrigger>
@@ -283,6 +295,11 @@ export default function Communication() {
             onApproveAllDirect={handleApproveAllDirect}
             approvingAllExternal={isApprovingAllDirect}
           />
+        </TabsContent>
+
+        {/* 1b. SEQUÊNCIAS DRIP POR RAMO (educativo + ofertas alternadas, 100% automático) */}
+        <TabsContent value="drip" className="mt-4">
+          <DripSequencesTab sequences={dripSequences} logs={dripLogs} onRefresh={loadData} />
         </TabsContent>
 
         {/* 2. DISPARO EM MASSA ATUAL (100% mantido e funcionando) */}

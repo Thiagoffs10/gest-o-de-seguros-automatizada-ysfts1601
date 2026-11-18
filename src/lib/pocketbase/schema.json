@@ -1,5 +1,5 @@
 {
-  "generatedAt": "2026-11-18T17:16:53.783Z",
+  "generatedAt": "2026-11-18T18:44:25.798Z",
   "collections": [
     {
       "name": "users",
@@ -3148,6 +3148,253 @@
         }
       ],
       "indexes": ["CREATE INDEX idx_organizations_nome ON organizations (nome)"]
+    },
+    {
+      "name": "email_sequences",
+      "type": "base",
+      "apiRules": {
+        "list": "@request.auth.id != ''",
+        "view": "@request.auth.id != ''",
+        "create": "@request.auth.id != ''",
+        "update": "@request.auth.id != ''",
+        "delete": null
+      },
+      "fields": [
+        {
+          "name": "ramo",
+          "type": "select",
+          "required": true,
+          "system": false,
+          "selectValues": ["viagem", "celular", "notebook", "auto", "residencia", "saude"]
+        },
+        {
+          "name": "nome",
+          "type": "text",
+          "required": true,
+          "system": false
+        },
+        {
+          "name": "descricao",
+          "type": "text",
+          "required": false,
+          "system": false
+        },
+        {
+          "name": "passos",
+          "type": "json",
+          "required": false,
+          "system": false
+        },
+        {
+          "name": "intervalo_dias",
+          "type": "number",
+          "required": false,
+          "system": false
+        },
+        {
+          "name": "ativo",
+          "type": "bool",
+          "required": false,
+          "system": false
+        },
+        {
+          "name": "organization",
+          "type": "relation",
+          "required": false,
+          "system": false,
+          "collectionRef": "organizations"
+        },
+        {
+          "name": "created",
+          "type": "autodate",
+          "required": false,
+          "system": false,
+          "autodateTriggers": ["onCreate"]
+        },
+        {
+          "name": "updated",
+          "type": "autodate",
+          "required": false,
+          "system": false,
+          "autodateTriggers": ["onCreate", "onUpdate"]
+        }
+      ],
+      "indexes": [
+        "CREATE UNIQUE INDEX idx_email_sequences_ramo_org ON email_sequences (ramo, organization)"
+      ]
+    },
+    {
+      "name": "email_sequence_state",
+      "type": "base",
+      "apiRules": {
+        "list": "@request.auth.id != ''",
+        "view": "@request.auth.id != ''",
+        "create": "@request.auth.id != ''",
+        "update": "@request.auth.id != ''",
+        "delete": "@request.auth.id != ''"
+      },
+      "fields": [
+        {
+          "name": "client",
+          "type": "relation",
+          "required": true,
+          "system": false,
+          "collectionRef": "clients"
+        },
+        {
+          "name": "sequence",
+          "type": "relation",
+          "required": true,
+          "system": false,
+          "collectionRef": "email_sequences"
+        },
+        {
+          "name": "passo_atual",
+          "type": "number",
+          "required": false,
+          "system": false
+        },
+        {
+          "name": "ultimo_envio",
+          "type": "date",
+          "required": false,
+          "system": false
+        },
+        {
+          "name": "ativo",
+          "type": "bool",
+          "required": false,
+          "system": false
+        },
+        {
+          "name": "organization",
+          "type": "relation",
+          "required": false,
+          "system": false,
+          "collectionRef": "organizations"
+        },
+        {
+          "name": "created",
+          "type": "autodate",
+          "required": false,
+          "system": false,
+          "autodateTriggers": ["onCreate"]
+        },
+        {
+          "name": "updated",
+          "type": "autodate",
+          "required": false,
+          "system": false,
+          "autodateTriggers": ["onCreate", "onUpdate"]
+        }
+      ],
+      "indexes": [
+        "CREATE UNIQUE INDEX idx_email_seq_state_client_seq ON email_sequence_state (client, sequence)",
+        "CREATE INDEX idx_email_seq_state_client ON email_sequence_state (client)"
+      ]
+    },
+    {
+      "name": "email_sequence_logs",
+      "type": "base",
+      "apiRules": {
+        "list": "@request.auth.id != ''",
+        "view": "@request.auth.id != ''",
+        "create": "@request.auth.id != ''",
+        "update": "@request.auth.id != ''",
+        "delete": "@request.auth.id != ''"
+      },
+      "fields": [
+        {
+          "name": "client",
+          "type": "relation",
+          "required": true,
+          "system": false,
+          "collectionRef": "clients"
+        },
+        {
+          "name": "sequence",
+          "type": "relation",
+          "required": true,
+          "system": false,
+          "collectionRef": "email_sequences"
+        },
+        {
+          "name": "passo_ordem",
+          "type": "number",
+          "required": false,
+          "system": false
+        },
+        {
+          "name": "tipo_mensagem",
+          "type": "select",
+          "required": false,
+          "system": false,
+          "selectValues": ["educativo", "oferta"]
+        },
+        {
+          "name": "ramo",
+          "type": "text",
+          "required": false,
+          "system": false
+        },
+        {
+          "name": "assunto",
+          "type": "text",
+          "required": false,
+          "system": false
+        },
+        {
+          "name": "recipient_email",
+          "type": "email",
+          "required": true,
+          "system": false
+        },
+        {
+          "name": "data_envio",
+          "type": "date",
+          "required": true,
+          "system": false
+        },
+        {
+          "name": "status_envio",
+          "type": "select",
+          "required": true,
+          "system": false,
+          "selectValues": ["ENVIADO", "FALHOU"]
+        },
+        {
+          "name": "erro_log",
+          "type": "text",
+          "required": false,
+          "system": false
+        },
+        {
+          "name": "organization",
+          "type": "relation",
+          "required": false,
+          "system": false,
+          "collectionRef": "organizations"
+        },
+        {
+          "name": "created",
+          "type": "autodate",
+          "required": false,
+          "system": false,
+          "autodateTriggers": ["onCreate"]
+        },
+        {
+          "name": "updated",
+          "type": "autodate",
+          "required": false,
+          "system": false,
+          "autodateTriggers": ["onCreate", "onUpdate"]
+        }
+      ],
+      "indexes": [
+        "CREATE INDEX idx_email_seq_logs_client ON email_sequence_logs (client)",
+        "CREATE INDEX idx_email_seq_logs_seq ON email_sequence_logs (sequence)",
+        "CREATE INDEX idx_email_seq_logs_data ON email_sequence_logs (data_envio)"
+      ]
     }
   ]
 }
