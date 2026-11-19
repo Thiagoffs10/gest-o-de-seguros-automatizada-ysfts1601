@@ -32,11 +32,9 @@ export interface DatePeriod {
   label: string
 }
 
-function computeFirstDayNextMonth(year: number, month: number): string {
-  if (month === 12) {
-    return `${year + 1}-01-01`
-  }
-  return `${year}-${String(month + 1).padStart(2, '0')}-01`
+function computeLastDayOfMonth(year: number, month: number): string {
+  const lastDay = new Date(year, month, 0).getDate() // mês 1-based: new Date(ano, mês, 0) = último dia
+  return `${year}-${String(month).padStart(2, '0')}-${String(lastDay).padStart(2, '0')}`
 }
 
 export function formatBRDate(d: string): string {
@@ -86,8 +84,8 @@ export function computePeriod(
   if (isMonthAll && year && year !== 'ALL') {
     return {
       start: `${year}-01-01`,
-      end: `${parseInt(year, 10) + 1}-01-01`,
-      endInclusive: false,
+      end: `${parseInt(year, 10)}-12-31`,
+      endInclusive: true,
       label: `Ano de ${year}`,
     }
   }
@@ -98,8 +96,8 @@ export function computePeriod(
     const monthIdx = parseInt(month, 10) - 1
     return {
       start: `${currentYear}-${m}-01`,
-      end: computeFirstDayNextMonth(currentYear, parseInt(month, 10)),
-      endInclusive: false,
+      end: computeLastDayOfMonth(currentYear, parseInt(month, 10)),
+      endInclusive: true,
       label: `${MONTH_NAMES[monthIdx] || ''} ${currentYear}`,
     }
   }
@@ -109,8 +107,8 @@ export function computePeriod(
     const monthIdx = parseInt(month, 10) - 1
     return {
       start: `${year}-${m}-01`,
-      end: computeFirstDayNextMonth(parseInt(year, 10), parseInt(month, 10)),
-      endInclusive: false,
+      end: computeLastDayOfMonth(parseInt(year, 10), parseInt(month, 10)),
+      endInclusive: true,
       label: `${MONTH_NAMES[monthIdx] || ''} ${year}`,
     }
   }
@@ -119,8 +117,8 @@ export function computePeriod(
   const m = String(now.getMonth() + 1).padStart(2, '0')
   return {
     start: `${now.getFullYear()}-${m}-01`,
-    end: computeFirstDayNextMonth(now.getFullYear(), now.getMonth() + 1),
-    endInclusive: false,
+    end: computeLastDayOfMonth(now.getFullYear(), now.getMonth() + 1),
+    endInclusive: true,
     label: `${MONTH_NAMES[now.getMonth()]} ${now.getFullYear()}`,
   }
 }

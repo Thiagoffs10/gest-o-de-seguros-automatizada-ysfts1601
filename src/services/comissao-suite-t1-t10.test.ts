@@ -465,6 +465,20 @@ describe('Suíte de Testes Obrigatórios T1 a T10 — Validação Financeira', (
     expect(isDateInPeriod(singleDayPeriod, '2026-09-16')).toBe(false)
   })
 
+  it('período mensal fecha no ÚLTIMO dia do mês (31/10 entra, 01/11 fora) — fix do relatório de produção', () => {
+    const periodOutubro = computePeriod('10', '2026')
+    expect(periodOutubro.start).toBe('2026-10-01')
+    expect(periodOutubro.end).toBe('2026-10-31')
+    expect(periodOutubro.endInclusive).toBe(true)
+    expect(isDateInPeriod(periodOutubro, '2026-10-31')).toBe(true)
+    expect(isDateInPeriod(periodOutubro, '2026-11-01')).toBe(false)
+
+    // Setembro tem 30 dias; fevereiro respeita bissexto
+    expect(computePeriod('9', '2026').end).toBe('2026-09-30')
+    expect(computePeriod('2', '2026').end).toBe('2026-02-28')
+    expect(computePeriod('2', '2024').end).toBe('2024-02-29')
+  })
+
   // -------------------------------------------------------------------------
   // Caso Real (Policy 14432373 - Sergio, Azul Seguros):
   // Recebimento legado sem vínculo (competência vazia) é alocado por inferência
