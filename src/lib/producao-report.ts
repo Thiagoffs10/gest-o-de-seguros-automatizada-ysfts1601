@@ -168,8 +168,10 @@ function buildHeaderInfo(
     formatBRDate(data.period.start) === formatBRDate(data.period.end)
       ? formatBRDate(data.period.start)
       : `${formatBRDate(data.period.start)} a ${formatBRDate(data.period.end)}`
+  // O período NÃO vai no título: já aparece nos metadados da direita
+  // ("Competência: …") e deixava o título largo demais para o cabeçalho.
   return {
-    title: `Produção ${data.seguradoraNome} — ${periodLabel}`,
+    title: `Produção ${data.seguradoraNome}`,
     subtitle: `Relatório ${kindLabel} da produção do período`,
     periodLabel,
   }
@@ -230,7 +232,6 @@ export async function exportProducaoSinteticoPDF(data: ProducaoReportData): Prom
     orientation: 'portrait',
     infoNotes: [
       'Relatório sintético: apenas totais consolidados do período, sem detalhamento por apólice.',
-      'Prêmio líquido = premium_amount (valor líquido do cadastro); comissão líquida = comissão bruta − ISS da seguradora.',
     ],
     filename: `relatorio-producao-sintetico-${periodLabel.replace(/\s/g, '-')}.pdf`,
   })
