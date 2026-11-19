@@ -11,6 +11,7 @@ import {
   Search,
 } from 'lucide-react'
 import { DripClientHistoryDialog } from '@/components/comunicacao/DripClientHistoryDialog'
+import { BirthdayEmailCard } from '@/components/comunicacao/BirthdayEmailCard'
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
@@ -191,6 +192,8 @@ export function DripSequencesTab({ sequences, logs, onRefresh }: DripTabProps) {
           </div>
         </CardHeader>
       </Card>
+
+      <BirthdayEmailCard onRefresh={onRefresh} />
 
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
         {sequences.map((sq) => {
