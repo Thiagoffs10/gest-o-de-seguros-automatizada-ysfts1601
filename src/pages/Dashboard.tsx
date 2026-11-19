@@ -52,6 +52,7 @@ import {
   exportProducaoAnaliticoExcel,
 } from '@/lib/producao-report'
 import { ProducaoReportsMenu } from '@/components/producao/ProducaoReportsMenu'
+import { ProducaoChartsAnuais } from '@/components/producao/ProducaoChartsAnuais'
 import {
   BarChart,
   Bar,
@@ -158,6 +159,9 @@ export default function Dashboard() {
   useRealtime('comissao_recebimentos', () => scheduleRealtimeReload())
 
   const period = useMemo(() => computePeriodFromFilters(filters), [filters])
+
+  // "Todos os meses": mês em ALL e nenhum intervalo de datas customizado
+  const isTodosMeses = filters.month === 'ALL' && !filters.dateFrom && !filters.dateTo
 
   // Produção do período: apólices iniciadas no período, opcionalmente restritas a uma seguradora.
   // O filtro de organização já chega aplicado pelos serviços (getOrgId/withOrgFilter).
@@ -484,6 +488,9 @@ export default function Dashboard() {
               Mostrando somente a produção de{' '}
               <span className="font-medium">{producaoSeguradoraLabel}</span>.
             </p>
+          )}
+          {isTodosMeses && (
+            <ProducaoChartsAnuais policies={periodPolicies} formatValue={maskValue} />
           )}
         </CardContent>
       </Card>

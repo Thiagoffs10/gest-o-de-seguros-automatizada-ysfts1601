@@ -1,4 +1,5 @@
 import type { RowInput } from 'jspdf-autotable'
+import type { jsPDF } from 'jspdf'
 import logoImg from '@/assets/cred10mixlogooficialfundobranco4k-12574.jpg'
 
 export interface SummaryCardItem {
@@ -76,6 +77,25 @@ export function slugifyFilename(name: string, period?: string): string {
   return `${clean}${cleanPeriod}.pdf`
 }
 
+/**
+ * Trunca um texto para caber na largura disponível (mm) no tamanho de fonte dado,
+ * acrescentando "…" quando cortado. Evita textos encavalados no cabeçalho dos PDFs.
+ */
+function truncateToWidth(doc: jsPDF, text: string, fontSize: number, maxWidth: number): string {
+  doc.setFont('helvetica', 'normal')
+  doc.setFontSize(fontSize)
+  const textStr = String(text ?? '')
+  if (doc.getTextWidth(textStr) <= maxWidth) return textStr
+  const ellipsis = '…'
+  let cut = textStr.length
+  while (cut > 1) {
+    const candidate = `${textStr.slice(0, cut).trimEnd()}${ellipsis}`
+    if (doc.getTextWidth(candidate) <= maxWidth) return candidate
+    cut--
+  }
+  return ellipsis
+}
+
 export async function exportFinancialListingPDF(options: FinancialPDFOptions) {
   const [{ jsPDF }, autoTableModule] = await Promise.all([
     import('jspdf'),
@@ -116,33 +136,54 @@ export async function exportFinancialListingPDF(options: FinancialPDFOptions) {
 
   // Título Institucional e Título do Modal
   const titleX = base64Logo ? margin + 44 : margin
-  doc.setFont('helvetica', 'bold')
-  doc.setFontSize(11)
-  doc.setTextColor(15, 23, 42) // slate-900
-  doc.text('CRED10MIX CORRETORA DE SEGUROS', titleX, currentY + 4)
 
-  doc.setFont('helvetica', 'bold')
-  doc.setFontSize(13)
-  doc.setTextColor(37, 99, 235) // blue-600
-  doc.text(options.title, titleX, currentY + 10)
-
-  if (options.subtitle) {
-    doc.setFont('helvetica', 'normal')
-    doc.setFontSize(8.5)
-    doc.setTextColor(100, 116, 139) // slate-500
-    doc.text(options.subtitle, titleX, currentY + 15)
-  }
-
-  // Metadados à Direita (Data/Hora de Geração e Período)
+  // Metadados à Direita (Data/Hora de Geração e Período) — desenhados primeiro,
+  // para reservar a área direita do cabeçalho antes do título.
   const now = new Date()
   const dataGeracao = `${now.toLocaleDateString('pt-BR')} às ${now.toLocaleTimeString('pt-BR')}`
   doc.setFont('helvetica', 'normal')
   doc.setFontSize(8)
   doc.setTextColor(100, 116, 139)
   const rightX = pageWidth - margin
-  doc.text(`Gerado em: ${dataGeracao}`, rightX, currentY + 4, { align: 'right' })
-  doc.text(`Competência: ${options.periodLabel}`, rightX, currentY + 9, { align: 'right' })
-  doc.text(`Total de registros: ${options.rows.length}`, rightX, currentY + 14, { align: 'right' })
+  const metaLines = [
+    `Gerado em: ${dataGeracao}`,
+    `Competência: ${options.periodLabel}`,
+    `Total de registros: ${options.rows.length}`,
+  ]
+  // Largura máxima que os metadados à direita ocupam (para limitar o título)
+  const metaMaxWidth = Math.max(...metaLines.map((l) => doc.getTextWidth(l)))
+
+  // O título nunca invade a área dos metadados nem passa da margem direita
+  const titleMaxWidth = pageWidth - margin - titleX - (metaMaxWidth > 0 ? metaMaxWidth + 6 : 0)
+
+  // Título Institucional e Título do Relatório — truncados para nunca cruzar os metadados
+  doc.setFont('helvetica', 'bold')
+  doc.setFontSize(11)
+  doc.setTextColor(15, 23, 42) // slate-900
+  doc.text(
+    truncateToWidth(doc, 'CRED10MIX CORRETORA DE SEGUROS', 11, titleMaxWidth),
+    titleX,
+    currentY + 4,
+  )
+
+  doc.setFont('helvetica', 'bold')
+  doc.setFontSize(13)
+  doc.setTextColor(37, 99, 235) // blue-600
+  doc.text(truncateToWidth(doc, options.title, 13, titleMaxWidth), titleX, currentY + 10)
+
+  if (options.subtitle) {
+    doc.setFont('helvetica', 'normal')
+    doc.setFontSize(8.5)
+    doc.setTextColor(100, 116, 139) // slate-500
+    doc.text(truncateToWidth(doc, options.subtitle, 8.5, titleMaxWidth), titleX, currentY + 15)
+  }
+
+  doc.setFont('helvetica', 'normal')
+  doc.setFontSize(8)
+  doc.setTextColor(100, 116, 139)
+  doc.text(metaLines[0], rightX, currentY + 4, { align: 'right' })
+  doc.text(metaLines[1], rightX, currentY + 9, { align: 'right' })
+  doc.text(metaLines[2], rightX, currentY + 14, { align: 'right' })
 
   currentY += headerHeight
 
@@ -253,8 +294,14 @@ export async function exportFinancialListingPDF(options: FinancialPDFOptions) {
       doc.setFont('helvetica', 'italic')
       doc.setFontSize(7)
       doc.setTextColor(100, 116, 139)
-      doc.text(`* ${note}`, margin, currentY + 2)
-      currentY += 4
+      const noteText = `* ${note}`
+      const noteMaxWidth = pageWidth - margin * 2
+      // Nota longa: quebra em linhas em vez de cortar/passar da margem
+      const noteLines = doc.splitTextToSize(noteText, noteMaxWidth) as string[]
+      noteLines.forEach((line) => {
+        doc.text(line, margin, currentY + 2)
+        currentY += 4
+      })
     })
     currentY += 1
   }
